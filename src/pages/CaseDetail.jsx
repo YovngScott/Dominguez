@@ -164,9 +164,12 @@ export default function CaseDetail() {
   if (!caso) return <p className="p-10 text-center text-[var(--ink-soft)]">Caso no encontrado.</p>;
 
   const estadoActivo =
-    caso.estado !== "listo_para_trabajar" && caso.estado !== "entregado"
-      ? "en_espera_piezas"
-      : caso.estado;
+    caso.estado === "vehiculo_en_taller"
+      ? "listo_para_trabajar"
+      : caso.estado !== "listo_para_trabajar" && caso.estado !== "entregado"
+        ? "en_espera_piezas"
+        : caso.estado;
+  const enTaller = caso.estado === "vehiculo_en_taller";
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -224,6 +227,32 @@ export default function CaseDetail() {
             })}
           </div>
           {estadoError && <p className="text-sm text-[var(--brand-red)] mt-2">{estadoError}</p>}
+
+          {estadoActivo === "listo_para_trabajar" && (
+            <label
+              className={`mt-3 inline-flex items-center gap-2.5 pl-3 pr-4 py-2 rounded-xl border-2 cursor-pointer transition-all select-none ${
+                enTaller
+                  ? "border-sky-300 bg-sky-50 text-sky-700"
+                  : "border-[var(--line)] text-[var(--ink-soft)] hover:border-sky-300"
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                  enTaller ? "bg-sky-500 border-sky-500 text-white" : "border-[var(--ink-soft)]"
+                }`}
+              >
+                {enTaller && <Icon name="check" className="w-3.5 h-3.5" strokeWidth={3} />}
+              </span>
+              <input
+                type="checkbox"
+                checked={enTaller}
+                onChange={(e) => actualizarEstado(e.target.checked ? "vehiculo_en_taller" : "listo_para_trabajar")}
+                className="sr-only"
+              />
+              <Icon name="car" className="w-4 h-4" />
+              <span className="font-semibold text-sm">Vehículo en el taller</span>
+            </label>
+          )}
         </div>
 
         {/* Datos */}

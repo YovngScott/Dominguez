@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import ItemModal from "../components/ItemModal";
@@ -24,12 +24,17 @@ const ANIOS = Array.from({ length: ANIO_ACTUAL + 1 - 1980 + 1 }, (_, i) => {
 export default function NewQuote() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const { cotId } = useParams();
+  const editando = !!cotId;
   const [aseguradoras, setAseguradoras] = useState([]);
   const [marcas, setMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [piezasCatalogo, setPiezasCatalogo] = useState([]);
   const [error, setError] = useState("");
   const [estado, setEstado] = useState(""); // texto de progreso
+  const [cargando, setCargando] = useState(editando);
+  const [original, setOriginal] = useState(null); // cotización original (modo edición)
+  const [evidenciasExistentes, setEvidenciasExistentes] = useState([]); // [{id, url}]
 
   const [modal, setModal] = useState(null); // { tipo, index|null }
   const [evidencias, setEvidencias] = useState([]); // { file, preview }
@@ -65,6 +70,48 @@ export default function NewQuote() {
     }
     load();
   }, []);
+
+  // Modo edición: carga la cotización existente
+  useEffect(() => {
+    if (!cotId) return;
+    async function load() {
+      const { data } = await supabase.from("cotizaciones").select("*").eq("id", cotId).single();
+      if (data) {
+        setOriginal(data);
+        setForm({
+          cliente_nombre: data.cliente_nombre || "",
+          cliente_email: data.cliente_email || "",
+          telefonos: data.telefonos?.length ? data.telefonos : [""],
+          marca: data.marca || "",
+          modelo: data.modelo || "",
+          anio: data.anio ? String(data.anio) : "",
+          color: data.color || "",
+          placa: data.placa || "",
+          chasis: data.chasis || "",
+          tipo_vehiculo: data.tipo_vehiculo || "",
+          aseguradora_id: data.aseguradora_id || "",
+          numero_reclamo: data.numero_reclamo || "",
+          numero_poliza: data.numero_poliza || "",
+          items_piezas: data.items_piezas || [],
+          items_mano_obra: data.items_mano_obra || [],
+        });
+
+        const { data: evs } = await supabase
+          .from("cotizacion_evidencias")
+          .select("id, storage_path")
+          .eq("cotizacion_id", cotId);
+        const conUrl = await Promise.all(
+          (evs || []).map(async (e) => {
+            const { data: s } = await supabase.storage.from("cotizaciones").createSignedUrl(e.storage_path, 3600);
+            return { id: e.id, url: s?.signedUrl };
+          })
+        );
+        setEvidenciasExistentes(conUrl.filter((e) => e.url));
+      }
+      setCargando(false);
+    }
+    load();
+  }, [cotId]);
 
   // Carga modelos cuando la marca escrita coincide con una del catálogo
   useEffect(() => {
@@ -136,6 +183,12 @@ export default function NewQuote() {
     setEvidencias((prev) => [...prev, ...nuevas].slice(0, 50));
   }
 
+  async function quitarEvidenciaExistente(ev) {
+    if (!confirm("¿Quitar esta evidencia?")) return;
+    await supabase.from("cotizacion_evidencias").delete().eq("id", ev.id);
+    setEvidenciasExistentes((prev) => prev.filter((e) => e.id !== ev.id));
+  }
+
   const totales = calcularTotales(form.items_piezas, form.items_mano_obra);
 
   async function generar() {
@@ -144,97 +197,131 @@ export default function NewQuote() {
     if (!form.aseguradora_id) return setError("Selecciona la aseguradora.");
 
     try {
-      setEstado("Asignando número…");
-      const { data: numero, error: numErr } = await supabase.rpc("siguiente_numero_cotizacion");
-      if (numErr) throw numErr;
-
       const aseg = aseguradoras.find((a) => a.id === form.aseguradora_id);
       const { data: userData } = await supabase.auth.getUser();
+      let cot;
 
-      // Busca un caso con el mismo chasis para enlazar
-      let casoId = null;
-      if (form.chasis.trim()) {
-        const { data: casos } = await supabase
-          .from("casos")
-          .select("id")
-          .ilike("chasis", form.chasis.trim())
-          .order("created_at", { ascending: false })
-          .limit(1);
-        casoId = casos?.[0]?.id || null;
-      }
-
-      // Si no existe un caso para este vehículo, se crea uno automáticamente
-      // (en espera de piezas) con los datos de la cotización.
-      if (!casoId) {
-        setEstado("Creando caso…");
-        const { data: cliente } = await supabase
-          .from("clientes")
-          .insert({
-            nombre_completo: form.cliente_nombre,
-            email: form.cliente_email || null,
-            telefono: form.telefonos.filter(Boolean)[0] || null,
-          })
-          .select()
-          .single();
-
-        const marcaId = await findOrCreateMarca(form.marca);
-        const modeloId = await findOrCreateModelo(marcaId, form.modelo);
-
-        const { data: nuevoCaso, error: casoErr } = await supabase
-          .from("casos")
-          .insert({
-            cliente_id: cliente.id,
-            aseguradora_id: form.aseguradora_id,
-            estado: "en_espera_piezas",
-            marca_id: marcaId,
-            modelo_id: modeloId,
+      if (editando) {
+        setEstado("Guardando cambios…");
+        const { data: actualizada, error: updErr } = await supabase
+          .from("cotizaciones")
+          .update({
+            cliente_nombre: form.cliente_nombre,
+            cliente_email: form.cliente_email || null,
+            telefonos: form.telefonos.filter(Boolean),
+            marca: form.marca || null,
+            modelo: form.modelo || null,
             anio: form.anio ? Number(form.anio) : null,
             color: form.color || null,
-            chasis: form.chasis || null,
             placa: form.placa || null,
+            chasis: form.chasis || null,
+            tipo_vehiculo: form.tipo_vehiculo || null,
+            aseguradora_id: form.aseguradora_id,
+            aseguradora_nombre: aseg?.nombre || null,
             numero_reclamo: form.numero_reclamo || null,
             numero_poliza: form.numero_poliza || null,
+            items_piezas: form.items_piezas,
+            items_mano_obra: form.items_mano_obra,
+            subtotal: totales.subtotal,
+            itbis: totales.itbis,
+            total: totales.total,
+          })
+          .eq("id", cotId)
+          .select()
+          .single();
+        if (updErr) throw updErr;
+        cot = actualizada;
+      } else {
+        setEstado("Asignando número…");
+        const { data: numero, error: numErr } = await supabase.rpc("siguiente_numero_cotizacion");
+        if (numErr) throw numErr;
+
+        // Busca un caso con el mismo chasis para enlazar
+        let casoId = null;
+        if (form.chasis.trim()) {
+          const { data: casos } = await supabase
+            .from("casos")
+            .select("id")
+            .ilike("chasis", form.chasis.trim())
+            .order("created_at", { ascending: false })
+            .limit(1);
+          casoId = casos?.[0]?.id || null;
+        }
+
+        // Si no existe un caso para este vehículo, se crea uno automáticamente
+        // (en espera de piezas) con los datos de la cotización.
+        if (!casoId) {
+          setEstado("Creando caso…");
+          const { data: cliente } = await supabase
+            .from("clientes")
+            .insert({
+              nombre_completo: form.cliente_nombre,
+              email: form.cliente_email || null,
+              telefono: form.telefonos.filter(Boolean)[0] || null,
+            })
+            .select()
+            .single();
+
+          const marcaId = await findOrCreateMarca(form.marca);
+          const modeloId = await findOrCreateModelo(marcaId, form.modelo);
+
+          const { data: nuevoCaso, error: casoErr } = await supabase
+            .from("casos")
+            .insert({
+              cliente_id: cliente.id,
+              aseguradora_id: form.aseguradora_id,
+              estado: "en_espera_piezas",
+              marca_id: marcaId,
+              modelo_id: modeloId,
+              anio: form.anio ? Number(form.anio) : null,
+              color: form.color || null,
+              chasis: form.chasis || null,
+              placa: form.placa || null,
+              numero_reclamo: form.numero_reclamo || null,
+              numero_poliza: form.numero_poliza || null,
+              created_by: userData?.user?.id,
+            })
+            .select()
+            .single();
+          if (casoErr) throw casoErr;
+          casoId = nuevoCaso.id;
+        }
+
+        setEstado("Guardando cotización…");
+        const { data: nueva, error: insErr } = await supabase
+          .from("cotizaciones")
+          .insert({
+            numero,
+            estado: "generada",
+            caso_id: casoId,
+            cliente_nombre: form.cliente_nombre,
+            cliente_email: form.cliente_email || null,
+            telefonos: form.telefonos.filter(Boolean),
+            marca: form.marca || null,
+            modelo: form.modelo || null,
+            anio: form.anio ? Number(form.anio) : null,
+            color: form.color || null,
+            placa: form.placa || null,
+            chasis: form.chasis || null,
+            tipo_vehiculo: form.tipo_vehiculo || null,
+            aseguradora_id: form.aseguradora_id,
+            aseguradora_nombre: aseg?.nombre || null,
+            numero_reclamo: form.numero_reclamo || null,
+            numero_poliza: form.numero_poliza || null,
+            items_piezas: form.items_piezas,
+            items_mano_obra: form.items_mano_obra,
+            subtotal: totales.subtotal,
+            itbis: totales.itbis,
+            total: totales.total,
             created_by: userData?.user?.id,
           })
           .select()
           .single();
-        if (casoErr) throw casoErr;
-        casoId = nuevoCaso.id;
+        if (insErr) throw insErr;
+        cot = nueva;
       }
 
-      setEstado("Guardando cotización…");
-      const { data: cot, error: insErr } = await supabase
-        .from("cotizaciones")
-        .insert({
-          numero,
-          estado: "generada",
-          caso_id: casoId,
-          cliente_nombre: form.cliente_nombre,
-          cliente_email: form.cliente_email || null,
-          telefonos: form.telefonos.filter(Boolean),
-          marca: form.marca || null,
-          modelo: form.modelo || null,
-          anio: form.anio ? Number(form.anio) : null,
-          color: form.color || null,
-          placa: form.placa || null,
-          chasis: form.chasis || null,
-          tipo_vehiculo: form.tipo_vehiculo || null,
-          aseguradora_id: form.aseguradora_id,
-          aseguradora_nombre: aseg?.nombre || null,
-          numero_reclamo: form.numero_reclamo || null,
-          numero_poliza: form.numero_poliza || null,
-          items_piezas: form.items_piezas,
-          items_mano_obra: form.items_mano_obra,
-          subtotal: totales.subtotal,
-          itbis: totales.itbis,
-          total: totales.total,
-          created_by: userData?.user?.id,
-        })
-        .select()
-        .single();
-      if (insErr) throw insErr;
-
-      // Sube evidencias (se guardan con la cotización; no van en el PDF)
+      // Sube evidencias nuevas (se guardan con la cotización; no van en el PDF)
       if (evidencias.length) {
         setEstado("Subiendo evidencias…");
         for (const ev of evidencias) {
@@ -256,7 +343,7 @@ export default function NewQuote() {
       const { generarPdfCotizacion } = await import("../lib/cotizacionPdf");
       const blob = await generarPdfCotizacion({
         ...form,
-        numero,
+        numero: cot.numero,
         aseguradora_nombre: aseg?.nombre,
         aseguradora_direccion: aseg?.direccion,
         aseguradora_telefono: aseg?.telefono,
@@ -269,15 +356,22 @@ export default function NewQuote() {
 
       navigate(`/cotizaciones/${cot.id}`);
     } catch (err) {
-      setError(err.message || "No se pudo generar la cotización.");
+      setError(err.message || "No se pudo guardar la cotización.");
       setEstado("");
     }
   }
 
+  if (cargando) {
+    return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-      <Link to="/cotizaciones" className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]">
-        ← Cotizaciones
+      <Link
+        to={editando ? `/cotizaciones/${cotId}` : "/cotizaciones"}
+        className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]"
+      >
+        ← {editando ? "Volver a la cotización" : "Cotizaciones"}
       </Link>
 
       {/* Banner */}
@@ -287,12 +381,15 @@ export default function NewQuote() {
         <div className="relative flex items-center justify-between gap-4">
           <div>
             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide bg-white/10 px-2.5 py-1 rounded-full">
-              Borrador
+              {editando ? `Editando · ${original?.numero}` : "Borrador"}
             </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">Nueva cotización</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">
+              {editando ? "Editar cotización" : "Nueva cotización"}
+            </h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
-              Valora piezas y mano de obra. Al generar se crea el PDF y, si el chasis
-              coincide con un caso, queda enlazada automáticamente.
+              {editando
+                ? "Corrige los datos, agrega o elimina piezas/servicios y vuelve a generar el PDF."
+                : "Valora piezas y mano de obra. Al generar se crea el PDF y, si el chasis coincide con un caso, queda enlazada automáticamente."}
             </p>
           </div>
           <span className="hidden sm:block text-white/90">
@@ -420,6 +517,17 @@ export default function NewQuote() {
           {/* Evidencias */}
           <Section icon="image" title="Evidencias del choque" desc="Fotos de los daños del vehículo">
             <div className="flex flex-wrap gap-3">
+              {evidenciasExistentes.map((ev) => (
+                <div key={ev.id} className="relative group">
+                  <img src={ev.url} alt="" className="w-24 h-24 object-cover rounded-xl" />
+                  <button
+                    onClick={() => quitarEvidenciaExistente(ev)}
+                    className="absolute -top-2 -right-2 bg-black/70 text-white w-6 h-6 rounded-full text-sm opacity-0 group-hover:opacity-100"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
               {evidencias.map((ev, i) => (
                 <div key={i} className="relative group">
                   <img src={ev.preview} alt="" className="w-24 h-24 object-cover rounded-xl" />
@@ -461,16 +569,21 @@ export default function NewQuote() {
               {error && <p className="text-sm text-[var(--brand-red)] mt-4">{error}</p>}
 
               <button onClick={generar} disabled={!!estado} className="btn-primary w-full mt-4">
-                {estado || "Generar cotización (PDF)"}
+                {estado || (editando ? "Guardar cambios (PDF)" : "Generar cotización (PDF)")}
               </button>
-              <Link to="/cotizaciones" className="block text-center text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)] mt-3">
+              <Link
+                to={editando ? `/cotizaciones/${cotId}` : "/cotizaciones"}
+                className="block text-center text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)] mt-3"
+              >
                 Cancelar
               </Link>
 
-              <p className="text-[11px] text-[var(--ink-soft)] mt-4 leading-relaxed">
-                Si el chasis coincide con un caso registrado, el PDF aparecerá en el
-                apartado <strong>Cotizaciones</strong> de ese caso.
-              </p>
+              {!editando && (
+                <p className="text-[11px] text-[var(--ink-soft)] mt-4 leading-relaxed">
+                  Si el chasis coincide con un caso registrado, el PDF aparecerá en el
+                  apartado <strong>Cotizaciones</strong> de ese caso.
+                </p>
+              )}
             </div>
           </div>
         </aside>

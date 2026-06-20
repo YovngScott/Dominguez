@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
 import Combobox from "../components/Combobox";
@@ -18,9 +18,13 @@ function ddmmaaaa(iso) {
 export default function NewOrder() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const { ordenId } = useParams();
+  const editando = !!ordenId;
   const casoId = params.get("caso") || null;
   const [error, setError] = useState("");
   const [estado, setEstado] = useState("");
+  const [cargando, setCargando] = useState(editando);
+  const [original, setOriginal] = useState(null);
 
   const [form, setForm] = useState({
     fecha: hoy(),
@@ -47,9 +51,46 @@ export default function NewOrder() {
     trabajos: "",
   });
 
+  // Modo edición: carga la orden existente
+  useEffect(() => {
+    if (!ordenId) return;
+    async function load() {
+      const { data } = await supabase.from("ordenes_reparacion").select("*").eq("id", ordenId).single();
+      if (data) {
+        setOriginal(data);
+        setForm({
+          fecha: data.fecha || hoy(),
+          hora: data.hora || "",
+          cliente: data.cliente || "",
+          direccion: data.direccion || "",
+          tel: data.tel || "",
+          cel: data.cel || "",
+          fax: data.fax || "",
+          email: data.email || "",
+          cia_seguro: data.cia_seguro || "",
+          poliza: data.poliza || "",
+          ficha: data.ficha || "",
+          marca: data.marca || "",
+          modelo: data.modelo || "",
+          anio: data.anio || "",
+          color: data.color || "",
+          placa: data.placa || "",
+          km: data.km || "",
+          chasis: data.chasis || "",
+          tipo_combustible: data.tipo_combustible || "",
+          costo: data.costo || "",
+          observaciones: data.observaciones || "",
+          trabajos: data.trabajos || "",
+        });
+      }
+      setCargando(false);
+    }
+    load();
+  }, [ordenId]);
+
   // Prellenar desde un caso
   useEffect(() => {
-    if (!casoId) return;
+    if (!casoId || editando) return;
     async function load() {
       const { data } = await supabase
         .from("casos")
@@ -88,36 +129,70 @@ export default function NewOrder() {
     setError("");
     if (!form.cliente.trim()) return setError("El nombre del cliente es obligatorio.");
     try {
-      setEstado("Asignando número…");
-      const { data: numero, error: nErr } = await supabase.rpc("siguiente_numero_orden");
-      if (nErr) throw nErr;
+      let orden;
 
-      const { data: userData } = await supabase.auth.getUser();
-      setEstado("Guardando…");
-      const { data: orden, error: insErr } = await supabase
-        .from("ordenes_reparacion")
-        .insert({ numero, caso_id: casoId, ...form, created_by: userData?.user?.id })
-        .select()
-        .single();
-      if (insErr) throw insErr;
+      if (editando) {
+        setEstado("Guardando cambios…");
+        const { data: actualizada, error: updErr } = await supabase
+          .from("ordenes_reparacion")
+          .update({ ...form })
+          .eq("id", ordenId)
+          .select()
+          .single();
+        if (updErr) throw updErr;
+        orden = actualizada;
+      } else {
+        setEstado("Asignando número…");
+        const { data: numero, error: nErr } = await supabase.rpc("siguiente_numero_orden");
+        if (nErr) throw nErr;
+
+        const { data: userData } = await supabase.auth.getUser();
+        setEstado("Guardando…");
+        const { data: nueva, error: insErr } = await supabase
+          .from("ordenes_reparacion")
+          .insert({ numero, caso_id: casoId, ...form, created_by: userData?.user?.id })
+          .select()
+          .single();
+        if (insErr) throw insErr;
+        orden = nueva;
+
+        // Si el chasis coincide con un caso, ese vehículo ya está físicamente
+        // en el taller: lo movemos automáticamente a esa categoría.
+        if (form.chasis && form.chasis.trim()) {
+          const { data: match } = await supabase
+            .from("casos")
+            .select("id")
+            .ilike("chasis", form.chasis.trim())
+            .neq("estado", "entregado")
+            .limit(1)
+            .maybeSingle();
+          if (match) {
+            await supabase.from("casos").update({ estado: "vehiculo_en_taller" }).eq("id", match.id);
+          }
+        }
+      }
 
       setEstado("Generando PDF…");
       const { generarPdfOrden } = await import("../lib/ordenPdf");
-      const blob = await generarPdfOrden({ ...form, numero, fecha: ddmmaaaa(form.fecha) });
+      const blob = await generarPdfOrden({ ...form, numero: orden.numero, fecha: ddmmaaaa(form.fecha) });
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank"); // abre el PDF para imprimir
 
       navigate(`/ordenes/${orden.id}`);
     } catch (err) {
-      setError(err.message || "No se pudo generar la orden.");
+      setError(err.message || "No se pudo guardar la orden.");
       setEstado("");
     }
+  }
+
+  if (cargando) {
+    return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
   }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
       <Link
-        to={casoId ? `/casos/${casoId}` : "/ordenes"}
+        to={editando ? `/ordenes/${ordenId}` : casoId ? `/casos/${casoId}` : "/ordenes"}
         className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]"
       >
         ← Volver
@@ -128,12 +203,13 @@ export default function NewOrder() {
         <div className="relative flex items-center justify-between gap-4">
           <div>
             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide bg-white/10 px-2.5 py-1 rounded-full">
-              Recibo de entrada
+              {editando ? `Editando · Orden No. ${original?.numero}` : "Recibo de entrada"}
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">Orden de reparación</h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
-              Genera un recibo en una sola hoja con los datos del vehículo y el texto de
-              responsabilidad. Solo faltan las dos firmas.
+              {editando
+                ? "Corrige los datos del recibo y vuelve a generar el PDF para imprimir."
+                : "Genera un recibo en una sola hoja con los datos del vehículo y el texto de responsabilidad. Solo faltan las dos firmas."}
             </p>
           </div>
           <span className="hidden sm:block text-white/90">
@@ -203,9 +279,14 @@ export default function NewOrder() {
 
         <div className="flex gap-3">
           <button onClick={generar} disabled={!!estado} className="btn-primary">
-            {estado || "Generar e imprimir recibo"}
+            {estado || (editando ? "Guardar e imprimir recibo" : "Generar e imprimir recibo")}
           </button>
-          <Link to={casoId ? `/casos/${casoId}` : "/ordenes"} className="btn-ghost">Cancelar</Link>
+          <Link
+            to={editando ? `/ordenes/${ordenId}` : casoId ? `/casos/${casoId}` : "/ordenes"}
+            className="btn-ghost"
+          >
+            Cancelar
+          </Link>
         </div>
       </div>
     </div>

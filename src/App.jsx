@@ -152,6 +152,14 @@ export default function App() {
         }
       />
       <Route
+        path="/cotizaciones/:cotId/editar"
+        element={
+          <PrivateLayout>
+            <NewQuote />
+          </PrivateLayout>
+        }
+      />
+      <Route
         path="/ordenes"
         element={
           <PrivateLayout>
@@ -172,6 +180,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <OrderView />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/ordenes/:ordenId/editar"
+        element={
+          <PrivateLayout>
+            <NewOrder />
           </PrivateLayout>
         }
       />

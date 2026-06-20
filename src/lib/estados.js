@@ -18,6 +18,14 @@ export const ESTADOS = {
     card: "from-emerald-50 to-white border-emerald-200",
     accent: "#059669",
   },
+  vehiculo_en_taller: {
+    label: "Vehículos en el taller",
+    short: "En el taller",
+    icon: "car",
+    chip: "bg-sky-100 text-sky-700",
+    card: "from-sky-50 to-white border-sky-200",
+    accent: "#0284c7",
+  },
   entregado: {
     label: "Entregados",
     short: "Entregados",
@@ -30,5 +38,8 @@ export const ESTADOS = {
 
 export const ESTADO_DEFAULT = "en_espera_piezas";
 
-// Orden de los estados en la UI
+// Orden de los estados al crear/editar un caso (categorías de entrada)
 export const ESTADOS_PRINCIPALES = ["en_espera_piezas", "listo_para_trabajar"];
+
+// Categorías que se muestran como tarjetas en el listado de una aseguradora
+export const ESTADOS_LISTA = ["en_espera_piezas", "listo_para_trabajar", "vehiculo_en_taller"];

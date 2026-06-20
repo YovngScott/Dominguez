@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { calcularItem, nombrePieza, rd } from "../lib/cotizacion";
 import Icon from "../components/Icon";
 
 export default function QuoteView() {
   const { cotId } = useParams();
+  const navigate = useNavigate();
   const [cot, setCot] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [evidencias, setEvidencias] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [eliminando, setEliminando] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -36,6 +38,24 @@ export default function QuoteView() {
     load();
   }, [cotId]);
 
+  async function eliminar() {
+    if (!confirm("¿Eliminar esta cotización? Se borrará también su PDF y evidencias. Esta acción no se puede deshacer.")) {
+      return;
+    }
+    setEliminando(true);
+    const { data: evs } = await supabase
+      .from("cotizacion_evidencias")
+      .select("storage_path")
+      .eq("cotizacion_id", cotId);
+    const paths = (evs || []).map((e) => e.storage_path);
+    if (cot.pdf_path) paths.push(cot.pdf_path);
+    if (paths.length) await supabase.storage.from("cotizaciones").remove(paths);
+
+    await supabase.from("cotizacion_evidencias").delete().eq("cotizacion_id", cotId);
+    await supabase.from("cotizaciones").delete().eq("id", cotId);
+    navigate("/cotizaciones");
+  }
+
   if (loading) return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
   if (!cot) return <p className="p-10 text-center text-[var(--ink-soft)]">Cotización no encontrada.</p>;
 
@@ -50,11 +70,23 @@ export default function QuoteView() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">{cot.numero}</h1>
           <p className="text-[var(--ink-soft)]">{cot.cliente_nombre}</p>
         </div>
-        {pdfUrl && (
-          <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn-primary gap-1.5">
-            <Icon name="file" className="w-4 h-4" /> Ver / Descargar PDF
-          </a>
-        )}
+        <div className="flex gap-2">
+          <Link to={`/cotizaciones/${cot.id}/editar`} className="btn-ghost gap-1.5">
+            <Icon name="pencil" className="w-4 h-4" /> Editar
+          </Link>
+          <button
+            onClick={eliminar}
+            disabled={eliminando}
+            className="btn-ghost gap-1.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
+          >
+            <Icon name="trash" className="w-4 h-4" /> {eliminando ? "Eliminando…" : "Eliminar"}
+          </button>
+          {pdfUrl && (
+            <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn-primary gap-1.5">
+              <Icon name="file" className="w-4 h-4" /> Ver / Descargar PDF
+            </a>
+          )}
+        </div>
       </div>
 
       {cot.caso_id && (

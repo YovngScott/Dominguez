@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { ESTADOS, ESTADOS_PRINCIPALES } from "../lib/estados";
+import { ESTADOS, ESTADOS_LISTA } from "../lib/estados";
 import Icon from "../components/Icon";
 
 export default function CaseList() {
@@ -39,11 +39,11 @@ export default function CaseList() {
   }, [aseguradoraId]);
 
   // "En espera de piezas" actúa como catch-all: incluye cualquier caso cuyo
-  // estado no sea explícitamente "listo_para_trabajar" ni "entregado"
-  // (así también aparecen casos creados con estados antiguos como "ingresado").
+  // estado no sea explícitamente otro estado conocido (así también aparecen
+  // casos creados con estados antiguos como "ingresado").
   const perteneceA = (caso, estado) => {
     if (estado === "en_espera_piezas") {
-      return caso.estado !== "listo_para_trabajar" && caso.estado !== "entregado";
+      return !["listo_para_trabajar", "vehiculo_en_taller", "entregado"].includes(caso.estado);
     }
     return caso.estado === estado;
   };
@@ -103,13 +103,13 @@ export default function CaseList() {
         )}
       </div>
 
-      {/* Dos opciones principales */}
+      {/* Categorías principales */}
       <div
-        className={`grid sm:grid-cols-2 gap-4 mb-7 transition-opacity ${
+        className={`grid sm:grid-cols-3 gap-4 mb-7 transition-opacity ${
           buscando ? "opacity-40" : ""
         }`}
       >
-        {ESTADOS_PRINCIPALES.map((estado) => {
+        {ESTADOS_LISTA.map((estado) => {
           const e = ESTADOS[estado];
           const seleccionado = activo === estado;
           return (

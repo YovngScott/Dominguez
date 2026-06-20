@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
 
@@ -11,9 +11,11 @@ function ddmmaaaa(iso) {
 
 export default function OrderView() {
   const { ordenId } = useParams();
+  const navigate = useNavigate();
   const [orden, setOrden] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -30,6 +32,13 @@ export default function OrderView() {
     const blob = await generarPdfOrden({ ...orden, fecha: ddmmaaaa(orden.fecha) });
     window.open(URL.createObjectURL(blob), "_blank");
     setGenerando(false);
+  }
+
+  async function eliminar() {
+    if (!confirm("¿Eliminar este recibo? Esta acción no se puede deshacer.")) return;
+    setEliminando(true);
+    await supabase.from("ordenes_reparacion").delete().eq("id", ordenId);
+    navigate("/ordenes");
   }
 
   if (loading) return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
@@ -49,6 +58,16 @@ export default function OrderView() {
           {orden.caso_id && (
             <Link to={`/casos/${orden.caso_id}`} className="btn-ghost">Ver caso</Link>
           )}
+          <Link to={`/ordenes/${orden.id}/editar`} className="btn-ghost gap-1.5">
+            <Icon name="pencil" className="w-4 h-4" /> Editar
+          </Link>
+          <button
+            onClick={eliminar}
+            disabled={eliminando}
+            className="btn-ghost gap-1.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
+          >
+            <Icon name="trash" className="w-4 h-4" /> {eliminando ? "Eliminando…" : "Eliminar"}
+          </button>
           <button onClick={imprimir} disabled={generando} className="btn-primary gap-1.5">
             <Icon name="printer" className="w-4 h-4" />
             {generando ? "Generando…" : "Imprimir / PDF"}
