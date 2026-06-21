@@ -134,6 +134,26 @@ const PATHS = {
       <circle cx="16.5" cy="18" r="1.5" />
     </>
   ),
+  menu: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M3 12h18" />
+      <path d="M3 18h18" />
+    </>
+  ),
+  close: (
+    <>
+      <path d="M18 6 6 18" />
+      <path d="M6 6l12 12" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="M16 17l5-5-5-5" />
+      <path d="M21 12H9" />
+    </>
+  ),
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.8 }) {
