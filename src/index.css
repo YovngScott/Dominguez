@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+
+  /* === Identidad Dominguez Auto Pintura === */
+  --brand-red: #e10600;
+  --brand-red-600: #be0500;
+  --brand-red-50: #fff1f0;
+  --ink: #0b0b0c;
+  --ink-soft: #3f3f46;
+  --paper: #f5f6f8;
+  --line: #e6e7eb;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--paper);
+  color: var(--ink);
+}
+
+#root {
+  min-height: 100svh;
+}
+
+/* Tamaño mínimo de toque cómodo en tablet */
+button,
+a.touch-target,
+input,
+select {
+  min-height: 44px;
+}
+
+@layer components {
+  .input {
+    width: 100%;
+    border-radius: 0.6rem;
+    border: 1px solid var(--line);
+    padding: 0.6rem 0.85rem;
+    background-color: #fff;
+    color: var(--ink);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input::placeholder {
+    color: #9aa0aa;
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--brand-red);
+    box-shadow: 0 0 0 3px var(--brand-red-50);
+  }
+  .input:disabled {
+    background-color: #f3f4f6;
+    color: #9aa0aa;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background-color: var(--brand-red);
+    color: #fff;
+    font-weight: 600;
+    border-radius: 0.6rem;
+    padding: 0.6rem 1.25rem;
+    box-shadow: 0 6px 18px -6px rgba(225, 6, 0, 0.55);
+    transition: background-color 0.15s, transform 0.05s;
+  }
+  .btn-primary:hover {
+    background-color: var(--brand-red-600);
+  }
+  .btn-primary:active {
+    transform: translateY(1px);
+  }
+  .btn-primary:disabled {
+    opacity: 0.55;
+    box-shadow: none;
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background-color: #fff;
+    color: var(--ink);
+    font-weight: 600;
+    border: 1px solid var(--line);
+    border-radius: 0.6rem;
+    padding: 0.6rem 1.25rem;
+    transition: border-color 0.15s, background-color 0.15s;
+  }
+  .btn-ghost:hover {
+    border-color: var(--ink);
+  }
+
+  .card {
+    background-color: #fff;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    box-shadow: 0 1px 2px rgba(11, 11, 12, 0.04);
+  }
+
+  .field-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-bottom: 0.3rem;
+    display: block;
+  }
+}
+
+@media print {
+  :root,
+  body {
+    background: #fff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
