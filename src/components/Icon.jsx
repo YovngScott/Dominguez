@@ -37,6 +37,13 @@ const PATHS = {
       <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
     </>
   ),
+  download: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M12 15V3" />
+    </>
+  ),
   trash: (
     <>
       <path d="M3 6h18" />

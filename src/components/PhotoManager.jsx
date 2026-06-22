@@ -15,6 +15,7 @@ export default function PhotoManager({ casoId }) {
   const [error, setError] = useState("");
   const [lightbox, setLightbox] = useState(null);
   const [comparar, setComparar] = useState(false);
+  const [descargando, setDescargando] = useState(null); // { actual, total } | null
 
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -104,6 +105,54 @@ export default function PhotoManager({ casoId }) {
     await supabase.storage.from("fotos-casos").remove([foto.storage_path]);
     await supabase.from("fotos_caso").delete().eq("id", foto.id);
     setFotos((prev) => prev.filter((f) => f.id !== foto.id));
+  }
+
+  // Descarga TODAS las fotos de la categoría activa de una sola vez. En
+  // Chrome/Edge deja elegir la carpeta destino y las guarda ahí; en otros
+  // navegadores las baja una por una a la carpeta de descargas.
+  async function descargarTodas(lista, nombreCat) {
+    if (!lista.length || descargando) return;
+    setError("");
+    const base = (nombreCat || "fotos").replace(/[^\wáéíóúñ\s-]/gi, "").trim() || "fotos";
+    const nombreArchivo = (i) => `${base}-${String(i + 1).padStart(2, "0")}.jpg`;
+
+    let dirHandle = null;
+    if (window.showDirectoryPicker) {
+      try {
+        dirHandle = await window.showDirectoryPicker();
+      } catch {
+        return; // el usuario canceló el selector de carpeta
+      }
+    }
+
+    setDescargando({ actual: 0, total: lista.length });
+    for (let i = 0; i < lista.length; i++) {
+      try {
+        const resp = await fetch(lista[i].signedUrl);
+        const blob = await resp.blob();
+
+        if (dirHandle) {
+          const fileHandle = await dirHandle.getFileHandle(nombreArchivo(i), { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = nombreArchivo(i);
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          await new Promise((r) => setTimeout(r, 250)); // evita que el navegador bloquee descargas en ráfaga
+        }
+      } catch {
+        setError("No se pudo descargar una de las fotos.");
+      }
+      setDescargando({ actual: i + 1, total: lista.length });
+    }
+    setDescargando(null);
   }
 
   // Fotos de la sub-pestaña activa
@@ -214,6 +263,25 @@ export default function PhotoManager({ casoId }) {
             </p>
           )}
           {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+
+          {fotosCat.length > 0 && (
+            <div className="flex items-center justify-between mb-3 gap-3">
+              <p className="text-sm text-slate-500">
+                {fotosCat.length} foto(s) en <strong className="text-slate-700">{catActiva?.nombre}</strong>
+              </p>
+              <button
+                type="button"
+                onClick={() => descargarTodas(fotosCat, catActiva?.nombre)}
+                disabled={!!descargando}
+                className="text-sm font-medium px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                <Icon name="download" className="w-4 h-4" />
+                {descargando
+                  ? `Descargando ${descargando.actual}/${descargando.total}…`
+                  : `Descargar todas (${fotosCat.length})`}
+              </button>
+            </div>
+          )}
 
           {fotosCat.length === 0 ? (
             <p className="text-slate-500 text-sm">No hay fotos en “{catActiva?.nombre}” todavía.</p>
