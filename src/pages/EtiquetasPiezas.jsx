@@ -1,15 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import { agregarPiezaCatalogo } from "../lib/catalogo";
 
-// Formulario suelto para imprimir etiquetas de piezas. Los datos del vehículo
-// se escriben a mano (pensado para vehículos viejos que aún no tienen caso en
-// el sistema). Genera una etiqueta 4x3" con el vehículo + checklist de piezas
-// para marcar las cajas al recibirlas (sin código de barras). La etiqueta se
-// guarda para verla luego en el historial y poder modificar sus piezas.
+// Formulario para imprimir etiquetas de piezas POR CAJA. Los datos del
+// vehículo/seguro se escriben una vez (arriba) y se comparten; abajo se
+// agregan las cajas, cada una con sus piezas. Al imprimir, cada caja sale en
+// su propia hoja (4x3"). Todo se guarda como una sola etiqueta en el historial.
 export default function EtiquetasPiezas() {
   const { etiquetaId } = useParams();
   const editando = !!etiquetaId;
@@ -27,13 +26,11 @@ export default function EtiquetasPiezas() {
     reclamo: "",
   });
 
-  const [piezas, setPiezas] = useState([]); // [{ nombre, cantidad }]
-  const [nuevaPieza, setNuevaPieza] = useState("");
-  const [nuevaCant, setNuevaCant] = useState("1");
+  // Cada caja es un arreglo de piezas [{ nombre, cantidad }].
+  const [cajas, setCajas] = useState([[]]);
   const [error, setError] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
-  const [guardadoId, setGuardadoId] = useState(null); // id tras el primer guardado en modo nuevo
-  const inputRef = useRef(null);
+  const [guardadoId, setGuardadoId] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -62,7 +59,9 @@ export default function EtiquetasPiezas() {
           aseguradora: data.aseguradora_nombre || "",
           reclamo: data.numero_reclamo || "",
         });
-        setPiezas(data.piezas || []);
+        const cs = (data.cajas || []).map((c) => c.piezas || []);
+        // Compatibilidad con etiquetas viejas (una sola lista de piezas)
+        setCajas(cs.length ? cs : [data.piezas || []]);
       }
     }
     load();
@@ -92,36 +91,44 @@ export default function EtiquetasPiezas() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  function agregarPieza() {
-    const nombre = nuevaPieza.trim();
-    if (!nombre) return;
-    const cantidad = Math.max(1, parseInt(nuevaCant, 10) || 1);
-    setPiezas((prev) => [...prev, { nombre, cantidad }]);
+  function agregarPiezaACaja(cajaIdx, nombre, cantidad) {
+    const limpio = (nombre || "").trim();
+    if (!limpio) return;
+    setCajas((prev) => prev.map((c, i) => (i === cajaIdx ? [...c, { nombre: limpio, cantidad }] : c)));
 
     // Guarda la pieza en el catálogo si es nueva (para autocompletar luego)
-    if (!piezasCatalogo.some((p) => p.label.toLowerCase() === nombre.toLowerCase())) {
-      agregarPiezaCatalogo(nombre);
-      setPiezasCatalogo((prev) => [...prev, { id: nombre, label: nombre }]);
+    if (!piezasCatalogo.some((p) => p.label.toLowerCase() === limpio.toLowerCase())) {
+      agregarPiezaCatalogo(limpio);
+      setPiezasCatalogo((prev) => [...prev, { id: limpio, label: limpio }]);
     }
-
-    setNuevaPieza("");
-    setNuevaCant("1");
-    inputRef.current?.focus?.();
   }
 
-  function quitarPieza(i) {
-    setPiezas((prev) => prev.filter((_, idx) => idx !== i));
+  function quitarPiezaDeCaja(cajaIdx, piezaIdx) {
+    setCajas((prev) => prev.map((c, i) => (i === cajaIdx ? c.filter((_, j) => j !== piezaIdx) : c)));
   }
 
-  // Guarda (o actualiza) la etiqueta para que aparezca en el historial.
-  async function guardarEtiqueta() {
+  function agregarCaja() {
+    setCajas((prev) => [...prev, []]);
+  }
+
+  function quitarCaja(cajaIdx) {
+    setCajas((prev) => prev.filter((_, i) => i !== cajaIdx));
+  }
+
+  // Cajas con al menos una pieza (las vacías no se imprimen ni se guardan).
+  function cajasConPiezas() {
+    return cajas.filter((c) => c.length > 0);
+  }
+
+  async function guardarEtiqueta(cajasValidas) {
     const payload = {
       marca: form.marca || null,
       modelo: form.modelo || null,
       anio: form.anio || null,
       aseguradora_nombre: form.aseguradora || null,
       numero_reclamo: form.reclamo || null,
-      piezas,
+      cajas: cajasValidas.map((piezas) => ({ piezas })),
+      piezas: cajasValidas.flat(), // lista plana (compatibilidad / búsqueda)
     };
     const id = etiquetaId || guardadoId;
     if (id) {
@@ -139,13 +146,13 @@ export default function EtiquetasPiezas() {
 
   async function imprimir() {
     setError("");
-    if (!piezas.length) return setError("Agrega al menos una pieza.");
+    const validas = cajasConPiezas();
+    if (!validas.length) return setError("Agrega al menos una pieza en alguna caja.");
 
     setImprimiendo(true);
     try {
-      // Se guarda primero para que quede en el historial aunque cierren el PDF.
       try {
-        await guardarEtiqueta();
+        await guardarEtiqueta(validas);
       } catch {
         /* si falla el guardado igual se imprime */
       }
@@ -158,7 +165,7 @@ export default function EtiquetasPiezas() {
         numero_reclamo: form.reclamo,
       };
       const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
-      const blob = await generarPdfEtiquetas({ caso, piezas });
+      const blob = await generarPdfEtiquetas({ caso, cajas: validas.map((piezas) => ({ piezas })) });
       window.open(URL.createObjectURL(blob), "_blank");
     } catch {
       setError("No se pudo generar las etiquetas.");
@@ -166,6 +173,8 @@ export default function EtiquetasPiezas() {
       setImprimiendo(false);
     }
   }
+
+  const totalPiezas = cajas.reduce((acc, c) => acc + c.length, 0);
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
@@ -181,21 +190,35 @@ export default function EtiquetasPiezas() {
         <div className="relative flex items-center justify-between gap-4">
           <div>
             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide bg-white/10 px-2.5 py-1 rounded-full">
-              {editando ? "Editar etiqueta" : "Etiquetas para caja"}
+              {editando ? "Editar etiqueta" : "Etiquetas por caja"}
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">
               {editando ? "Editar etiqueta" : "Imprimir etiquetas"}
             </h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
-              {editando
-                ? "Modifica las piezas o los datos del vehículo y vuelve a imprimir la etiqueta."
-                : "Escribe los datos del vehículo, arma la lista de piezas e imprime una etiqueta (4×3\") con el checklist para marcar las cajas al recibirlas."}
+              Escribe los datos del vehículo una vez y agrega una caja por cada paquete.
+              Cada caja se imprime en su propia hoja (4×3&quot;).
             </p>
           </div>
           <span className="hidden sm:block text-white/90">
             <Icon name="tag" className="w-16 h-16" strokeWidth={1.4} />
           </span>
         </div>
+      </div>
+
+      {/* Acciones (reposicionadas arriba) */}
+      <div className="flex gap-3 mb-6">
+        <button
+          onClick={imprimir}
+          disabled={imprimiendo}
+          className="btn-primary gap-1.5 disabled:opacity-50"
+        >
+          <Icon name="printer" className="w-4 h-4" />
+          {imprimiendo ? "Generando…" : editando ? "Guardar e imprimir" : "Imprimir etiquetas"}
+        </button>
+        <Link to={editando ? "/piezas/etiquetas/historial" : "/piezas"} className="btn-ghost">
+          Cancelar
+        </Link>
       </div>
 
       <div className="space-y-5">
@@ -239,80 +262,113 @@ export default function EtiquetasPiezas() {
           </div>
         </div>
 
-        {/* Piezas */}
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-[var(--ink)]">Piezas ({piezas.length})</h2>
-          </div>
+        {/* Cajas */}
+        {cajas.map((piezas, i) => (
+          <CajaCard
+            key={i}
+            indice={i}
+            total={cajas.length}
+            piezas={piezas}
+            piezasCatalogo={piezasCatalogo}
+            onAgregar={(nombre, cant) => agregarPiezaACaja(i, nombre, cant)}
+            onQuitar={(j) => quitarPiezaDeCaja(i, j)}
+            onEliminarCaja={() => quitarCaja(i)}
+          />
+        ))}
 
-          {/* Agregar pieza */}
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex-1">
-              <Combobox
-                items={piezasCatalogo}
-                value={nuevaPieza}
-                onChange={(v) => setNuevaPieza(v)}
-                placeholder="Nombre de la pieza (ej. Bumper delantero)…"
-                allowCreate
-              />
-            </div>
-            <input
-              type="number"
-              min="1"
-              value={nuevaCant}
-              onChange={(e) => setNuevaCant(e.target.value)}
-              className="input w-full sm:w-24"
-              placeholder="Cant."
-              aria-label="Cantidad"
-            />
-            <button onClick={agregarPieza} className="btn-primary whitespace-nowrap gap-1.5">
-              <Icon name="plus" className="w-4 h-4" /> Agregar
-            </button>
-          </div>
-
-          {/* Lista */}
-          {piezas.length === 0 ? (
-            <p className="text-sm text-[var(--ink-soft)] mt-5 text-center py-6 border border-dashed border-[var(--line)] rounded-xl">
-              Aún no hay piezas. Agrega las que vayas necesitando.
-            </p>
-          ) : (
-            <ul className="divide-y divide-[var(--line)] mt-4">
-              {piezas.map((p, i) => (
-                <li key={i} className="flex items-center gap-3 py-2.5">
-                  <span className="w-6 h-6 rounded-md border-2 border-[var(--ink-soft)] shrink-0" />
-                  <span className="flex-1 font-medium text-[var(--ink)]">{p.nombre}</span>
-                  {p.cantidad > 1 && (
-                    <span className="text-xs text-[var(--ink-soft)] whitespace-nowrap">x{p.cantidad}</span>
-                  )}
-                  <button
-                    onClick={() => quitarPieza(i)}
-                    className="text-[var(--ink-soft)] hover:text-[var(--brand-red)] px-1"
-                    title="Quitar"
-                  >
-                    <Icon name="trash" className="w-4 h-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <button onClick={agregarCaja} className="btn-ghost w-full gap-1.5 border-dashed">
+          <Icon name="plus" className="w-4 h-4" /> Agregar caja
+        </button>
 
         {error && <p className="text-sm text-[var(--brand-red)]">{error}</p>}
 
-        <div className="flex gap-3">
-          <button
-            onClick={imprimir}
-            disabled={imprimiendo}
-            className="btn-primary gap-1.5 disabled:opacity-50"
-          >
-            <Icon name="printer" className="w-4 h-4" />
-            {imprimiendo ? "Generando…" : editando ? "Guardar e imprimir" : "Imprimir etiquetas"}
-          </button>
-          <Link to={editando ? "/piezas/etiquetas/historial" : "/piezas"} className="btn-ghost">
-            Cancelar
-          </Link>
-        </div>
+        <p className="text-xs text-[var(--ink-soft)] text-center">
+          {cajas.length} caja(s) · {totalPiezas} pieza(s) en total
+        </p>
       </div>
+    </div>
+  );
+}
+
+// Tarjeta de una caja: su propio campo para agregar piezas y su lista.
+function CajaCard({ indice, total, piezas, piezasCatalogo, onAgregar, onQuitar, onEliminarCaja }) {
+  const [nuevaPieza, setNuevaPieza] = useState("");
+  const [nuevaCant, setNuevaCant] = useState("1");
+
+  function agregar() {
+    if (!nuevaPieza.trim()) return;
+    onAgregar(nuevaPieza, Math.max(1, parseInt(nuevaCant, 10) || 1));
+    setNuevaPieza("");
+    setNuevaCant("1");
+  }
+
+  return (
+    <div className="card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-[var(--ink)]">
+          Caja {indice + 1} <span className="text-[var(--ink-soft)] font-normal">({piezas.length} pieza{piezas.length === 1 ? "" : "s"})</span>
+        </h2>
+        {total > 1 && (
+          <button
+            onClick={onEliminarCaja}
+            className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)] inline-flex items-center gap-1"
+            title="Eliminar caja"
+          >
+            <Icon name="trash" className="w-4 h-4" /> Quitar caja
+          </button>
+        )}
+      </div>
+
+      {/* Agregar pieza */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex-1">
+          <Combobox
+            items={piezasCatalogo}
+            value={nuevaPieza}
+            onChange={(v) => setNuevaPieza(v)}
+            placeholder="Nombre de la pieza (ej. Bumper delantero)…"
+            allowCreate
+          />
+        </div>
+        <input
+          type="number"
+          min="1"
+          value={nuevaCant}
+          onChange={(e) => setNuevaCant(e.target.value)}
+          className="input w-full sm:w-24"
+          placeholder="Cant."
+          aria-label="Cantidad"
+        />
+        <button onClick={agregar} className="btn-primary whitespace-nowrap gap-1.5">
+          <Icon name="plus" className="w-4 h-4" /> Agregar
+        </button>
+      </div>
+
+      {/* Lista */}
+      {piezas.length === 0 ? (
+        <p className="text-sm text-[var(--ink-soft)] mt-5 text-center py-6 border border-dashed border-[var(--line)] rounded-xl">
+          Aún no hay piezas en esta caja.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--line)] mt-4">
+          {piezas.map((p, j) => (
+            <li key={j} className="flex items-center gap-3 py-2.5">
+              <span className="w-6 h-6 rounded-md border-2 border-[var(--ink-soft)] shrink-0" />
+              <span className="flex-1 font-medium text-[var(--ink)]">{p.nombre}</span>
+              {p.cantidad > 1 && (
+                <span className="text-xs text-[var(--ink-soft)] whitespace-nowrap">x{p.cantidad}</span>
+              )}
+              <button
+                onClick={() => onQuitar(j)}
+                className="text-[var(--ink-soft)] hover:text-[var(--brand-red)] px-1"
+                title="Quitar"
+              >
+                <Icon name="trash" className="w-4 h-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

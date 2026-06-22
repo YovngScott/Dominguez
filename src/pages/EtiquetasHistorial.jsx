@@ -3,6 +3,17 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
 
+// Cajas de una etiqueta (formato nuevo); si es vieja, envuelve su lista de
+// piezas como una sola caja.
+function cajasDe(et) {
+  if (et.cajas?.length) return et.cajas.map((c) => ({ piezas: c.piezas || [] }));
+  return [{ piezas: et.piezas || [] }];
+}
+
+function piezasPlanas(et) {
+  return cajasDe(et).flatMap((c) => c.piezas || []);
+}
+
 // Historial de etiquetas de piezas generadas/impresas. Permite abrir una para
 // modificar sus piezas/datos y reimprimirla, reimprimir directo, o eliminarla.
 export default function EtiquetasHistorial() {
@@ -36,7 +47,7 @@ export default function EtiquetasHistorial() {
         numero_reclamo: et.numero_reclamo,
       };
       const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
-      const blob = await generarPdfEtiquetas({ caso, piezas: et.piezas || [] });
+      const blob = await generarPdfEtiquetas({ caso, cajas: cajasDe(et) });
       window.open(URL.createObjectURL(blob), "_blank");
     } finally {
       setImprimiendoId(null);
@@ -52,7 +63,7 @@ export default function EtiquetasHistorial() {
   const term = q.trim().toLowerCase();
   const lista = term
     ? etiquetas.filter((e) =>
-        [e.marca, e.modelo, e.anio, e.aseguradora_nombre, e.numero_reclamo, ...(e.piezas || []).map((p) => p.nombre)]
+        [e.marca, e.modelo, e.anio, e.aseguradora_nombre, e.numero_reclamo, ...piezasPlanas(e).map((p) => p.nombre)]
           .filter(Boolean)
           .some((x) => String(x).toLowerCase().includes(term))
       )
@@ -90,7 +101,8 @@ export default function EtiquetasHistorial() {
         <div className="space-y-3">
           {lista.map((et) => {
             const titulo = [et.marca, et.modelo, et.anio].filter(Boolean).join(" ") || "Vehículo";
-            const piezas = et.piezas || [];
+            const numCajas = cajasDe(et).length;
+            const piezas = piezasPlanas(et);
             return (
               <div key={et.id} className="card p-5">
                 <div className="flex items-start justify-between gap-3">
@@ -104,7 +116,7 @@ export default function EtiquetasHistorial() {
                       {et.numero_reclamo ? ` · Reclamo ${et.numero_reclamo}` : ""}
                     </p>
                     <p className="text-xs text-[var(--ink-soft)] mt-1">
-                      {piezas.length} pieza(s) · {new Date(et.created_at).toLocaleDateString("es-DO")}
+                      {numCajas} caja(s) · {piezas.length} pieza(s) · {new Date(et.created_at).toLocaleDateString("es-DO")}
                     </p>
                   </button>
                   <div className="flex items-center gap-1 shrink-0">
