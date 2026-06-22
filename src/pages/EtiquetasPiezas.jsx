@@ -1,18 +1,34 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import { agregarPiezaCatalogo } from "../lib/catalogo";
 
-// Formulario suelto para imprimir etiquetas de piezas: se arma una lista de
-// piezas a mano y se vincula a un caso (vehículo) para que la etiqueta lleve
-// los datos del asegurado, el vehículo y el seguro. Una etiqueta 4x3" con el
-// checklist de piezas para marcar las cajas al recibirlas.
+// Formulario suelto para imprimir etiquetas de piezas. Los datos del vehículo
+// se escriben a mano (pensado para vehículos viejos que aún no tienen caso en
+// el sistema). Genera una etiqueta 4x3" con el vehículo + checklist de piezas
+// para marcar las cajas al recibirlas (sin código de barras).
 export default function EtiquetasPiezas() {
-  const [casos, setCasos] = useState([]); // [{ id, ...datos }]
+  const [aseguradoras, setAseguradoras] = useState([]);
+  const [marcas, setMarcas] = useState([]);
+  const [modelos, setModelos] = useState([]);
   const [piezasCatalogo, setPiezasCatalogo] = useState([]);
-  const [casoId, setCasoId] = useState("");
+
+  const [form, setForm] = useState({
+    cliente: "",
+    tel: "",
+    marca: "",
+    modelo: "",
+    anio: "",
+    color: "",
+    placa: "",
+    chasis: "",
+    aseguradora: "",
+    reclamo: "",
+    poliza: "",
+  });
+
   const [piezas, setPiezas] = useState([]); // [{ nombre, cantidad }]
   const [nuevaPieza, setNuevaPieza] = useState("");
   const [nuevaCant, setNuevaCant] = useState("1");
@@ -22,37 +38,41 @@ export default function EtiquetasPiezas() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: cs }, { data: pc }] = await Promise.all([
-        supabase
-          .from("casos")
-          .select(
-            `id, placa, chasis, anio, color, numero_reclamo, numero_poliza,
-             cliente:clientes(nombre_completo, telefono),
-             aseguradora:aseguradoras(nombre),
-             marca:marcas(nombre), modelo:modelos(nombre)`
-          )
-          .neq("estado", "entregado")
-          .order("created_at", { ascending: false }),
+      const [{ data: asegs }, { data: ms }, { data: pc }] = await Promise.all([
+        supabase.from("aseguradoras").select("nombre").eq("activo", true).order("orden"),
+        supabase.from("marcas").select("id, nombre").order("nombre"),
         supabase.from("piezas_catalogo").select("nombre").order("nombre"),
       ]);
-      setCasos(cs || []);
+      setAseguradoras((asegs || []).map((a) => ({ id: a.nombre, label: a.nombre })));
+      setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
       setPiezasCatalogo((pc || []).map((p) => ({ id: p.nombre, label: p.nombre })));
     }
     load();
   }, []);
 
-  const casoSel = useMemo(() => casos.find((c) => c.id === casoId) || null, [casos, casoId]);
+  // Modelos sugeridos cuando la marca escrita coincide con una del catálogo
+  useEffect(() => {
+    async function loadModelos() {
+      const match = marcas.find(
+        (m) => m.label.toLowerCase() === (form.marca || "").trim().toLowerCase()
+      );
+      if (!match) {
+        setModelos([]);
+        return;
+      }
+      const { data } = await supabase
+        .from("modelos")
+        .select("nombre")
+        .eq("marca_id", match._id)
+        .order("nombre");
+      setModelos((data || []).map((m) => ({ id: m.nombre, label: m.nombre })));
+    }
+    loadModelos();
+  }, [form.marca, marcas]);
 
-  const itemsCasos = casos.map((c) => ({
-    id: c.id,
-    label: [
-      [c.marca?.nombre, c.modelo?.nombre].filter(Boolean).join(" ") || "Vehículo",
-      c.placa || c.chasis,
-      c.cliente?.nombre_completo,
-    ]
-      .filter(Boolean)
-      .join(" · "),
-  }));
+  function up(k, v) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
 
   function agregarPieza() {
     const nombre = nuevaPieza.trim();
@@ -77,23 +97,22 @@ export default function EtiquetasPiezas() {
 
   async function imprimir() {
     setError("");
-    if (!casoSel) return setError("Selecciona el vehículo (caso) al que pertenecen las piezas.");
     if (!piezas.length) return setError("Agrega al menos una pieza.");
 
     setImprimiendo(true);
     try {
       const caso = {
-        marca: casoSel.marca?.nombre,
-        modelo: casoSel.modelo?.nombre,
-        anio: casoSel.anio,
-        color: casoSel.color,
-        placa: casoSel.placa,
-        chasis: casoSel.chasis,
-        cliente_nombre: casoSel.cliente?.nombre_completo,
-        cliente_telefono: casoSel.cliente?.telefono,
-        aseguradora_nombre: casoSel.aseguradora?.nombre,
-        numero_reclamo: casoSel.numero_reclamo,
-        numero_poliza: casoSel.numero_poliza,
+        marca: form.marca,
+        modelo: form.modelo,
+        anio: form.anio,
+        color: form.color,
+        placa: form.placa,
+        chasis: form.chasis,
+        cliente_nombre: form.cliente,
+        cliente_telefono: form.tel,
+        aseguradora_nombre: form.aseguradora,
+        numero_reclamo: form.reclamo,
+        numero_poliza: form.poliza,
       };
       const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
       const blob = await generarPdfEtiquetas({ caso, piezas });
@@ -120,8 +139,8 @@ export default function EtiquetasPiezas() {
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">Imprimir etiquetas</h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
-              Arma la lista de piezas, vincúlala a un vehículo e imprime una etiqueta
-              (4×3&quot;) con el checklist para marcar las cajas al recibirlas.
+              Escribe los datos del vehículo, arma la lista de piezas e imprime una
+              etiqueta (4×3&quot;) con el checklist para marcar las cajas al recibirlas.
             </p>
           </div>
           <span className="hidden sm:block text-white/90">
@@ -131,28 +150,62 @@ export default function EtiquetasPiezas() {
       </div>
 
       <div className="space-y-5">
-        {/* Vehículo / caso */}
+        {/* Vehículo y seguro */}
         <div className="card p-6">
-          <h2 className="font-bold text-[var(--ink)] mb-1">Vehículo</h2>
-          <p className="text-xs text-[var(--ink-soft)] mb-4">
-            Busca por placa, chasis o nombre del asegurado.
-          </p>
-          <Combobox
-            items={itemsCasos}
-            value={casoId}
-            onChange={(id) => setCasoId(id)}
-            placeholder="Seleccionar vehículo…"
-            emptyText="No hay casos activos"
-          />
-
-          {casoSel && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 text-sm border-t border-[var(--line)] pt-4">
-              <Dato k="Vehículo" v={[casoSel.marca?.nombre, casoSel.modelo?.nombre, casoSel.anio].filter(Boolean).join(" ")} />
-              <Dato k="Placa" v={casoSel.placa} />
-              <Dato k="Asegurado" v={casoSel.cliente?.nombre_completo} />
-              <Dato k="Aseguradora" v={casoSel.aseguradora?.nombre} />
-            </div>
-          )}
+          <h2 className="font-bold text-[var(--ink)] mb-4">Vehículo y seguro</h2>
+          <div className="grid sm:grid-cols-3 gap-4">
+            <Campo label="Asegurado">
+              <input value={form.cliente} onChange={(e) => up("cliente", e.target.value)} className="input" />
+            </Campo>
+            <Campo label="Teléfono">
+              <input value={form.tel} onChange={(e) => up("tel", e.target.value)} className="input" />
+            </Campo>
+            <Campo label="Aseguradora">
+              <Combobox
+                items={aseguradoras}
+                value={form.aseguradora}
+                onChange={(v) => up("aseguradora", v)}
+                placeholder="Seleccionar…"
+                allowCreate
+              />
+            </Campo>
+            <Campo label="Marca">
+              <Combobox
+                items={marcas}
+                value={form.marca}
+                onChange={(v) => setForm((f) => ({ ...f, marca: v, modelo: "" }))}
+                placeholder="Toyota, Honda…"
+                allowCreate
+              />
+            </Campo>
+            <Campo label="Modelo">
+              <Combobox
+                items={modelos}
+                value={form.modelo}
+                onChange={(v) => up("modelo", v)}
+                placeholder="Corolla, Civic…"
+                allowCreate
+              />
+            </Campo>
+            <Campo label="Año">
+              <input value={form.anio} onChange={(e) => up("anio", e.target.value)} className="input" placeholder="2020" />
+            </Campo>
+            <Campo label="Color">
+              <input value={form.color} onChange={(e) => up("color", e.target.value)} className="input" />
+            </Campo>
+            <Campo label="Placa">
+              <input value={form.placa} onChange={(e) => up("placa", e.target.value)} className="input" />
+            </Campo>
+            <Campo label="Chasis">
+              <input value={form.chasis} onChange={(e) => up("chasis", e.target.value)} className="input" />
+            </Campo>
+            <Campo label="No. de reclamo">
+              <input value={form.reclamo} onChange={(e) => up("reclamo", e.target.value)} className="input" />
+            </Campo>
+            <Campo label="No. de póliza">
+              <input value={form.poliza} onChange={(e) => up("poliza", e.target.value)} className="input" />
+            </Campo>
+          </div>
         </div>
 
         {/* Piezas */}
@@ -233,11 +286,11 @@ export default function EtiquetasPiezas() {
   );
 }
 
-function Dato({ k, v }) {
+function Campo({ label, children }) {
   return (
-    <div>
-      <p className="text-[var(--ink-soft)] text-xs uppercase tracking-wide">{k}</p>
-      <p className="font-semibold text-[var(--ink)]">{v || "—"}</p>
-    </div>
+    <label className="block">
+      <span className="field-label">{label}</span>
+      {children}
+    </label>
   );
 }
