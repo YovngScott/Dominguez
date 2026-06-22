@@ -1,28 +1,32 @@
 import { Routes, Route, Navigate, Link, NavLink, useLocation } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useAuth } from "./hooks/useAuth";
 import Logo from "./components/Logo";
 import Icon from "./components/Icon";
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import CaseList from "./pages/CaseList";
-import CaseDetail from "./pages/CaseDetail";
-import NewCase from "./pages/NewCase";
-import EditCase from "./pages/EditCase";
-import CaseReport from "./pages/CaseReport";
-import QuoteList from "./pages/QuoteList";
-import NewQuote from "./pages/NewQuote";
-import QuoteView from "./pages/QuoteView";
-import OrdersList from "./pages/OrdersList";
-import NewOrder from "./pages/NewOrder";
-import OrderView from "./pages/OrderView";
-import PiezasList from "./pages/PiezasList";
-import PiezasCaso from "./pages/PiezasCaso";
-import EtiquetasPiezas from "./pages/EtiquetasPiezas";
-import EtiquetasHistorial from "./pages/EtiquetasHistorial";
-import ClientList from "./pages/ClientList";
-import CitasList from "./pages/CitasList";
-import Reportes from "./pages/Reportes";
+
+// Cada página se carga bajo demanda (code-splitting): el navegador solo
+// descarga el código de la pantalla que se está abriendo, no el de toda la
+// app de una vez. Reduce mucho la carga inicial.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const CaseList = lazy(() => import("./pages/CaseList"));
+const CaseDetail = lazy(() => import("./pages/CaseDetail"));
+const NewCase = lazy(() => import("./pages/NewCase"));
+const EditCase = lazy(() => import("./pages/EditCase"));
+const CaseReport = lazy(() => import("./pages/CaseReport"));
+const QuoteList = lazy(() => import("./pages/QuoteList"));
+const NewQuote = lazy(() => import("./pages/NewQuote"));
+const QuoteView = lazy(() => import("./pages/QuoteView"));
+const OrdersList = lazy(() => import("./pages/OrdersList"));
+const NewOrder = lazy(() => import("./pages/NewOrder"));
+const OrderView = lazy(() => import("./pages/OrderView"));
+const PiezasList = lazy(() => import("./pages/PiezasList"));
+const PiezasCaso = lazy(() => import("./pages/PiezasCaso"));
+const EtiquetasPiezas = lazy(() => import("./pages/EtiquetasPiezas"));
+const EtiquetasHistorial = lazy(() => import("./pages/EtiquetasHistorial"));
+const ClientList = lazy(() => import("./pages/ClientList"));
+const CitasList = lazy(() => import("./pages/CitasList"));
+const Reportes = lazy(() => import("./pages/Reportes"));
 
 const NAV = [
   { to: "/cotizaciones", label: "Cotizaciones", icon: "receipt" },
@@ -165,7 +169,9 @@ function PrivateLayout({ children }) {
         />
       )}
 
-      <main className="flex-1">{children}</main>
+      <main className="flex-1">
+        <Suspense fallback={Cargando}>{children}</Suspense>
+      </main>
     </div>
   );
 }
@@ -175,8 +181,10 @@ function PrivateBare({ children }) {
   const { session, loading } = useAuth();
   if (loading) return <div className="p-10 text-center text-gray-500">Cargando…</div>;
   if (!session) return <Navigate to="/login" replace />;
-  return children;
+  return <Suspense fallback={Cargando}>{children}</Suspense>;
 }
+
+const Cargando = <div className="p-10 text-center text-gray-500">Cargando…</div>;
 
 export default function App() {
   return (
