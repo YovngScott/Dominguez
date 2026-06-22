@@ -14,8 +14,8 @@ export default function PiezasCaso() {
       const { data } = await supabase
         .from("casos")
         .select(
-          `placa, chasis, anio, color, numero_reclamo,
-           cliente:clientes(nombre_completo),
+          `placa, chasis, anio, color, numero_reclamo, numero_poliza,
+           cliente:clientes(nombre_completo, telefono),
            aseguradora:aseguradoras(nombre),
            marca:marcas(nombre), modelo:modelos(nombre)`
         )
@@ -24,12 +24,15 @@ export default function PiezasCaso() {
       if (data) {
         setCaso({
           cliente_nombre: data.cliente?.nombre_completo,
+          cliente_telefono: data.cliente?.telefono,
           aseguradora_nombre: data.aseguradora?.nombre,
           marca: data.marca?.nombre,
           modelo: data.modelo?.nombre,
           anio: data.anio,
           placa: data.placa,
+          chasis: data.chasis,
           numero_reclamo: data.numero_reclamo,
+          numero_poliza: data.numero_poliza,
         });
       }
       setLoading(false);

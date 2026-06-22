@@ -37,11 +37,8 @@ export default function NewOrder() {
     direccion: "",
     tel: "",
     cel: "",
-    fax: "",
     email: "",
     cia_seguro: "",
-    poliza: "",
-    ficha: "",
     marca: "",
     modelo: "",
     anio: "",
@@ -105,11 +102,8 @@ export default function NewOrder() {
           direccion: data.direccion || "",
           tel: data.tel || "",
           cel: data.cel || "",
-          fax: data.fax || "",
           email: data.email || "",
           cia_seguro: data.cia_seguro || "",
-          poliza: data.poliza || "",
-          ficha: data.ficha || "",
           marca: data.marca || "",
           modelo: data.modelo || "",
           anio: data.anio || "",
@@ -148,8 +142,6 @@ export default function NewOrder() {
         tel: data.cliente?.telefono || "",
         email: data.cliente?.email || "",
         cia_seguro: data.aseguradora?.nombre || "",
-        poliza: data.numero_poliza || "",
-        ficha: data.numero_reclamo || "",
         marca: data.marca?.nombre || "",
         modelo: data.modelo?.nombre || "",
         anio: data.anio ? String(data.anio) : "",
@@ -266,29 +258,11 @@ export default function NewOrder() {
             <F label="Dirección" v={form.direccion} on={(x) => up("direccion", x)} />
             <F label="Teléfono" v={form.tel} on={(x) => up("tel", x)} />
             <F label="Celular" v={form.cel} on={(x) => up("cel", x)} />
-            <F label="Fax" v={form.fax} on={(x) => up("fax", x)} />
             <F label="Email" v={form.email} on={(x) => up("email", x)} />
           </div>
         </Card>
 
-        <Card title="Seguro">
-          <div className="grid sm:grid-cols-3 gap-4">
-            <label className="block">
-              <span className="field-label">Cía. de seguro</span>
-              <Combobox
-                items={aseguradoras}
-                value={form.cia_seguro}
-                onChange={(v) => up("cia_seguro", v)}
-                placeholder="Seleccionar…"
-                allowCreate
-              />
-            </label>
-            <F label="Póliza No." v={form.poliza} on={(x) => up("poliza", x)} />
-            <F label="No. de ficha" v={form.ficha} on={(x) => up("ficha", x)} />
-          </div>
-        </Card>
-
-        <Card title="Vehículo">
+        <Card title="Vehículo y seguro">
           <div className="grid sm:grid-cols-3 gap-4">
             <label className="block">
               <span className="field-label">Marca</span>
@@ -322,6 +296,16 @@ export default function NewOrder() {
                 value={form.tipo_combustible}
                 onChange={(v) => up("tipo_combustible", v)}
                 placeholder="Seleccionar…"
+              />
+            </label>
+            <label className="block">
+              <span className="field-label">Cía. de seguro</span>
+              <Combobox
+                items={aseguradoras}
+                value={form.cia_seguro}
+                onChange={(v) => up("cia_seguro", v)}
+                placeholder="Seleccionar…"
+                allowCreate
               />
             </label>
           </div>

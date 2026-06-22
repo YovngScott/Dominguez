@@ -81,7 +81,7 @@ export default function OrderView() {
         <Dato k="Placa" v={orden.placa} />
         <Dato k="Chasis" v={orden.chasis} />
         <Dato k="Aseguradora" v={orden.cia_seguro} />
-        <Dato k="Póliza" v={orden.poliza} />
+        <Dato k="Combustible" v={orden.tipo_combustible} />
         <Dato k="Costo" v={orden.costo ? `RD$ ${orden.costo}` : "—"} />
         <Dato k="Teléfono" v={orden.tel} />
       </div>

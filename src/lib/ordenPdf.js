@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 
 const TALLER = {
+  nombre: "DOMINGUEZ AUTO PINTURA",
   tels: "809.575.7986 / 809.330.3554 / 809.576.5349",
   email1: "dominguez.apintura@gmail.com",
   email2: "cotizaciones.dautopintura@gmail.com",
@@ -26,9 +27,13 @@ const LEGAL_BOLD = [
 
 const TINTA = [17, 17, 17];
 const GRIS = [110, 116, 128];
+const GRIS_CLARO = [148, 153, 163];
 const ROJO = [200, 30, 30];
-const LINEA = [220, 222, 226];
-const M = 14;
+const ROJO_CLARO = [253, 235, 235];
+const LINEA = [224, 226, 230];
+const FONDO = [246, 247, 249];
+const BLANCO = [255, 255, 255];
+const M = 13;
 
 async function urlADataUrl(url) {
   try {
@@ -44,191 +49,228 @@ async function urlADataUrl(url) {
   }
 }
 
-function campos(doc, x, y, pares, size = 9) {
-  doc.setFontSize(size);
-  let cx = x;
-  pares.forEach(([lab, val]) => {
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...TINTA);
-    doc.text(lab, cx, y);
-    cx += doc.getTextWidth(lab) + 1.2;
-    doc.setFont("helvetica", "normal");
-    const v = String(val ?? "");
-    doc.text(v, cx, y);
-    cx += doc.getTextWidth(v) + 4;
-  });
+// Etiqueta pequeña (gris, mayúsculas) + valor en negrita, en una sola línea.
+function campo(doc, x, y, label, valor, { labelW = null } = {}) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.6);
+  doc.setTextColor(...GRIS_CLARO);
+  doc.text(label.toUpperCase(), x, y);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.6);
+  doc.setTextColor(...TINTA);
+  doc.text(String(valor || "—"), x + (labelW ?? 0), y + 4.6);
 }
 
-function bloque(doc, x, y, w, titulo, lineas) {
+// Tarjeta con barra de acento a la izquierda + encabezado con ícono simple.
+function tarjeta(doc, x, y, w, h, titulo) {
+  doc.setFillColor(...BLANCO);
+  doc.setDrawColor(...LINEA);
+  doc.setLineWidth(0.35);
+  doc.roundedRect(x, y, w, h, 2.5, 2.5, "FD");
+  doc.setFillColor(...ROJO);
+  doc.roundedRect(x, y, 2.6, h, 2.5, 2.5, "F");
+  doc.rect(x + 1.3, y, 1.3, h, "F"); // cuadra la esquina interior de la barra
+
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(8.5);
   doc.setTextColor(...ROJO);
-  doc.text(titulo, x + 4, y + 6);
-  doc.setFontSize(9);
-  doc.setTextColor(...TINTA);
-  let yy = y + 12;
-  lineas.filter(Boolean).forEach((l) => {
-    if (Array.isArray(l)) campos(doc, x + 4, yy, l, 9);
-    else {
-      doc.setFont("helvetica", "normal");
-      doc.text(String(l), x + 4, yy);
-    }
-    yy += 5.5;
-  });
+  doc.text(titulo.toUpperCase(), x + 8, y + 8);
+  doc.setDrawColor(...LINEA);
+  doc.setLineWidth(0.2);
+  doc.line(x + 8, y + 10.5, x + w - 6, y + 10.5);
 }
 
 export async function generarPdfOrden(orden) {
   const doc = new jsPDF({ unit: "mm", format: "letter" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
-  let y = 12;
+  const contentW = W - M * 2;
 
-  // ===== Encabezado =====
+  // ===== Letterhead (banda oscura con logo + datos del taller) =====
+  const bandH = 30;
+  doc.setFillColor(...TINTA);
+  doc.rect(0, 0, W, bandH, "F");
+  doc.setFillColor(...ROJO);
+  doc.rect(0, bandH, W, 1.4, "F");
+
   const logo = await urlADataUrl("/logo.png");
   if (logo) {
     try {
-      doc.addImage(logo, "PNG", M, y, 40, 30, undefined, "FAST");
+      doc.setFillColor(...BLANCO);
+      doc.roundedRect(M, 4, 44, bandH - 8, 2, 2, "F");
+      doc.addImage(logo, "PNG", M + 2, 5.5, 40, bandH - 11, undefined, "FAST");
     } catch {
       /* opcional */
     }
   }
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...GRIS);
-  const der = [TALLER.tels, TALLER.email1, TALLER.email2, TALLER.direccion, `${TALLER.rnc}  ·  ${TALLER.registro}`];
-  der.forEach((t, i) => doc.text(t, W - M, y + 4 + i * 4, { align: "right" }));
+  doc.setFontSize(7.6);
+  doc.setTextColor(230, 230, 232);
+  const der = [TALLER.tels, `${TALLER.email1}  ·  ${TALLER.email2}`, TALLER.direccion, `${TALLER.rnc}   ${TALLER.registro}`];
+  der.forEach((t, i) => doc.text(t, W - M, 7.5 + i * 4.4, { align: "right" }));
 
-  y += 34;
-  doc.setDrawColor(...ROJO);
-  doc.setLineWidth(0.6);
-  doc.line(M, y, W - M, y);
-  y += 8;
-
-  // Título + número + fecha
+  // ===== Título + No. + fecha =====
+  let y = bandH + 11;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
+  doc.setFontSize(18);
   doc.setTextColor(...TINTA);
   doc.text("RECIBO DE ENTRADA", M, y);
+
+  const numTxt = `No. ${orden.numero || "—"}`;
   doc.setFontSize(13);
-  doc.setTextColor(...ROJO);
-  doc.text(`Recibo No. ${orden.numero || "—"}`, W - M, y - 1, { align: "right" });
+  const numW = doc.getTextWidth(numTxt) + 8;
+  doc.setFillColor(...ROJO);
+  doc.roundedRect(W - M - numW, y - 7.2, numW, 9.2, 2, 2, "F");
+  doc.setTextColor(...BLANCO);
+  doc.text(numTxt, W - M - numW / 2, y - 1, { align: "center" });
+
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...GRIS);
-  doc.text(
-    `Fecha: ${orden.fecha || ""}${orden.hora ? "   Hora: " + orden.hora : ""}`,
-    W - M,
-    y + 5,
-    { align: "right" }
-  );
-  y += 10;
+  doc.text(`Fecha: ${orden.fecha || "—"}    Hora: ${orden.hora || "—"}`, W - M, y + 6.5, { align: "right" });
+  y += 12;
 
-  // ===== Cajas Cliente / Vehículo =====
-  const colW = (W - M * 2 - 6) / 2;
-  const boxH = 40;
-  doc.setDrawColor(...LINEA);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(M, y, colW, boxH, 2, 2, "S");
-  doc.roundedRect(M + colW + 6, y, colW, boxH, 2, 2, "S");
+  // ===== Tarjetas Cliente / Vehículo =====
+  const gap = 6;
+  const colW = (contentW - gap) / 2;
+  const cardH = 50;
+  tarjeta(doc, M, y, colW, cardH, "Cliente");
+  tarjeta(doc, M + colW + gap, y, colW, cardH, "Vehículo");
 
-  bloque(doc, M, y, colW, "CLIENTE", [
-    orden.cliente,
-    orden.direccion,
-    [["Tel:", orden.tel || "—"], ...(orden.cel ? [["Cel:", orden.cel]] : [])],
-    orden.email,
-  ]);
-  bloque(doc, M + colW + 6, y, colW, "VEHÍCULO", [
-    [["Marca:", orden.marca || "—"], ["Modelo:", orden.modelo || "—"]],
-    [["Año:", orden.anio || "—"], ["Color:", orden.color || "—"]],
-    [["Placa:", orden.placa || "—"], ["Km:", orden.km || "—"]],
-    [["Chasis:", orden.chasis || "—"]],
-    [["Combustible:", orden.tipo_combustible || "—"]],
-  ]);
-  y += boxH + 6;
-
-  // ===== Seguro =====
-  doc.setDrawColor(...LINEA);
-  doc.roundedRect(M, y, W - M * 2, 14, 2, 2, "S");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(...ROJO);
-  doc.text("SEGURO", M + 4, y + 5.5);
-  campos(doc, M + 4, y + 11, [
-    ["Aseguradora:", orden.cia_seguro || "—"],
-    ["Póliza:", orden.poliza || "—"],
-    ["No. reclamo/ficha:", orden.ficha || "—"],
-  ]);
-  y += 20;
-
-  // ===== Recepción (costo / observaciones / trabajos) =====
-  const hayRecepcion = orden.costo || orden.observaciones || orden.trabajos;
-  if (hayRecepcion) {
+  // Cliente
+  {
+    const cx = M + 8;
+    let cy = y + 18;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(...ROJO);
-    doc.text("RECEPCIÓN", M, y);
-    y += 5;
+    doc.setFontSize(11.5);
+    doc.setTextColor(...TINTA);
+    doc.text(String(orden.cliente || "—"), cx, cy);
+    cy += 7;
+    campo(doc, cx, cy, "Dirección", orden.direccion);
+    cy += 9.5;
+    const mitad = colW / 2 - 4;
+    campo(doc, cx, cy, "Teléfono", orden.tel);
+    campo(doc, cx + mitad, cy, "Celular", orden.cel);
+    cy += 9.5;
+    campo(doc, cx, cy, "Email", orden.email);
+  }
+
+  // Vehículo
+  {
+    const cx = M + colW + gap + 8;
+    let cy = y + 18;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(...TINTA);
+    doc.text([orden.marca, orden.modelo, orden.anio].filter(Boolean).join(" ") || "—", cx, cy);
+    cy += 7;
+    const mitad = colW / 2 - 4;
+    campo(doc, cx, cy, "Color", orden.color);
+    campo(doc, cx + mitad, cy, "Placa", orden.placa);
+    cy += 9.5;
+    campo(doc, cx, cy, "Chasis", orden.chasis);
+    campo(doc, cx + mitad, cy, "Km/M", orden.km);
+    cy += 9.5;
+    campo(doc, cx, cy, "Combustible", orden.tipo_combustible);
+    campo(doc, cx + mitad, cy, "Aseguradora", orden.cia_seguro);
+  }
+  y += cardH + 7;
+
+  // ===== Recepción: costo + observaciones + trabajos =====
+  const hayObs = !!orden.observaciones;
+  const hayTrab = !!orden.trabajos;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  const obsLines = hayObs ? doc.splitTextToSize(orden.observaciones, contentW - 16) : [];
+  const trabLines = hayTrab ? doc.splitTextToSize(orden.trabajos, contentW - 16) : [];
+  const textBlockH = Math.max(obsLines.length, trabLines.length, 1) * 4.6 + 10;
+  const recepH = 16 + (hayObs || hayTrab ? textBlockH : 0);
+
+  tarjeta(doc, M, y, contentW, recepH, "Recepción del vehículo");
+  doc.setFillColor(...ROJO_CLARO);
+  doc.roundedRect(W - M - 58, y + 3, 50, 8, 1.5, 1.5, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...ROJO);
+  doc.text(`Costo: RD$ ${orden.costo || "0.00"}`, W - M - 33, y + 8.3, { align: "center" });
+
+  let ry = y + 18;
+  if (hayObs) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.2);
+    doc.setTextColor(...GRIS_CLARO);
+    doc.text("OBSERVACIONES", M + 8, ry);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(...TINTA);
-    if (orden.costo) {
-      campos(doc, M, y, [["Costo de reparación: RD$", orden.costo]], 9);
-      y += 6;
-    }
-    if (orden.observaciones) {
-      doc.setFont("helvetica", "bold");
-      doc.text("Observaciones:", M, y);
-      doc.setFont("helvetica", "normal");
-      const ls = doc.splitTextToSize(orden.observaciones, W - M * 2 - 30);
-      doc.text(ls, M + 28, y);
-      y += Math.max(6, ls.length * 4.5 + 1);
-    }
-    if (orden.trabajos) {
-      doc.setFont("helvetica", "bold");
-      doc.text("Trabajos a realizar:", M, y);
-      doc.setFont("helvetica", "normal");
-      const ls = doc.splitTextToSize(orden.trabajos, W - M * 2 - 36);
-      doc.text(ls, M + 34, y);
-      y += Math.max(6, ls.length * 4.5 + 1);
-    }
-    y += 4;
+    doc.text(obsLines, M + 8, ry + 4.4);
+    ry += obsLines.length * 4.6 + 6;
   }
+  if (hayTrab) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.2);
+    doc.setTextColor(...GRIS_CLARO);
+    doc.text("TRABAJOS A REALIZAR", M + 8, ry);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...TINTA);
+    doc.text(trabLines, M + 8, ry + 4.4);
+  }
+  y += recepH + 7;
 
-  // ===== Texto legal =====
+  // ===== Texto legal (caja gris, dos columnas) =====
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(...GRIS);
-  const legalLines = doc.splitTextToSize(LEGAL, W - M * 2);
-  doc.text(legalLines, M, y);
-  y += legalLines.length * 3.1 + 2;
+  doc.setFontSize(6.9);
+  const legalColW = contentW / 2 - 6;
+  const legalLinesAll = doc.splitTextToSize(LEGAL, legalColW);
+  const mitadIdx = Math.ceil(legalLinesAll.length / 2);
+  const colA = legalLinesAll.slice(0, mitadIdx);
+  const colB = legalLinesAll.slice(mitadIdx);
+  const legalH = Math.max(colA.length, colB.length) * 3.05 + 8;
 
+  doc.setFillColor(...FONDO);
+  doc.roundedRect(M, y, contentW, legalH, 2.5, 2.5, "F");
+  doc.setTextColor(...GRIS);
+  doc.text(colA, M + 5, y + 5.5);
+  doc.text(colB, M + 6 + legalColW, y + 5.5);
+  y += legalH + 4;
+
+  // Avisos en negritas (callout rojo)
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(...TINTA);
-  LEGAL_BOLD.forEach((t) => {
-    const ls = doc.splitTextToSize(t, W - M * 2);
-    doc.text(ls, M, y);
-    y += ls.length * 3.1 + 1.5;
+  doc.setFontSize(6.9);
+  const boldLines = LEGAL_BOLD.map((t) => doc.splitTextToSize(t, contentW - 10));
+  const boldH = boldLines.reduce((acc, ls) => acc + ls.length * 3.2, 0) + 6;
+  doc.setFillColor(...ROJO_CLARO);
+  doc.setDrawColor(...ROJO);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(M, y, contentW, boldH, 2.5, 2.5, "FD");
+  doc.setTextColor(...ROJO);
+  let by = y + 4.6;
+  boldLines.forEach((ls) => {
+    doc.text(ls, M + 5, by);
+    by += ls.length * 3.2;
   });
+  y += boldH + 9;
 
   // ===== Firmas + sello =====
-  const yFirma = Math.max(y + 16, H - 34);
+  const yFirma = Math.max(y + 14, H - 24);
   const sello = await urlADataUrl("/sello.jpg");
   if (sello) {
     try {
-      doc.addImage(sello, "JPEG", M + 6, yFirma - 30, 40, 34, undefined, "FAST");
+      doc.addImage(sello, "JPEG", M + 8, yFirma - 28, 36, 30, undefined, "FAST");
     } catch {
       /* opcional */
     }
   }
   doc.setDrawColor(...TINTA);
   doc.setLineWidth(0.3);
-  doc.line(M, yFirma, M + 70, yFirma);
-  doc.line(W - M - 70, yFirma, W - M, yFirma);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.line(M, yFirma, M + 78, yFirma);
+  doc.line(W - M - 78, yFirma, W - M, yFirma);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
   doc.setTextColor(...TINTA);
-  doc.text("Dominguez Auto Pintura", M + 35, yFirma + 5, { align: "center" });
-  doc.text("Cliente", W - M - 35, yFirma + 5, { align: "center" });
+  doc.text(TALLER.nombre, M + 39, yFirma + 5, { align: "center" });
+  doc.text("Firma del cliente", W - M - 39, yFirma + 5, { align: "center" });
 
   return doc.output("blob");
 }

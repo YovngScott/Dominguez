@@ -154,6 +154,12 @@ const PATHS = {
       <path d="M21 12H9" />
     </>
   ),
+  tag: (
+    <>
+      <path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24H4a1 1 0 0 0-1 1v5.59a2 2 0 0 0 .59 1.41l9.58 9.59a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z" />
+      <circle cx="7.5" cy="7.5" r="1.5" />
+    </>
+  ),
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.8 }) {

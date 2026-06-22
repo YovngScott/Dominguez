@@ -18,6 +18,9 @@ export default function PiezasManager({ casoId, caso }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [exportando, setExportando] = useState(false);
+  const [mostrarEtiquetas, setMostrarEtiquetas] = useState(false);
+  const [seleccion, setSeleccion] = useState(new Set());
+  const [imprimiendo, setImprimiendo] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -106,6 +109,39 @@ export default function PiezasManager({ casoId, caso }) {
     }
   }
 
+  function abrirEtiquetas() {
+    // Por defecto selecciona las piezas pendientes (las que normalmente
+    // acaban de llegar y hay que marcar en la caja).
+    const pendientesClaves = piezas.filter((p) => !recibidas.has(p.clave)).map((p) => p.clave);
+    setSeleccion(new Set(pendientesClaves.length ? pendientesClaves : piezas.map((p) => p.clave)));
+    setMostrarEtiquetas(true);
+  }
+
+  function toggleSeleccion(clave) {
+    setSeleccion((prev) => {
+      const n = new Set(prev);
+      if (n.has(clave)) n.delete(clave);
+      else n.add(clave);
+      return n;
+    });
+  }
+
+  async function imprimirEtiquetas() {
+    setImprimiendo(true);
+    try {
+      const seleccionadas = piezas.filter((p) => seleccion.has(p.clave));
+      const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
+      const blob = await generarPdfEtiquetas({ caso: infoCaso || {}, piezas: seleccionadas });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setMostrarEtiquetas(false);
+    } catch {
+      setError("No se pudo generar las etiquetas.");
+    } finally {
+      setImprimiendo(false);
+    }
+  }
+
   const recibidasCount = piezas.filter((p) => recibidas.has(p.clave)).length;
   const pendientes = piezas.length - recibidasCount;
 
@@ -118,13 +154,22 @@ export default function PiezasManager({ casoId, caso }) {
             {recibidasCount} de {piezas.length} recibidas · {pendientes} pendiente(s)
           </p>
         </div>
-        <button
-          onClick={exportar}
-          disabled={exportando || !piezas.length}
-          className="btn-ghost text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
-        >
-          <Icon name="printer" className="w-4 h-4" /> {exportando ? "Generando…" : "Exportar PDF"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={abrirEtiquetas}
+            disabled={!piezas.length}
+            className="btn-primary text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
+          >
+            <Icon name="tag" className="w-4 h-4" /> Imprimir etiquetas
+          </button>
+          <button
+            onClick={exportar}
+            disabled={exportando || !piezas.length}
+            className="btn-ghost text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
+          >
+            <Icon name="printer" className="w-4 h-4" /> {exportando ? "Generando…" : "Exportar PDF"}
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-sm text-[var(--brand-red)] mb-3">{error}</p>}
@@ -175,6 +220,96 @@ export default function PiezasManager({ casoId, caso }) {
           })}
         </ul>
       )}
+
+      {mostrarEtiquetas && (
+        <EtiquetasModal
+          piezas={piezas}
+          seleccion={seleccion}
+          onToggle={toggleSeleccion}
+          onSeleccionarTodas={() => setSeleccion(new Set(piezas.map((p) => p.clave)))}
+          onLimpiar={() => setSeleccion(new Set())}
+          onImprimir={imprimirEtiquetas}
+          onCancelar={() => setMostrarEtiquetas(false)}
+          imprimiendo={imprimiendo}
+        />
+      )}
+    </div>
+  );
+}
+
+function EtiquetasModal({
+  piezas,
+  seleccion,
+  onToggle,
+  onSeleccionarTodas,
+  onLimpiar,
+  onImprimir,
+  onCancelar,
+  imprimiendo,
+}) {
+  return (
+    <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+        <div className="p-5 border-b border-[var(--line)]">
+          <h3 className="font-bold text-[var(--ink)] flex items-center gap-2">
+            <Icon name="tag" className="w-5 h-5 text-[var(--brand-red)]" /> Imprimir etiquetas
+          </h3>
+          <p className="text-xs text-[var(--ink-soft)] mt-1">
+            Selecciona qué piezas llevarán etiqueta. Cada una sale en una hoja de 4×6&quot;
+            con los datos del asegurado, vehículo y seguro, lista para pegar en la caja.
+          </p>
+        </div>
+
+        <div className="px-5 py-2 flex gap-3 text-xs">
+          <button onClick={onSeleccionarTodas} className="text-[var(--brand-red)] font-semibold">
+            Seleccionar todas
+          </button>
+          <button onClick={onLimpiar} className="text-[var(--ink-soft)] font-semibold">
+            Quitar selección
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-2">
+          <ul className="divide-y divide-[var(--line)]">
+            {piezas.map((p) => {
+              const sel = seleccion.has(p.clave);
+              return (
+                <li key={p.clave}>
+                  <button
+                    onClick={() => onToggle(p.clave)}
+                    className="w-full flex items-center gap-3 py-2.5 text-left"
+                  >
+                    <span
+                      className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
+                        sel ? "bg-[var(--brand-red)] border-[var(--brand-red)] text-white" : "border-[var(--ink-soft)]"
+                      }`}
+                    >
+                      {sel && <Icon name="check" className="w-3.5 h-3.5" strokeWidth={3} />}
+                    </span>
+                    <span className="flex-1 text-sm font-medium text-[var(--ink)]">{p.nombre}</span>
+                    {p.cantidad > 1 && (
+                      <span className="text-xs text-[var(--ink-soft)] whitespace-nowrap">x{p.cantidad}</span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="p-5 border-t border-[var(--line)] flex gap-3">
+          <button
+            onClick={onImprimir}
+            disabled={imprimiendo || seleccion.size === 0}
+            className="btn-primary flex-1 disabled:opacity-50"
+          >
+            {imprimiendo ? "Generando…" : `Imprimir ${seleccion.size} etiqueta(s)`}
+          </button>
+          <button onClick={onCancelar} className="btn-ghost">
+            Cancelar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
