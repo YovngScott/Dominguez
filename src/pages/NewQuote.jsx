@@ -36,6 +36,7 @@ export default function NewQuote() {
   const [cargando, setCargando] = useState(editando);
   const [original, setOriginal] = useState(null); // cotización original (modo edición)
   const [evidenciasExistentes, setEvidenciasExistentes] = useState([]); // [{id, url}]
+  const [categoriaDanosId, setCategoriaDanosId] = useState(null);
 
   const [modal, setModal] = useState(null); // { tipo, index|null }
   const [evidencias, setEvidencias] = useState([]); // { file, preview }
@@ -65,14 +66,16 @@ export default function NewQuote() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: asegs }, { data: ms }, { data: piezas }] = await Promise.all([
+      const [{ data: asegs }, { data: ms }, { data: piezas }, { data: catDanos }] = await Promise.all([
         supabase.from("aseguradoras").select("*").eq("activo", true).order("orden"),
         supabase.from("marcas").select("id, nombre").order("nombre"),
         supabase.from("piezas_catalogo").select("nombre").order("nombre"),
+        supabase.from("categorias_foto").select("id").ilike("nombre", "%daño%").limit(1).maybeSingle(),
       ]);
       setAseguradoras(asegs || []);
       setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
       setPiezasCatalogo((piezas || []).map((p) => ({ id: p.nombre, label: p.nombre })));
+      setCategoriaDanosId(catDanos?.id || null);
     }
     load();
   }, []);
@@ -195,6 +198,45 @@ export default function NewQuote() {
     setEvidenciasExistentes((prev) => prev.filter((e) => e.id !== ev.id));
   }
 
+  // Mantiene al día los datos del caso enlazado (cliente, vehículo, seguro)
+  // cuando se edita una cotización o cuando una nueva queda enlazada a un
+  // caso ya existente por el chasis.
+  async function sincronizarCaso(casoId, datos) {
+    const { data: casoActual } = await supabase
+      .from("casos")
+      .select("cliente_id")
+      .eq("id", casoId)
+      .single();
+    if (!casoActual) return;
+
+    await supabase
+      .from("clientes")
+      .update({
+        nombre_completo: datos.cliente_nombre,
+        email: datos.cliente_email || null,
+        telefono: datos.telefonos.filter(Boolean)[0] || null,
+      })
+      .eq("id", casoActual.cliente_id);
+
+    const marcaId = await findOrCreateMarca(datos.marca);
+    const modeloId = await findOrCreateModelo(marcaId, datos.modelo);
+
+    await supabase
+      .from("casos")
+      .update({
+        aseguradora_id: datos.aseguradora_id,
+        marca_id: marcaId,
+        modelo_id: modeloId,
+        anio: datos.anio ? Number(datos.anio) : null,
+        color: datos.color || null,
+        placa: datos.placa || null,
+        chasis: datos.chasis || null,
+        numero_reclamo: datos.numero_reclamo || null,
+        numero_poliza: datos.numero_poliza || null,
+      })
+      .eq("id", casoId);
+  }
+
   const totales = calcularTotales(form.items_piezas, form.items_mano_obra);
 
   async function generar() {
@@ -237,6 +279,12 @@ export default function NewQuote() {
           .single();
         if (updErr) throw updErr;
         cot = actualizada;
+
+        // El caso enlazado debe quedar con los mismos datos que la cotización.
+        if (cot.caso_id) {
+          setEstado("Actualizando caso…");
+          await sincronizarCaso(cot.caso_id, form);
+        }
       } else {
         setEstado("Asignando número…");
         const { data: numero, error: numErr } = await supabase.rpc("siguiente_numero_cotizacion");
@@ -244,6 +292,7 @@ export default function NewQuote() {
 
         // Busca un caso con el mismo chasis para enlazar
         let casoId = null;
+        let casoEsNuevo = false;
         if (form.chasis.trim()) {
           const { data: casos } = await supabase
             .from("casos")
@@ -257,6 +306,7 @@ export default function NewQuote() {
         // Si no existe un caso para este vehículo, se crea uno automáticamente
         // (en espera de piezas) con los datos de la cotización.
         if (!casoId) {
+          casoEsNuevo = true;
           setEstado("Creando caso…");
           const { data: cliente } = await supabase
             .from("clientes")
@@ -293,6 +343,13 @@ export default function NewQuote() {
           casoId = nuevoCaso.id;
         }
 
+        // Si la cotización quedó enlazada a un caso ya existente, sus datos
+        // (cliente, vehículo, seguro) se actualizan con lo de esta cotización.
+        if (!casoEsNuevo) {
+          setEstado("Actualizando caso…");
+          await sincronizarCaso(casoId, form);
+        }
+
         setEstado("Guardando cotización…");
         const { data: nueva, error: insErr } = await supabase
           .from("cotizaciones")
@@ -327,7 +384,9 @@ export default function NewQuote() {
         cot = nueva;
       }
 
-      // Sube evidencias nuevas (se guardan con la cotización; no van en el PDF)
+      // Sube evidencias nuevas (se guardan con la cotización; no van en el PDF).
+      // Además, si hay un caso enlazado, la misma foto se vincula a la
+      // categoría "Daños" del caso para que aparezca también en su pestaña Fotos.
       if (evidencias.length) {
         setEstado("Subiendo evidencias…");
         for (const ev of evidencias) {
@@ -341,6 +400,25 @@ export default function NewQuote() {
               cotizacion_id: cot.id,
               storage_path: path,
             });
+          }
+
+          if (cot.caso_id && categoriaDanosId) {
+            const fotoPath = `${cot.caso_id}/${categoriaDanosId}/${uuid()}.jpg`;
+            const { error: fotoErr } = await supabase.storage
+              .from("fotos-casos")
+              .upload(fotoPath, comp, { contentType: "image/jpeg" });
+            if (!fotoErr) {
+              const { data: signed } = await supabase.storage
+                .from("fotos-casos")
+                .createSignedUrl(fotoPath, 3600);
+              await supabase.from("fotos_caso").insert({
+                caso_id: cot.caso_id,
+                categoria_id: categoriaDanosId,
+                storage_path: fotoPath,
+                url: signed?.signedUrl || "",
+                uploaded_by: userData?.user?.id,
+              });
+            }
           }
         }
       }
