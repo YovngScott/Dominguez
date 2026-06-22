@@ -57,6 +57,11 @@ escritorio y en tablet (patio del taller).
    19. `19_nombres_aseguradoras.sql` — actualiza los nombres de las
        aseguradoras al nombre legal/comercial completo y renombra "Personal"
        a "General". Ejecutar una vez.
+   20. `20_backfill_casos_recibos.sql` — repara los recibos creados antes de
+       que el sistema enlazara/creara el caso automáticamente: a cada recibo
+       sin caso le busca uno por chasis o le crea uno nuevo. Ejecutar una vez
+       (es seguro volver a correrlo: si ya no quedan recibos sin caso, no
+       hace nada).
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.

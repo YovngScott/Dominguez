@@ -4,6 +4,12 @@ import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
 import Combobox from "../components/Combobox";
 import { useFormDraft, clearFormDraft } from "../hooks/useFormDraft";
+import {
+  findOrCreateAseguradora,
+  findOrCreateMarca,
+  findOrCreateModelo,
+  getAseguradoraGeneralId,
+} from "../lib/catalogo";
 
 const TIPOS_COMBUSTIBLE = ["Gasolina", "Diesel", "Gas"];
 
@@ -174,34 +180,82 @@ export default function NewOrder() {
         if (updErr) throw updErr;
         orden = actualizada;
       } else {
+        const { data: userData } = await supabase.auth.getUser();
+
+        // Determina a qué caso queda enlazado este recibo: el que venía por
+        // la URL (recibo creado desde dentro de un caso), uno ya existente
+        // que coincida por chasis, o uno nuevo creado con los datos del recibo.
+        let casoFinal = casoId;
+
+        if (!casoFinal && form.chasis.trim()) {
+          const { data: match } = await supabase
+            .from("casos")
+            .select("id, estado")
+            .ilike("chasis", form.chasis.trim())
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (match) casoFinal = match.id;
+        }
+
+        if (casoFinal) {
+          // El vehículo ya está físicamente en el taller: se mueve a esa categoría.
+          await supabase
+            .from("casos")
+            .update({ estado: "vehiculo_en_taller" })
+            .eq("id", casoFinal)
+            .neq("estado", "entregado");
+        } else {
+          setEstado("Creando caso…");
+          const { data: cliente, error: clienteErr } = await supabase
+            .from("clientes")
+            .insert({
+              nombre_completo: form.cliente,
+              telefono: [form.tel, form.cel].filter(Boolean).join(" / ") || null,
+              email: form.email || null,
+              direccion: form.direccion || null,
+            })
+            .select()
+            .single();
+          if (clienteErr) throw clienteErr;
+
+          const marcaId = await findOrCreateMarca(form.marca);
+          const modeloId = await findOrCreateModelo(marcaId, form.modelo);
+          const aseguradoraId =
+            (await findOrCreateAseguradora(form.cia_seguro)) || (await getAseguradoraGeneralId());
+
+          const { data: nuevoCaso, error: casoErr } = await supabase
+            .from("casos")
+            .insert({
+              cliente_id: cliente.id,
+              aseguradora_id: aseguradoraId,
+              estado: "vehiculo_en_taller", // el recibo solo se hace cuando el vehículo ya está aquí
+              marca_id: marcaId,
+              modelo_id: modeloId,
+              anio: /^\d+$/.test(form.anio) ? Number(form.anio) : null,
+              color: form.color || null,
+              chasis: form.chasis || null,
+              placa: form.placa || null,
+              created_by: userData?.user?.id,
+            })
+            .select()
+            .single();
+          if (casoErr) throw casoErr;
+          casoFinal = nuevoCaso.id;
+        }
+
         setEstado("Asignando número…");
         const { data: numero, error: nErr } = await supabase.rpc("siguiente_numero_orden");
         if (nErr) throw nErr;
 
-        const { data: userData } = await supabase.auth.getUser();
         setEstado("Guardando…");
         const { data: nueva, error: insErr } = await supabase
           .from("ordenes_reparacion")
-          .insert({ numero, caso_id: casoId, ...form, created_by: userData?.user?.id })
+          .insert({ numero, caso_id: casoFinal, ...form, created_by: userData?.user?.id })
           .select()
           .single();
         if (insErr) throw insErr;
         orden = nueva;
-
-        // Si el chasis coincide con un caso, ese vehículo ya está físicamente
-        // en el taller: lo movemos automáticamente a esa categoría.
-        if (form.chasis && form.chasis.trim()) {
-          const { data: match } = await supabase
-            .from("casos")
-            .select("id")
-            .ilike("chasis", form.chasis.trim())
-            .neq("estado", "entregado")
-            .limit(1)
-            .maybeSingle();
-          if (match) {
-            await supabase.from("casos").update({ estado: "vehiculo_en_taller" }).eq("id", match.id);
-          }
-        }
       }
 
       setEstado("Generando PDF…");
