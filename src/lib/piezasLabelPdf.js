@@ -1,119 +1,130 @@
 import { jsPDF } from "jspdf";
 
-// Tamaño de etiqueta para impresoras térmicas de envío (4" x 6").
-// Si tu impresora usa otro tamaño de rollo, ajusta LABEL_W / LABEL_H (en mm)
-// y selecciona el mismo tamaño de papel en el diálogo de impresión.
+// Tamaño real de las etiquetas del rollo (impresora térmica 2Connet 2C-LP427B): 4 x 3".
+// Si cambias de rollo, ajusta LABEL_W / LABEL_H (mm) y el tamaño de papel
+// seleccionado en el diálogo de impresión.
 const LABEL_W = 101.6; // 4"
-const LABEL_H = 152.4; // 6"
-const M = 6;
-const ROW_H = 8.2;
+const LABEL_H = 76.2; // 3"
+const M = 5;
+const MAX_POR_ETIQUETA = 9; // si hay más piezas, se reparten en varias etiquetas
 
-const TINTA = [17, 17, 17];
-const GRIS = [110, 116, 128];
-const ROJO = [200, 30, 30];
-const LINEA = [222, 224, 228];
-const FONDO = [246, 247, 249];
+const TINTA = [20, 20, 20];
+const GRIS = [120, 124, 132];
+const LINEA = [190, 192, 196];
 
 function linea(doc, x, y, w) {
   doc.setDrawColor(...LINEA);
-  doc.setLineWidth(0.4);
+  doc.setLineWidth(0.3);
   doc.line(x, y, x + w, y);
 }
 
-// Dibuja un campo (etiqueta + valor) en (x, y); devuelve nada, el avance de
-// fila lo controla quien llama (ROW_H por fila, o un valor propio).
-function dato(doc, x, y, label, valor, fontSize = 9) {
+function campoCorto(doc, x, y, label, valor, maxW) {
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.2);
+  doc.setFontSize(5.4);
   doc.setTextColor(...GRIS);
   doc.text(label.toUpperCase(), x, y);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(fontSize);
+  doc.setFontSize(8);
   doc.setTextColor(...TINTA);
-  doc.text(String(valor || "—"), x, y + 4.3);
+  const v = doc.splitTextToSize(String(valor || "—"), maxW || 40)[0];
+  doc.text(v, x, y + 3.6);
+}
+
+function partirEnGrupos(arr, tam) {
+  const grupos = [];
+  for (let i = 0; i < arr.length; i += tam) grupos.push(arr.slice(i, i + tam));
+  return grupos;
 }
 
 /**
- * Genera un PDF con una etiqueta por página (una por pieza seleccionada),
- * pensado para imprimirse en una impresora de etiquetas térmica de 4x6"
- * (p. ej. 2Connet 2C-LP427B) y pegarse en la caja de la pieza al recibirla.
+ * Genera un PDF con una etiqueta por cada grupo de piezas seleccionadas
+ * (todas las piezas elegidas salen juntas en la(s) misma(s) etiqueta(s),
+ * no una por pieza), pensado para una impresora térmica de 4x3"
+ * (p. ej. 2Connet 2C-LP427B) y pegarse en la caja al recibir las piezas.
  */
 export async function generarPdfEtiquetas({ caso = {}, piezas = [] }) {
-  const doc = new jsPDF({ unit: "mm", format: [LABEL_W, LABEL_H] });
-  const W = LABEL_W;
-  const contentW = W - M * 2;
-  const colX = M + contentW / 2 + 2;
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [LABEL_W, LABEL_H] });
+  const contentW = LABEL_W - M * 2;
+  const mitad = contentW / 2;
+  const colX = M + mitad + 2;
 
-  piezas.forEach((p, idx) => {
-    if (idx > 0) doc.addPage([LABEL_W, LABEL_H]);
-    let y = M + 2;
+  const grupos = partirEnGrupos(piezas, MAX_POR_ETIQUETA);
 
-    // Encabezado del taller
+  grupos.forEach((grupo, gi) => {
+    if (gi > 0) doc.addPage([LABEL_W, LABEL_H], "landscape");
+    let y = M;
+
+    // ===== Encabezado =====
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...ROJO);
-    doc.text("DOMINGUEZ AUTO PINTURA", W / 2, y, { align: "center" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
-    doc.setTextColor(...GRIS);
-    doc.text("Etiqueta de pieza recibida", W / 2, y + 4.4, { align: "center" });
-    y += 8;
-    linea(doc, M, y, contentW);
-    y += 6;
-
-    // Nombre de la pieza: lo más grande y visible de la etiqueta
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    const nombreLines = doc.splitTextToSize(p.nombre || "Pieza", contentW - 8);
-    const piezaBoxH = Math.max(17, nombreLines.length * 6.6 + 8);
-    doc.setFillColor(...FONDO);
-    doc.roundedRect(M, y, contentW, piezaBoxH, 2.5, 2.5, "F");
+    doc.setFontSize(9);
     doc.setTextColor(...TINTA);
-    doc.text(nombreLines, W / 2, y + piezaBoxH / 2 - (nombreLines.length - 1) * 3 + 1.5, {
-      align: "center",
-    });
-    if (p.cantidad > 1) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      doc.setTextColor(...ROJO);
-      doc.text(`CANT: ${p.cantidad}`, W - M - 3, y + piezaBoxH - 3, { align: "right" });
-    }
-    y += piezaBoxH + 6;
+    doc.text("DOMINGUEZ AUTO PINTURA", LABEL_W / 2, y, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.8);
+    doc.setTextColor(...GRIS);
+    const sub = grupos.length > 1 ? `Piezas recibidas (${gi + 1}/${grupos.length})` : "Piezas recibidas";
+    doc.text(sub, LABEL_W / 2, y + 3.6, { align: "center" });
+    y += 6.5;
+    linea(doc, M, y, contentW);
+    y += 4.5;
 
-    // Vehículo
+    // ===== Vehículo + asegurado (compacto, 2 columnas) =====
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11.5);
+    doc.setFontSize(9.5);
     doc.setTextColor(...TINTA);
     doc.text([caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ") || "—", M, y);
-    y += 6.5;
-    dato(doc, M, y, "Placa", caso.placa);
-    dato(doc, colX, y, "Color", caso.color);
-    y += ROW_H;
-    if (caso.chasis) {
-      dato(doc, M, y, "Chasis", caso.chasis, 8);
-      y += ROW_H;
-    }
-
-    y += 1.5;
-    linea(doc, M, y, contentW);
+    y += 4.6;
+    campoCorto(doc, M, y, "Placa", caso.placa, mitad - 4);
+    campoCorto(doc, colX, y, "Chasis", caso.chasis, mitad - 4);
     y += 6;
+    campoCorto(doc, M, y, "Asegurado", caso.cliente_nombre, mitad - 4);
+    campoCorto(doc, colX, y, "Aseguradora", caso.aseguradora_nombre, mitad - 4);
+    y += 6.2;
+    linea(doc, M, y, contentW);
+    y += 4;
 
-    // Asegurado + seguro (todo en cuadrícula de 2 columnas para no desbordar)
-    dato(doc, M, y, "Asegurado", caso.cliente_nombre, 8.5);
-    y += ROW_H;
-    dato(doc, M, y, "Teléfono", caso.cliente_telefono);
-    dato(doc, colX, y, "Aseguradora", caso.aseguradora_nombre, 8.5);
-    y += ROW_H;
-    if (caso.numero_reclamo || caso.numero_poliza) {
-      dato(doc, M, y, "Reclamo", caso.numero_reclamo, 8.5);
-      dato(doc, colX, y, "Póliza", caso.numero_poliza, 8.5);
-    }
-
-    // Pie: fecha de impresión
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
+    // ===== Lista de piezas =====
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5.6);
     doc.setTextColor(...GRIS);
-    doc.text(`Impreso: ${new Date().toLocaleDateString("es-DO")}`, M, LABEL_H - 4);
+    doc.text(`PIEZAS (${grupo.length})`, M, y);
+    y += 4;
+
+    const espacioRestante = LABEL_H - 6 - y; // deja 6mm de pie
+    const filaH = Math.max(3.6, Math.min(5.2, espacioRestante / grupo.length));
+    const fontPieza = filaH >= 4.6 ? 8.2 : 7;
+
+    grupo.forEach((p) => {
+      // casilla para marcar a mano cuando se verifique
+      doc.setDrawColor(...TINTA);
+      doc.setLineWidth(0.3);
+      doc.rect(M, y - 2.6, 2.6, 2.6);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(fontPieza);
+      doc.setTextColor(...TINTA);
+      const nombre = doc.splitTextToSize(p.nombre || "Pieza", contentW - 14)[0];
+      doc.text(nombre, M + 5, y);
+
+      if (p.cantidad > 1) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(...GRIS);
+        doc.text(`x${p.cantidad}`, M + contentW, y, { align: "right" });
+      }
+      y += filaH;
+    });
+
+    // ===== Pie =====
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.2);
+    doc.setTextColor(...GRIS);
+    const piePartes = [
+      caso.numero_reclamo ? `Reclamo ${caso.numero_reclamo}` : null,
+      caso.numero_poliza ? `Póliza ${caso.numero_poliza}` : null,
+      new Date().toLocaleDateString("es-DO"),
+    ].filter(Boolean);
+    doc.text(piePartes.join("   ·   "), M, LABEL_H - 2.2);
   });
 
   return doc.output("blob");
