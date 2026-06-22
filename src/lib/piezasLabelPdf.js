@@ -54,20 +54,6 @@ export async function generarPdfEtiquetas({ caso = {}, piezas = [] }) {
     if (gi > 0) doc.addPage([LABEL_W, LABEL_H], "landscape");
     let y = M;
 
-    // ===== Encabezado =====
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(...TINTA);
-    doc.text("DOMINGUEZ AUTO PINTURA", LABEL_W / 2, y, { align: "center" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.8);
-    doc.setTextColor(...GRIS);
-    const sub = grupos.length > 1 ? `Piezas recibidas (${gi + 1}/${grupos.length})` : "Piezas recibidas";
-    doc.text(sub, LABEL_W / 2, y + 3.6, { align: "center" });
-    y += 6.5;
-    linea(doc, M, y, contentW);
-    y += 4.5;
-
     // ===== Vehículo + asegurado (compacto, 2 columnas) =====
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
