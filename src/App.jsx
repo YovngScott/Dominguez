@@ -18,6 +18,7 @@ import NewOrder from "./pages/NewOrder";
 import OrderView from "./pages/OrderView";
 import PiezasList from "./pages/PiezasList";
 import PiezasCaso from "./pages/PiezasCaso";
+import EtiquetasPiezas from "./pages/EtiquetasPiezas";
 import ClientList from "./pages/ClientList";
 import CitasList from "./pages/CitasList";
 import Reportes from "./pages/Reportes";
@@ -298,6 +299,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <PiezasList />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/piezas/etiquetas"
+        element={
+          <PrivateLayout>
+            <EtiquetasPiezas />
           </PrivateLayout>
         }
       />

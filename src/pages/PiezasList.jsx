@@ -78,14 +78,19 @@ export default function PiezasList() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Piezas pendientes</h1>
-        <label className="flex items-center gap-2 text-sm text-[var(--ink-soft)] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={soloPendientes}
-            onChange={(e) => setSoloPendientes(e.target.checked)}
-          />
-          Solo con piezas pendientes
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-[var(--ink-soft)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={soloPendientes}
+              onChange={(e) => setSoloPendientes(e.target.checked)}
+            />
+            Solo con piezas pendientes
+          </label>
+          <Link to="/piezas/etiquetas" className="btn-primary text-sm py-2 px-3 gap-1.5">
+            <Icon name="tag" className="w-4 h-4" /> Imprimir etiquetas
+          </Link>
+        </div>
       </div>
 
       <input
