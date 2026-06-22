@@ -96,10 +96,10 @@ export async function generarPdfEtiquetas({ caso = {}, piezas = [] }) {
 
     // ===== Lista de piezas =====
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.6);
-    doc.setTextColor(...GRIS);
+    doc.setFontSize(7.5);
+    doc.setTextColor(...TINTA);
     doc.text(`PIEZAS (${grupo.length})`, M, y);
-    y += 4;
+    y += 4.5;
 
     const espacioRestante = LABEL_H - 6 - y; // deja 6mm de pie
     const filaH = Math.max(3.6, Math.min(5.2, espacioRestante / grupo.length));
@@ -127,15 +127,22 @@ export async function generarPdfEtiquetas({ caso = {}, piezas = [] }) {
     });
 
     // ===== Pie =====
+    let pieY = LABEL_H - 4.8;
+    if (caso.numero_reclamo) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.2);
+      doc.setTextColor(...TINTA);
+      doc.text(`Reclamo ${caso.numero_reclamo}`, M, pieY);
+      pieY -= 3.2;
+    }
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.2);
+    doc.setFontSize(4.8);
     doc.setTextColor(...GRIS);
     const piePartes = [
-      caso.numero_reclamo ? `Reclamo ${caso.numero_reclamo}` : null,
       caso.numero_poliza ? `Póliza ${caso.numero_poliza}` : null,
       new Date().toLocaleDateString("es-DO"),
     ].filter(Boolean);
-    doc.text(piePartes.join("   ·   "), M, LABEL_H - 2.2);
+    doc.text(piePartes.join("   ·   "), M, pieY);
   });
 
   return doc.output("blob");
