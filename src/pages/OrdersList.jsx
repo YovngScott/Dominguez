@@ -37,9 +37,9 @@ export default function OrdersList() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Órdenes de reparación</h1>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Recibos</h1>
         <Link to="/ordenes/nueva" className="btn-primary">
-          <span className="text-lg leading-none">+</span> Nueva orden
+          <span className="text-lg leading-none">+</span> Nuevo recibo
         </Link>
       </div>
 
@@ -54,14 +54,14 @@ export default function OrdersList() {
         <p className="text-[var(--ink-soft)]">Cargando…</p>
       ) : lista.length === 0 ? (
         <div className="card p-10 text-center text-[var(--ink-soft)]">
-          {term ? "Sin coincidencias." : "Aún no hay órdenes."}
+          {term ? "Sin coincidencias." : "Aún no hay recibos."}
         </div>
       ) : (
         <div className="card divide-y divide-[var(--line)] overflow-hidden">
           {lista.map((o) => (
             <Link key={o.id} to={`/ordenes/${o.id}`} className="flex items-center justify-between px-5 py-4 hover:bg-[var(--paper)]">
               <div>
-                <p className="font-bold text-[var(--ink)]">Orden No. {o.numero} · {o.cliente}</p>
+                <p className="font-bold text-[var(--ink)]">Recibo No. {o.numero} · {o.cliente}</p>
                 <p className="text-sm text-[var(--ink-soft)]">
                   {[o.marca, o.modelo].filter(Boolean).join(" ")}{o.placa ? ` · ${o.placa}` : ""}
                 </p>

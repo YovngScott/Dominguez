@@ -108,10 +108,10 @@ export async function generarPdfOrden(orden) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(...TINTA);
-  doc.text("ORDEN DE REPARACIÓN", M, y);
+  doc.text("RECIBO DE ENTRADA", M, y);
   doc.setFontSize(13);
   doc.setTextColor(...ROJO);
-  doc.text(`Orden No. ${orden.numero || "—"}`, W - M, y - 1, { align: "right" });
+  doc.text(`Recibo No. ${orden.numero || "—"}`, W - M, y - 1, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...GRIS);

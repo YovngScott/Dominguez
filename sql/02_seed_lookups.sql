@@ -14,10 +14,9 @@ insert into aseguradoras (nombre, es_personal, orden) values
 on conflict (nombre) do nothing;
 
 insert into categorias_foto (nombre, orden) values
-  ('Daños / Ingreso', 1),
-  ('Cotización de piezas', 2),
-  ('Proceso', 3),
-  ('Entrega / Finalizado', 4)
+  ('Daños', 1),                 -- fotos al cotizar (daños del choque)
+  ('Ingreso', 2),               -- fotos cuando llegan las piezas y entra al taller
+  ('Entrega / Finalizado', 3)
 on conflict (nombre) do nothing;
 
 insert into tipos_documento (nombre, orden) values

@@ -6,6 +6,7 @@ import ItemModal from "../components/ItemModal";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
 import { agregarPiezaCatalogo, findOrCreateMarca, findOrCreateModelo } from "../lib/catalogo";
+import { useFormDraft, clearFormDraft } from "../hooks/useFormDraft";
 import Icon from "../components/Icon";
 import {
   calcularItem,
@@ -56,6 +57,11 @@ export default function NewQuote() {
     items_piezas: [],
     items_mano_obra: [],
   });
+
+  // Autoguardado silencioso (solo en cotización nueva en blanco, no al editar
+  // ni al venir prellenada desde un caso por chasis/aseguradora).
+  const autosaveOn = !editando && !params.get("chasis") && !params.get("aseguradora");
+  useFormDraft({ key: "newquote", form, setForm, enabled: autosaveOn });
 
   useEffect(() => {
     async function load() {
@@ -354,6 +360,7 @@ export default function NewQuote() {
         .upload(pdfPath, blob, { contentType: "application/pdf", upsert: true });
       await supabase.from("cotizaciones").update({ pdf_path: pdfPath }).eq("id", cot.id);
 
+      clearFormDraft("newquote");
       navigate(`/cotizaciones/${cot.id}`);
     } catch (err) {
       setError(err.message || "No se pudo guardar la cotización.");

@@ -42,16 +42,16 @@ export default function OrderView() {
   }
 
   if (loading) return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
-  if (!orden) return <p className="p-10 text-center text-[var(--ink-soft)]">Orden no encontrada.</p>;
+  if (!orden) return <p className="p-10 text-center text-[var(--ink-soft)]">Recibo no encontrado.</p>;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
       <Link to="/ordenes" className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]">
-        ← Órdenes
+        ← Recibos
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-3 mt-2 mb-6">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Orden No. {orden.numero}</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Recibo No. {orden.numero}</h1>
           <p className="text-[var(--ink-soft)]">{orden.cliente}</p>
         </div>
         <div className="flex gap-2">

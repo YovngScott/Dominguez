@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import Combobox from "./Combobox";
 import Icon from "./Icon";
 import { ESTADOS, ESTADOS_PRINCIPALES } from "../lib/estados";
+import { useFormDraft, clearFormDraft } from "../hooks/useFormDraft";
 
 const ANIO_ACTUAL = new Date().getFullYear();
 const ANIOS = Array.from({ length: ANIO_ACTUAL + 1 - 1980 + 1 }, (_, i) => {
@@ -34,13 +35,16 @@ const FORM_VACIO = {
  * - initial: valores iniciales (marca/modelo son texto libre).
  * - onSubmit(form): persiste; debe lanzar error si falla.
  */
-export default function CaseForm({ initial, onSubmit, submitLabel = "Guardar caso", cancelTo = "/" }) {
+export default function CaseForm({ initial, onSubmit, submitLabel = "Guardar caso", cancelTo = "/", draftKey }) {
   const [aseguradoras, setAseguradoras] = useState([]);
   const [marcas, setMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ ...FORM_VACIO, ...initial });
+
+  // Autoguardado silencioso del borrador (solo en alta de caso nuevo)
+  useFormDraft({ key: draftKey, form, setForm, enabled: !!draftKey, initial });
 
   useEffect(() => {
     async function load() {
@@ -96,6 +100,7 @@ export default function CaseForm({ initial, onSubmit, submitLabel = "Guardar cas
     setError("");
     try {
       await onSubmit(form);
+      if (draftKey) clearFormDraft(draftKey);
     } catch (err) {
       setError(err.message || "Ocurrió un error al guardar el caso.");
       setSubmitting(false);

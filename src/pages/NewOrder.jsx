@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
 import Combobox from "../components/Combobox";
+import { useFormDraft, clearFormDraft } from "../hooks/useFormDraft";
 
 const TIPOS_COMBUSTIBLE = ["Gasolina", "Diesel", "Gas"];
 
@@ -25,6 +26,9 @@ export default function NewOrder() {
   const [estado, setEstado] = useState("");
   const [cargando, setCargando] = useState(editando);
   const [original, setOriginal] = useState(null);
+  const [aseguradoras, setAseguradoras] = useState([]);
+  const [marcas, setMarcas] = useState([]);
+  const [modelos, setModelos] = useState([]);
 
   const [form, setForm] = useState({
     fecha: hoy(),
@@ -50,6 +54,42 @@ export default function NewOrder() {
     observaciones: "",
     trabajos: "",
   });
+
+  // Autoguardado silencioso (solo al crear un recibo nuevo en blanco)
+  useFormDraft({ key: "neworder", form, setForm, enabled: !editando && !casoId });
+
+  // Catálogos para los desplegables (aseguradoras y marcas)
+  useEffect(() => {
+    async function loadCatalogos() {
+      const [{ data: asegs }, { data: ms }] = await Promise.all([
+        supabase.from("aseguradoras").select("nombre").eq("activo", true).order("orden"),
+        supabase.from("marcas").select("id, nombre").order("nombre"),
+      ]);
+      setAseguradoras((asegs || []).map((a) => ({ id: a.nombre, label: a.nombre })));
+      setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
+    }
+    loadCatalogos();
+  }, []);
+
+  // Carga modelos cuando la marca escrita coincide con una del catálogo
+  useEffect(() => {
+    async function loadModelos() {
+      const match = marcas.find(
+        (m) => m.label.toLowerCase() === (form.marca || "").trim().toLowerCase()
+      );
+      if (!match) {
+        setModelos([]);
+        return;
+      }
+      const { data } = await supabase
+        .from("modelos")
+        .select("nombre")
+        .eq("marca_id", match._id)
+        .order("nombre");
+      setModelos((data || []).map((m) => ({ id: m.nombre, label: m.nombre })));
+    }
+    loadModelos();
+  }, [form.marca, marcas]);
 
   // Modo edición: carga la orden existente
   useEffect(() => {
@@ -178,9 +218,10 @@ export default function NewOrder() {
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank"); // abre el PDF para imprimir
 
+      clearFormDraft("neworder");
       navigate(`/ordenes/${orden.id}`);
     } catch (err) {
-      setError(err.message || "No se pudo guardar la orden.");
+      setError(err.message || "No se pudo guardar el recibo.");
       setEstado("");
     }
   }
@@ -203,9 +244,9 @@ export default function NewOrder() {
         <div className="relative flex items-center justify-between gap-4">
           <div>
             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide bg-white/10 px-2.5 py-1 rounded-full">
-              {editando ? `Editando · Orden No. ${original?.numero}` : "Recibo de entrada"}
+              {editando ? `Editando · Recibo No. ${original?.numero}` : "Recibo de entrada"}
             </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">Orden de reparación</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">Recibo de reparación</h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
               {editando
                 ? "Corrige los datos del recibo y vuelve a generar el PDF para imprimir."
@@ -232,7 +273,16 @@ export default function NewOrder() {
 
         <Card title="Seguro">
           <div className="grid sm:grid-cols-3 gap-4">
-            <F label="Cía. de seguro" v={form.cia_seguro} on={(x) => up("cia_seguro", x)} />
+            <label className="block">
+              <span className="field-label">Cía. de seguro</span>
+              <Combobox
+                items={aseguradoras}
+                value={form.cia_seguro}
+                onChange={(v) => up("cia_seguro", v)}
+                placeholder="Seleccionar…"
+                allowCreate
+              />
+            </label>
             <F label="Póliza No." v={form.poliza} on={(x) => up("poliza", x)} />
             <F label="No. de ficha" v={form.ficha} on={(x) => up("ficha", x)} />
           </div>
@@ -240,8 +290,26 @@ export default function NewOrder() {
 
         <Card title="Vehículo">
           <div className="grid sm:grid-cols-3 gap-4">
-            <F label="Marca" v={form.marca} on={(x) => up("marca", x)} />
-            <F label="Modelo" v={form.modelo} on={(x) => up("modelo", x)} />
+            <label className="block">
+              <span className="field-label">Marca</span>
+              <Combobox
+                items={marcas}
+                value={form.marca}
+                onChange={(v) => setForm((f) => ({ ...f, marca: v, modelo: "" }))}
+                placeholder="Toyota, Honda…"
+                allowCreate
+              />
+            </label>
+            <label className="block">
+              <span className="field-label">Modelo</span>
+              <Combobox
+                items={modelos}
+                value={form.modelo}
+                onChange={(v) => up("modelo", v)}
+                placeholder="Corolla, Civic…"
+                allowCreate
+              />
+            </label>
             <F label="Año" v={form.anio} on={(x) => up("anio", x)} />
             <F label="Color" v={form.color} on={(x) => up("color", x)} />
             <F label="Placa" v={form.placa} on={(x) => up("placa", x)} />

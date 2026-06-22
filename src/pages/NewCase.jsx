@@ -61,6 +61,7 @@ export default function NewCase() {
         onSubmit={crear}
         submitLabel="Guardar caso"
         cancelTo="/"
+        draftKey="newcase"
       />
     </div>
   );

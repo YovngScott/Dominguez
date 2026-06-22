@@ -11,8 +11,9 @@ escritorio y en tablet (patio del taller).
 2. Ve a **SQL Editor** y ejecuta, en este orden, los archivos de `sql/`:
    1. `01_schema.sql` — tablas, índices, triggers y políticas RLS.
    2. `02_seed_lookups.sql` — aseguradoras (Reservas, Colonial, Atlántica,
-      Coop-Seguro, Sura, Internacional, Personal), categorías de foto y
-      tipos de documento.
+      Coop-Seguro, Sura, Internacional, Personal — luego se agregan Ochoa y
+      Viamar, y los nombres se actualizan a los legales completos),
+      categorías de foto y tipos de documento.
    3. `03_seed_marcas_modelos.sql` — catálogo de 52 marcas y ~378 modelos
       (generado por `scripts/gen_marcas_modelos.mjs`; vuelve a correr ese
       script y reemplaza el archivo si quieres ajustar el catálogo).
@@ -41,8 +42,21 @@ escritorio y en tablet (patio del taller).
        límite global en Dashboard → Storage → Settings.)
    13. `13_orden_combustible.sql` — agrega "Tipo de combustible" a la orden de
        reparación. Ejecutar una vez.
-   14. `14_estado_en_taller.sql` — agrega la categoría "Vehículo en el taller"
+   14. `14_aseguradoras_ochoa_viamar.sql` — agrega Ochoa y Viamar como
+       aseguradoras. Ejecutar una vez.
+   15. `15_piezas_recibidas.sql` — seguimiento de piezas pendientes/recibidas
+       por caso (apartado "Piezas"). Ejecutar una vez.
+   16. `16_citas.sql` — agenda de citas del taller (apartado "Citas"). Ejecutar
+       una vez.
+   17. `17_categorias_danos_ingreso.sql` — reorganiza las categorías de foto:
+       separa "Daños / Ingreso" en "Daños" (al cotizar) e "Ingreso" (cuando
+       llegan las piezas y el vehículo entra al taller) y elimina
+       "Cotización de piezas" y "Proceso". Ejecutar una vez.
+   18. `18_estado_en_taller.sql` — agrega la categoría "Vehículo en el taller"
        a los estados permitidos del caso. Ejecutar una vez.
+   19. `19_nombres_aseguradoras.sql` — actualiza los nombres de las
+       aseguradoras al nombre legal/comercial completo y renombra "Personal"
+       a "General". Ejecutar una vez.
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.

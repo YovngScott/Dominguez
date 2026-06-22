@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import PhotoManager from "../components/PhotoManager";
+import PiezasManager from "../components/PiezasManager";
 import DocumentManager from "../components/DocumentManager";
 import SignaturePad from "../components/SignaturePad";
 import Icon from "../components/Icon";
@@ -300,6 +301,9 @@ export default function CaseDetail() {
         <TabButton active={tab === "cotizaciones"} onClick={() => setTab("cotizaciones")}>
           <Icon name="receipt" className="w-4 h-4" /> Cotizaciones {cotizaciones.length > 0 && `(${cotizaciones.length})`}
         </TabButton>
+        <TabButton active={tab === "piezas"} onClick={() => setTab("piezas")}>
+          <Icon name="layers" className="w-4 h-4" /> Piezas
+        </TabButton>
         <TabButton active={tab === "historial"} onClick={() => setTab("historial")}>
           <Icon name="clock" className="w-4 h-4" /> Historial
         </TabButton>
@@ -308,6 +312,20 @@ export default function CaseDetail() {
       {tab === "fotos" && <PhotoManager casoId={caso.id} />}
       {tab === "documentos" && <DocumentManager casoId={caso.id} />}
       {tab === "cotizaciones" && <Cotizaciones lista={cotizaciones} chasis={caso.chasis} />}
+      {tab === "piezas" && (
+        <PiezasManager
+          casoId={caso.id}
+          caso={{
+            cliente_nombre: caso.cliente?.nombre_completo,
+            aseguradora_nombre: caso.aseguradora?.nombre,
+            marca: caso.marca?.nombre,
+            modelo: caso.modelo?.nombre,
+            anio: caso.anio,
+            placa: caso.placa,
+            numero_reclamo: caso.numero_reclamo,
+          }}
+        />
+      )}
       {tab === "historial" && <Historial eventos={historial} />}
 
       {showFirma && (
