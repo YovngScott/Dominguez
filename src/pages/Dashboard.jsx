@@ -6,7 +6,7 @@ import SearchBar from "../components/SearchBar";
 export default function Dashboard() {
   const [aseguradoras, setAseguradoras] = useState([]);
   const [conteos, setConteos] = useState({});
-  const [metricas, setMetricas] = useState({ espera: 0, listos: 0, entregadosMes: 0, activos: 0 });
+  const [metricas, setMetricas] = useState({ espera: 0, listos: 0, enTaller: 0, activos: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,18 +19,17 @@ export default function Dashboard() {
 
       const { data: casos } = await supabase
         .from("casos")
-        .select("aseguradora_id, estado, fecha_entrega");
+        .select("aseguradora_id, estado");
 
       const counts = {};
-      const m = { espera: 0, listos: 0, entregadosMes: 0, activos: 0 };
-      const ahora = new Date();
+      const m = { espera: 0, listos: 0, enTaller: 0, activos: 0 };
       (casos || []).forEach((c) => {
         counts[c.aseguradora_id] = (counts[c.aseguradora_id] || 0) + 1;
         if (c.estado === "entregado") {
-          const f = c.fecha_entrega ? new Date(c.fecha_entrega) : null;
-          if (f && f.getMonth() === ahora.getMonth() && f.getFullYear() === ahora.getFullYear()) {
-            m.entregadosMes += 1;
-          }
+          // los entregados no cuentan como casos activos
+        } else if (c.estado === "vehiculo_en_taller") {
+          m.enTaller += 1;
+          m.activos += 1;
         } else if (c.estado === "listo_para_trabajar") {
           m.listos += 1;
           m.activos += 1;
@@ -69,7 +68,7 @@ export default function Dashboard() {
           <Metrica valor={metricas.activos} etiqueta="Casos activos" color="var(--ink)" />
           <Metrica valor={metricas.espera} etiqueta="En espera de piezas" color="#d97706" />
           <Metrica valor={metricas.listos} etiqueta="Listos para trabajar" color="#059669" />
-          <Metrica valor={metricas.entregadosMes} etiqueta="Entregados este mes" color="var(--brand-red)" />
+          <Metrica valor={metricas.enTaller} etiqueta="Vehículos en el taller" color="#0284c7" />
         </div>
 
         <div className="flex items-center justify-between mb-6">
