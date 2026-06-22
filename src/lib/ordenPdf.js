@@ -86,28 +86,26 @@ export async function generarPdfOrden(orden) {
   const H = doc.internal.pageSize.getHeight();
   const contentW = W - M * 2;
 
-  // ===== Letterhead (banda oscura con logo + datos del taller) =====
+  // ===== Letterhead (fondo blanco, logo + datos del taller) =====
   const bandH = 30;
-  doc.setFillColor(...TINTA);
-  doc.rect(0, 0, W, bandH, "F");
-  doc.setFillColor(...ROJO);
-  doc.rect(0, bandH, W, 1.4, "F");
 
   const logo = await urlADataUrl("/logo.png");
   if (logo) {
     try {
-      doc.setFillColor(...BLANCO);
-      doc.roundedRect(M, 4, 44, bandH - 8, 2, 2, "F");
-      doc.addImage(logo, "PNG", M + 2, 5.5, 40, bandH - 11, undefined, "FAST");
+      doc.addImage(logo, "PNG", M, 2, 40, bandH - 6, undefined, "FAST");
     } catch {
       /* opcional */
     }
   }
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.6);
-  doc.setTextColor(230, 230, 232);
+  doc.setTextColor(...GRIS);
   const der = [TALLER.tels, `${TALLER.email1}  ·  ${TALLER.email2}`, TALLER.direccion, `${TALLER.rnc}   ${TALLER.registro}`];
   der.forEach((t, i) => doc.text(t, W - M, 7.5 + i * 4.4, { align: "right" }));
+
+  doc.setDrawColor(...ROJO);
+  doc.setLineWidth(1.2);
+  doc.line(0, bandH, W, bandH);
 
   // ===== Título + No. + fecha =====
   let y = bandH + 11;
