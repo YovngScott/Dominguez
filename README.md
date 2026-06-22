@@ -65,6 +65,11 @@ escritorio y en tablet (patio del taller).
    21. `21_firma_cliente_caso.sql` — agrega la columna para guardar la firma
        que el cliente hace con el dedo en la tablet al crear la cotización
        (se reutiliza después en el PDF del recibo). Ejecutar una vez.
+   22. `22_fk_usuarios_on_delete.sql` — permite borrar un usuario de
+       Authentication sin el error "Database error deleting user": cambia las
+       referencias a `auth.users` (created_by/uploaded_by/recibida_by) a
+       ON DELETE SET NULL, así los registros se conservan y solo pierden el
+       autor. Ejecutar una vez.
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.
