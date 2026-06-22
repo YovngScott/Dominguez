@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
@@ -8,8 +8,12 @@ import { agregarPiezaCatalogo } from "../lib/catalogo";
 // Formulario suelto para imprimir etiquetas de piezas. Los datos del vehículo
 // se escriben a mano (pensado para vehículos viejos que aún no tienen caso en
 // el sistema). Genera una etiqueta 4x3" con el vehículo + checklist de piezas
-// para marcar las cajas al recibirlas (sin código de barras).
+// para marcar las cajas al recibirlas (sin código de barras). La etiqueta se
+// guarda para verla luego en el historial y poder modificar sus piezas.
 export default function EtiquetasPiezas() {
+  const { etiquetaId } = useParams();
+  const editando = !!etiquetaId;
+
   const [aseguradoras, setAseguradoras] = useState([]);
   const [marcas, setMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
@@ -28,6 +32,7 @@ export default function EtiquetasPiezas() {
   const [nuevaCant, setNuevaCant] = useState("1");
   const [error, setError] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [guardadoId, setGuardadoId] = useState(null); // id tras el primer guardado en modo nuevo
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -43,6 +48,25 @@ export default function EtiquetasPiezas() {
     }
     load();
   }, []);
+
+  // Modo edición: carga la etiqueta guardada
+  useEffect(() => {
+    if (!etiquetaId) return;
+    async function load() {
+      const { data } = await supabase.from("etiquetas_piezas").select("*").eq("id", etiquetaId).single();
+      if (data) {
+        setForm({
+          marca: data.marca || "",
+          modelo: data.modelo || "",
+          anio: data.anio || "",
+          aseguradora: data.aseguradora_nombre || "",
+          reclamo: data.numero_reclamo || "",
+        });
+        setPiezas(data.piezas || []);
+      }
+    }
+    load();
+  }, [etiquetaId]);
 
   // Modelos sugeridos cuando la marca escrita coincide con una del catálogo
   useEffect(() => {
@@ -89,12 +113,43 @@ export default function EtiquetasPiezas() {
     setPiezas((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  // Guarda (o actualiza) la etiqueta para que aparezca en el historial.
+  async function guardarEtiqueta() {
+    const payload = {
+      marca: form.marca || null,
+      modelo: form.modelo || null,
+      anio: form.anio || null,
+      aseguradora_nombre: form.aseguradora || null,
+      numero_reclamo: form.reclamo || null,
+      piezas,
+    };
+    const id = etiquetaId || guardadoId;
+    if (id) {
+      await supabase.from("etiquetas_piezas").update(payload).eq("id", id);
+      return;
+    }
+    const { data: userData } = await supabase.auth.getUser();
+    const { data } = await supabase
+      .from("etiquetas_piezas")
+      .insert({ ...payload, created_by: userData?.user?.id })
+      .select("id")
+      .single();
+    if (data?.id) setGuardadoId(data.id);
+  }
+
   async function imprimir() {
     setError("");
     if (!piezas.length) return setError("Agrega al menos una pieza.");
 
     setImprimiendo(true);
     try {
+      // Se guarda primero para que quede en el historial aunque cierren el PDF.
+      try {
+        await guardarEtiqueta();
+      } catch {
+        /* si falla el guardado igual se imprime */
+      }
+
       const caso = {
         marca: form.marca,
         modelo: form.modelo,
@@ -114,8 +169,11 @@ export default function EtiquetasPiezas() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      <Link to="/piezas" className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]">
-        ← Piezas
+      <Link
+        to={editando ? "/piezas/etiquetas/historial" : "/piezas"}
+        className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]"
+      >
+        ← {editando ? "Etiquetas generadas" : "Piezas"}
       </Link>
 
       <div className="relative overflow-hidden rounded-2xl bg-[var(--ink)] text-white p-6 sm:p-8 mt-3 mb-6">
@@ -123,12 +181,15 @@ export default function EtiquetasPiezas() {
         <div className="relative flex items-center justify-between gap-4">
           <div>
             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide bg-white/10 px-2.5 py-1 rounded-full">
-              Etiquetas para caja
+              {editando ? "Editar etiqueta" : "Etiquetas para caja"}
             </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">Imprimir etiquetas</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">
+              {editando ? "Editar etiqueta" : "Imprimir etiquetas"}
+            </h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
-              Escribe los datos del vehículo, arma la lista de piezas e imprime una
-              etiqueta (4×3&quot;) con el checklist para marcar las cajas al recibirlas.
+              {editando
+                ? "Modifica las piezas o los datos del vehículo y vuelve a imprimir la etiqueta."
+                : "Escribe los datos del vehículo, arma la lista de piezas e imprime una etiqueta (4×3\") con el checklist para marcar las cajas al recibirlas."}
             </p>
           </div>
           <span className="hidden sm:block text-white/90">
@@ -245,9 +306,9 @@ export default function EtiquetasPiezas() {
             className="btn-primary gap-1.5 disabled:opacity-50"
           >
             <Icon name="printer" className="w-4 h-4" />
-            {imprimiendo ? "Generando…" : "Imprimir etiquetas"}
+            {imprimiendo ? "Generando…" : editando ? "Guardar e imprimir" : "Imprimir etiquetas"}
           </button>
-          <Link to="/piezas" className="btn-ghost">
+          <Link to={editando ? "/piezas/etiquetas/historial" : "/piezas"} className="btn-ghost">
             Cancelar
           </Link>
         </div>

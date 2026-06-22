@@ -70,6 +70,9 @@ escritorio y en tablet (patio del taller).
        referencias a `auth.users` (created_by/uploaded_by/recibida_by) a
        ON DELETE SET NULL, así los registros se conservan y solo pierden el
        autor. Ejecutar una vez.
+   23. `23_etiquetas_piezas.sql` — guarda las etiquetas de piezas generadas
+       desde /piezas/etiquetas para verlas en un historial y poder modificar
+       sus piezas o reimprimirlas. Ejecutar una vez.
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.

@@ -19,6 +19,7 @@ import OrderView from "./pages/OrderView";
 import PiezasList from "./pages/PiezasList";
 import PiezasCaso from "./pages/PiezasCaso";
 import EtiquetasPiezas from "./pages/EtiquetasPiezas";
+import EtiquetasHistorial from "./pages/EtiquetasHistorial";
 import ClientList from "./pages/ClientList";
 import CitasList from "./pages/CitasList";
 import Reportes from "./pages/Reportes";
@@ -304,6 +305,22 @@ export default function App() {
       />
       <Route
         path="/piezas/etiquetas"
+        element={
+          <PrivateLayout>
+            <EtiquetasPiezas />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/piezas/etiquetas/historial"
+        element={
+          <PrivateLayout>
+            <EtiquetasHistorial />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/piezas/etiquetas/:etiquetaId"
         element={
           <PrivateLayout>
             <EtiquetasPiezas />

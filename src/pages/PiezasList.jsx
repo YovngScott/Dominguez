@@ -87,6 +87,9 @@ export default function PiezasList() {
             />
             Solo con piezas pendientes
           </label>
+          <Link to="/piezas/etiquetas/historial" className="btn-ghost text-sm py-2 px-3 gap-1.5">
+            <Icon name="tag" className="w-4 h-4" /> Etiquetas generadas
+          </Link>
           <Link to="/piezas/etiquetas" className="btn-primary text-sm py-2 px-3 gap-1.5">
             <Icon name="tag" className="w-4 h-4" /> Imprimir etiquetas
           </Link>
