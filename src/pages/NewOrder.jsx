@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
@@ -36,6 +36,7 @@ export default function NewOrder() {
   const [aseguradoras, setAseguradoras] = useState([]);
   const [marcas, setMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
+  const enviandoRef = useRef(false);
 
   const [form, setForm] = useState({
     fecha: hoy(),
@@ -165,8 +166,17 @@ export default function NewOrder() {
   }
 
   async function generar() {
+    // Seguro contra doble clic/doble toque: bloquea de inmediato, antes de
+    // cualquier await, para que no se disparen dos envíos en paralelo
+    // (eso creaba un recibo y un caso duplicados).
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setError("");
-    if (!form.cliente.trim()) return setError("El nombre del cliente es obligatorio.");
+    if (!form.cliente.trim()) {
+      enviandoRef.current = false;
+      return setError("El nombre del cliente es obligatorio.");
+    }
+    setEstado("Guardando…");
     try {
       let orden;
 
@@ -276,6 +286,7 @@ export default function NewOrder() {
     } catch (err) {
       setError(err.message || "No se pudo guardar el recibo.");
       setEstado("");
+      enviandoRef.current = false;
     }
   }
 

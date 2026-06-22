@@ -48,6 +48,7 @@ export default function NewQuote() {
   const [paso, setPaso] = useState(1);
   const [firmaBlob, setFirmaBlob] = useState(null);
   const firmaRef = useRef(null);
+  const enviandoRef = useRef(false);
 
   const [form, setForm] = useState({
     cliente_nombre: "",
@@ -263,9 +264,21 @@ export default function NewQuote() {
   const totales = calcularTotales(form.items_piezas, form.items_mano_obra);
 
   async function generar() {
+    // Seguro contra doble clic/doble toque: bloquea de inmediato, antes de
+    // cualquier await, para que no se disparen dos envíos en paralelo
+    // (eso creaba una cotización y un caso duplicados).
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setError("");
-    if (!form.cliente_nombre.trim()) return setError("El nombre del cliente es obligatorio.");
-    if (!form.aseguradora_id) return setError("Selecciona la aseguradora.");
+    if (!form.cliente_nombre.trim()) {
+      enviandoRef.current = false;
+      return setError("El nombre del cliente es obligatorio.");
+    }
+    if (!form.aseguradora_id) {
+      enviandoRef.current = false;
+      return setError("Selecciona la aseguradora.");
+    }
+    setEstado("Guardando…");
 
     try {
       const aseg = aseguradoras.find((a) => a.id === form.aseguradora_id);
@@ -480,6 +493,7 @@ export default function NewQuote() {
     } catch (err) {
       setError(err.message || "No se pudo guardar la cotización.");
       setEstado("");
+      enviandoRef.current = false;
     }
   }
 
