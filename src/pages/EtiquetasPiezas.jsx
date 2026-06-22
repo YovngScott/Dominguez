@@ -20,6 +20,7 @@ export default function EtiquetasPiezas() {
     modelo: "",
     anio: "",
     aseguradora: "",
+    reclamo: "",
   });
 
   const [piezas, setPiezas] = useState([]); // [{ nombre, cantidad }]
@@ -99,6 +100,7 @@ export default function EtiquetasPiezas() {
         modelo: form.modelo,
         anio: form.anio,
         aseguradora_nombre: form.aseguradora,
+        numero_reclamo: form.reclamo,
       };
       const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
       const blob = await generarPdfEtiquetas({ caso, piezas });
@@ -169,6 +171,9 @@ export default function EtiquetasPiezas() {
             </Campo>
             <Campo label="Año">
               <input value={form.anio} onChange={(e) => up("anio", e.target.value)} className="input" placeholder="2020" />
+            </Campo>
+            <Campo label="No. de reclamo">
+              <input value={form.reclamo} onChange={(e) => up("reclamo", e.target.value)} className="input" />
             </Campo>
           </div>
         </div>
