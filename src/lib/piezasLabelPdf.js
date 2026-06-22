@@ -6,7 +6,7 @@ import { jsPDF } from "jspdf";
 const LABEL_W = 101.6; // 4"
 const LABEL_H = 76.2; // 3"
 const M = 5;
-const MAX_POR_ETIQUETA = 9; // si hay más piezas, se reparten en varias etiquetas
+const MAX_POR_ETIQUETA = 7; // si hay más piezas, se reparten en varias etiquetas
 
 const TINTA = [20, 20, 20];
 const GRIS = [120, 124, 132];
@@ -20,14 +20,14 @@ function linea(doc, x, y, w) {
 
 function campoCorto(doc, x, y, label, valor, maxW) {
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(5.4);
+  doc.setFontSize(6.2);
   doc.setTextColor(...GRIS);
   doc.text(label.toUpperCase(), x, y);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(9.5);
   doc.setTextColor(...TINTA);
   const v = doc.splitTextToSize(String(valor || "—"), maxW || 40)[0];
-  doc.text(v, x, y + 3.6);
+  doc.text(v, x, y + 4.2);
 }
 
 function partirEnGrupos(arr, tam) {
@@ -56,10 +56,10 @@ export async function generarPdfEtiquetas({ caso = {}, piezas = [] }) {
 
     // ===== Vehículo + asegurado (compacto, 2 columnas) =====
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
+    doc.setFontSize(11.5);
     doc.setTextColor(...TINTA);
-    doc.text([caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ") || "—", M, y);
-    y += 4.6;
+    doc.text([caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ") || "—", M, y + 1);
+    y += 6.4;
 
     // Solo se muestran los datos que tengan valor (en etiquetas de vehículos
     // sin caso solo se llena marca/modelo/año + aseguradora).
@@ -73,39 +73,46 @@ export async function generarPdfEtiquetas({ caso = {}, piezas = [] }) {
     datos.forEach(([label, valor], idx) => {
       const x = idx % 2 === 0 ? M : colX;
       campoCorto(doc, x, y, label, valor, mitad - 4);
-      if (idx % 2 === 1) y += 6;
+      if (idx % 2 === 1) y += 7;
     });
-    if (datos.length % 2 === 1) y += 6; // cierra la última fila impar
-    y += 0.2;
+    if (datos.length % 2 === 1) y += 7; // cierra la última fila impar
+
+    // ===== Reclamo (debajo de la aseguradora, destacado) =====
+    if (caso.numero_reclamo) {
+      campoCorto(doc, M, y, "No. de reclamo", caso.numero_reclamo, contentW);
+      y += 7;
+    }
+
+    y += 0.4;
     linea(doc, M, y, contentW);
-    y += 4;
+    y += 4.5;
 
     // ===== Lista de piezas =====
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
+    doc.setFontSize(8.5);
     doc.setTextColor(...TINTA);
     doc.text(`PIEZAS (${grupo.length})`, M, y);
-    y += 4.5;
+    y += 5;
 
     const espacioRestante = LABEL_H - 6 - y; // deja 6mm de pie
-    const filaH = Math.max(3.6, Math.min(5.2, espacioRestante / grupo.length));
-    const fontPieza = filaH >= 4.6 ? 8.2 : 7;
+    const filaH = Math.max(4, Math.min(6.4, espacioRestante / grupo.length));
+    const fontPieza = filaH >= 5 ? 9.5 : 8;
 
     grupo.forEach((p) => {
       // casilla para marcar a mano cuando se verifique
       doc.setDrawColor(...TINTA);
-      doc.setLineWidth(0.3);
-      doc.rect(M, y - 2.6, 2.6, 2.6);
+      doc.setLineWidth(0.35);
+      doc.rect(M, y - 2.9, 3.2, 3.2);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(fontPieza);
       doc.setTextColor(...TINTA);
-      const nombre = doc.splitTextToSize(p.nombre || "Pieza", contentW - 14)[0];
-      doc.text(nombre, M + 5, y);
+      const nombre = doc.splitTextToSize(p.nombre || "Pieza", contentW - 16)[0];
+      doc.text(nombre, M + 6, y);
 
       if (p.cantidad > 1) {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(7);
+        doc.setFontSize(8);
         doc.setTextColor(...GRIS);
         doc.text(`x${p.cantidad}`, M + contentW, y, { align: "right" });
       }
@@ -113,22 +120,14 @@ export async function generarPdfEtiquetas({ caso = {}, piezas = [] }) {
     });
 
     // ===== Pie =====
-    let pieY = LABEL_H - 4.8;
-    if (caso.numero_reclamo) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.2);
-      doc.setTextColor(...TINTA);
-      doc.text(`Reclamo ${caso.numero_reclamo}`, M, pieY);
-      pieY -= 3.2;
-    }
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(4.8);
+    doc.setFontSize(5);
     doc.setTextColor(...GRIS);
     const piePartes = [
       caso.numero_poliza ? `Póliza ${caso.numero_poliza}` : null,
       new Date().toLocaleDateString("es-DO"),
     ].filter(Boolean);
-    doc.text(piePartes.join("   ·   "), M, pieY);
+    doc.text(piePartes.join("   ·   "), M, LABEL_H - 2.4);
   });
 
   return doc.output("blob");
