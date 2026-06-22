@@ -62,6 +62,9 @@ escritorio y en tablet (patio del taller).
        sin caso le busca uno por chasis o le crea uno nuevo. Ejecutar una vez
        (es seguro volver a correrlo: si ya no quedan recibos sin caso, no
        hace nada).
+   21. `21_firma_cliente_caso.sql` — agrega la columna para guardar la firma
+       que el cliente hace con el dedo en la tablet al crear la cotización
+       (se reutiliza después en el PDF del recibo). Ejecutar una vez.
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.

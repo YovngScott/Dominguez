@@ -10,6 +10,7 @@ import {
   findOrCreateModelo,
   getAseguradoraGeneralId,
 } from "../lib/catalogo";
+import { obtenerFirmaClienteUrl } from "../lib/firmaCliente";
 
 const TIPOS_COMBUSTIBLE = ["Gasolina", "Diesel", "Gas"];
 
@@ -260,7 +261,13 @@ export default function NewOrder() {
 
       setEstado("Generando PDF…");
       const { generarPdfOrden } = await import("../lib/ordenPdf");
-      const blob = await generarPdfOrden({ ...form, numero: orden.numero, fecha: ddmmaaaa(form.fecha) });
+      const firmaClienteUrl = await obtenerFirmaClienteUrl(orden.caso_id);
+      const blob = await generarPdfOrden({
+        ...form,
+        numero: orden.numero,
+        fecha: ddmmaaaa(form.fecha),
+        firma_cliente_url: firmaClienteUrl,
+      });
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank"); // abre el PDF para imprimir
 

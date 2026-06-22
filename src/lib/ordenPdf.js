@@ -42,7 +42,9 @@ async function urlADataUrl(url) {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let bin = "";
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    const mime = url.endsWith(".png") ? "image/png" : "image/jpeg";
+    // blob.type es más fiable que la extensión: una signed URL de Supabase
+    // no termina en ".png" aunque la imagen sí lo sea.
+    const mime = blob.type || (url.endsWith(".png") ? "image/png" : "image/jpeg");
     return `data:${mime};base64,${btoa(bin)}`;
   } catch {
     return null;
@@ -258,6 +260,18 @@ export async function generarPdfOrden(orden) {
       doc.addImage(sello, "JPEG", M + 8, yFirma - 28, 36, 30, undefined, "FAST");
     } catch {
       /* opcional */
+    }
+  }
+  // Firma que el cliente hizo con el dedo en la tablet al hacer la
+  // cotización: se coloca sobre la línea, igual que el sello del taller.
+  if (orden.firma_cliente_url) {
+    const firmaCliente = await urlADataUrl(orden.firma_cliente_url);
+    if (firmaCliente) {
+      try {
+        doc.addImage(firmaCliente, "PNG", W - M - 73, yFirma - 15, 68, 14, undefined, "FAST");
+      } catch {
+        /* opcional */
+      }
     }
   }
   doc.setDrawColor(...TINTA);

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import ItemModal from "../components/ItemModal";
+import SignatureCanvas from "../components/SignatureCanvas";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
 import { agregarPiezaCatalogo, findOrCreateMarca, findOrCreateModelo } from "../lib/catalogo";
@@ -40,6 +41,13 @@ export default function NewQuote() {
 
   const [modal, setModal] = useState(null); // { tipo, index|null }
   const [evidencias, setEvidencias] = useState([]); // { file, preview }
+
+  // Paso 1 (datos + firma del cliente en tablet) → paso 2 (piezas/mano de
+  // obra/evidencias, lo llena el taller). Solo aplica al crear; al editar
+  // se ve todo junto, como antes.
+  const [paso, setPaso] = useState(1);
+  const [firmaBlob, setFirmaBlob] = useState(null);
+  const firmaRef = useRef(null);
 
   const [form, setForm] = useState({
     cliente_nombre: "",
@@ -237,6 +245,21 @@ export default function NewQuote() {
       .eq("id", casoId);
   }
 
+  async function continuarPaso2() {
+    setError("");
+    if (!form.cliente_nombre.trim()) return setError("El nombre del cliente es obligatorio.");
+    if (!form.aseguradora_id) return setError("Selecciona la aseguradora.");
+
+    const canvasVacio = firmaRef.current?.vacio();
+    if (canvasVacio && !firmaBlob) {
+      return setError("Falta la firma del cliente para continuar.");
+    }
+    if (!canvasVacio) {
+      setFirmaBlob(await firmaRef.current.getBlob());
+    }
+    setPaso(2);
+  }
+
   const totales = calcularTotales(form.items_piezas, form.items_mano_obra);
 
   async function generar() {
@@ -384,6 +407,20 @@ export default function NewQuote() {
         cot = nueva;
       }
 
+      // Guarda la firma que el cliente hizo con el dedo en el caso enlazado.
+      // No se usa en este PDF: se reutiliza después en el recibo, cuando
+      // lleguen las piezas y se le entregue el vehículo al taller.
+      if (firmaBlob && cot.caso_id) {
+        setEstado("Guardando firma…");
+        const firmaPath = `${cot.caso_id}/firma_cliente/firma.png`;
+        const { error: firmaErr } = await supabase.storage
+          .from("fotos-casos")
+          .upload(firmaPath, firmaBlob, { contentType: "image/png", upsert: true });
+        if (!firmaErr) {
+          await supabase.from("casos").update({ firma_cliente_url: firmaPath }).eq("id", cot.caso_id);
+        }
+      }
+
       // Sube evidencias nuevas (se guardan con la cotización; no van en el PDF).
       // Además, si hay un caso enlazado, la misma foto se vincula a la
       // categoría "Daños" del caso para que aparezca también en su pestaña Fotos.
@@ -450,6 +487,9 @@ export default function NewQuote() {
     return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
   }
 
+  const mostrarDatosBase = editando || paso === 1;
+  const mostrarValoracion = editando || paso === 2;
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
       <Link
@@ -466,15 +506,17 @@ export default function NewQuote() {
         <div className="relative flex items-center justify-between gap-4">
           <div>
             <span className="inline-block text-[11px] font-semibold uppercase tracking-wide bg-white/10 px-2.5 py-1 rounded-full">
-              {editando ? `Editando · ${original?.numero}` : "Borrador"}
+              {editando ? `Editando · ${original?.numero}` : `Paso ${paso} de 2`}
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">
-              {editando ? "Editar cotización" : "Nueva cotización"}
+              {editando ? "Editar cotización" : paso === 1 ? "Datos del cliente" : "Valoración del taller"}
             </h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
               {editando
                 ? "Corrige los datos, agrega o elimina piezas/servicios y vuelve a generar el PDF."
-                : "Valora piezas y mano de obra. Al generar se crea el PDF y, si el chasis coincide con un caso, queda enlazada automáticamente."}
+                : paso === 1
+                  ? "El cliente completa sus datos en la tablet y firma para continuar."
+                  : "Valora piezas y mano de obra. Al generar se crea el PDF y, si el chasis coincide con un caso, queda enlazada automáticamente."}
             </p>
           </div>
           <span className="hidden sm:block text-white/90">
@@ -483,9 +525,17 @@ export default function NewQuote() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[1fr_330px] gap-6 items-start">
+      <div
+        className={
+          mostrarValoracion
+            ? "grid lg:grid-cols-[1fr_330px] gap-6 items-start"
+            : "grid gap-6 items-start max-w-2xl mx-auto"
+        }
+      >
         {/* ===== Columna del formulario ===== */}
         <div className="space-y-5 min-w-0">
+        {mostrarDatosBase && (
+        <>
           {/* Cliente */}
           <Section icon="user" title="Datos del cliente" desc="Quién es el dueño del vehículo">
             <div className="grid sm:grid-cols-2 gap-4">
@@ -565,6 +615,38 @@ export default function NewQuote() {
               </Field>
             </div>
           </Section>
+        </>
+        )}
+
+        {!editando && paso === 1 && (
+          <>
+            {/* Firma del cliente */}
+            <Section icon="pencil" title="Firma del cliente" desc="Firma aquí con el dedo para continuar">
+              <SignatureCanvas ref={firmaRef} />
+              <p className="text-[11px] text-[var(--ink-soft)] mt-3 leading-relaxed">
+                Esta firma no aparece en el PDF de la cotización. Queda guardada para usarse
+                después en el recibo, cuando se le entregue el vehículo al taller.
+              </p>
+            </Section>
+
+            {error && <p className="text-sm text-[var(--brand-red)]">{error}</p>}
+
+            <button onClick={continuarPaso2} className="btn-primary w-full">
+              Siguiente →
+            </button>
+          </>
+        )}
+
+        {mostrarValoracion && (
+        <>
+          {!editando && (
+            <button
+              onClick={() => setPaso(1)}
+              className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]"
+            >
+              ← Volver a los datos del cliente
+            </button>
+          )}
 
           {/* Piezas */}
           <ItemsCard
@@ -631,9 +713,12 @@ export default function NewQuote() {
               </label>
             </div>
           </Section>
+        </>
+        )}
         </div>
 
         {/* ===== Resumen fijo ===== */}
+        {mostrarValoracion && (
         <aside className="lg:sticky lg:top-24">
           <div className="card overflow-hidden">
             <div className="bg-[var(--ink)] text-white px-5 py-3.5 flex items-center justify-between">
@@ -672,6 +757,7 @@ export default function NewQuote() {
             </div>
           </div>
         </aside>
+        )}
       </div>
 
       {modal && (

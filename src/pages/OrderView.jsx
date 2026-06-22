@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
+import { obtenerFirmaClienteUrl } from "../lib/firmaCliente";
 
 function ddmmaaaa(iso) {
   if (!iso) return "";
@@ -29,7 +30,12 @@ export default function OrderView() {
   async function imprimir() {
     setGenerando(true);
     const { generarPdfOrden } = await import("../lib/ordenPdf");
-    const blob = await generarPdfOrden({ ...orden, fecha: ddmmaaaa(orden.fecha) });
+    const firmaClienteUrl = await obtenerFirmaClienteUrl(orden.caso_id);
+    const blob = await generarPdfOrden({
+      ...orden,
+      fecha: ddmmaaaa(orden.fecha),
+      firma_cliente_url: firmaClienteUrl,
+    });
     window.open(URL.createObjectURL(blob), "_blank");
     setGenerando(false);
   }
