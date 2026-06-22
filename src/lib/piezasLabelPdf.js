@@ -74,12 +74,23 @@ export async function generarPdfEtiquetas({ caso = {}, piezas = [] }) {
     doc.setTextColor(...TINTA);
     doc.text([caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ") || "—", M, y);
     y += 4.6;
-    campoCorto(doc, M, y, "Placa", caso.placa, mitad - 4);
-    campoCorto(doc, colX, y, "Chasis", caso.chasis, mitad - 4);
-    y += 6;
-    campoCorto(doc, M, y, "Asegurado", caso.cliente_nombre, mitad - 4);
-    campoCorto(doc, colX, y, "Aseguradora", caso.aseguradora_nombre, mitad - 4);
-    y += 6.2;
+
+    // Solo se muestran los datos que tengan valor (en etiquetas de vehículos
+    // sin caso solo se llena marca/modelo/año + aseguradora).
+    const datos = [
+      ["Placa", caso.placa],
+      ["Chasis", caso.chasis],
+      ["Asegurado", caso.cliente_nombre],
+      ["Aseguradora", caso.aseguradora_nombre],
+    ].filter(([, v]) => v && String(v).trim());
+
+    datos.forEach(([label, valor], idx) => {
+      const x = idx % 2 === 0 ? M : colX;
+      campoCorto(doc, x, y, label, valor, mitad - 4);
+      if (idx % 2 === 1) y += 6;
+    });
+    if (datos.length % 2 === 1) y += 6; // cierra la última fila impar
+    y += 0.2;
     linea(doc, M, y, contentW);
     y += 4;
 

@@ -16,17 +16,10 @@ export default function EtiquetasPiezas() {
   const [piezasCatalogo, setPiezasCatalogo] = useState([]);
 
   const [form, setForm] = useState({
-    cliente: "",
-    tel: "",
     marca: "",
     modelo: "",
     anio: "",
-    color: "",
-    placa: "",
-    chasis: "",
     aseguradora: "",
-    reclamo: "",
-    poliza: "",
   });
 
   const [piezas, setPiezas] = useState([]); // [{ nombre, cantidad }]
@@ -105,14 +98,7 @@ export default function EtiquetasPiezas() {
         marca: form.marca,
         modelo: form.modelo,
         anio: form.anio,
-        color: form.color,
-        placa: form.placa,
-        chasis: form.chasis,
-        cliente_nombre: form.cliente,
-        cliente_telefono: form.tel,
         aseguradora_nombre: form.aseguradora,
-        numero_reclamo: form.reclamo,
-        numero_poliza: form.poliza,
       };
       const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
       const blob = await generarPdfEtiquetas({ caso, piezas });
@@ -153,13 +139,7 @@ export default function EtiquetasPiezas() {
         {/* Vehículo y seguro */}
         <div className="card p-6">
           <h2 className="font-bold text-[var(--ink)] mb-4">Vehículo y seguro</h2>
-          <div className="grid sm:grid-cols-3 gap-4">
-            <Campo label="Asegurado">
-              <input value={form.cliente} onChange={(e) => up("cliente", e.target.value)} className="input" />
-            </Campo>
-            <Campo label="Teléfono">
-              <input value={form.tel} onChange={(e) => up("tel", e.target.value)} className="input" />
-            </Campo>
+          <div className="grid sm:grid-cols-2 gap-4">
             <Campo label="Aseguradora">
               <Combobox
                 items={aseguradoras}
@@ -189,21 +169,6 @@ export default function EtiquetasPiezas() {
             </Campo>
             <Campo label="Año">
               <input value={form.anio} onChange={(e) => up("anio", e.target.value)} className="input" placeholder="2020" />
-            </Campo>
-            <Campo label="Color">
-              <input value={form.color} onChange={(e) => up("color", e.target.value)} className="input" />
-            </Campo>
-            <Campo label="Placa">
-              <input value={form.placa} onChange={(e) => up("placa", e.target.value)} className="input" />
-            </Campo>
-            <Campo label="Chasis">
-              <input value={form.chasis} onChange={(e) => up("chasis", e.target.value)} className="input" />
-            </Campo>
-            <Campo label="No. de reclamo">
-              <input value={form.reclamo} onChange={(e) => up("reclamo", e.target.value)} className="input" />
-            </Campo>
-            <Campo label="No. de póliza">
-              <input value={form.poliza} onChange={(e) => up("poliza", e.target.value)} className="input" />
             </Campo>
           </div>
         </div>
