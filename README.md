@@ -41,6 +41,8 @@ escritorio y en tablet (patio del taller).
        límite global en Dashboard → Storage → Settings.)
    13. `13_orden_combustible.sql` — agrega "Tipo de combustible" a la orden de
        reparación. Ejecutar una vez.
+   14. `14_estado_en_taller.sql` — agrega la categoría "Vehículo en el taller"
+       a los estados permitidos del caso. Ejecutar una vez.
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.
