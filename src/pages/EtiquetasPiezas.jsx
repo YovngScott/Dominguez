@@ -8,7 +8,7 @@ import { agregarPiezaCatalogo } from "../lib/catalogo";
 // Formulario para imprimir etiquetas de piezas POR CAJA. Los datos del
 // vehículo/seguro se escriben una vez (arriba) y se comparten; abajo se
 // agregan las cajas, cada una con sus piezas. Al imprimir, cada caja sale en
-// su propia hoja (4x3"). Todo se guarda como una sola etiqueta en el historial.
+// su propia hoja (4x2"). Todo se guarda como una sola etiqueta en el historial.
 export default function EtiquetasPiezas() {
   const { etiquetaId } = useParams();
   const editando = !!etiquetaId;
@@ -197,7 +197,7 @@ export default function EtiquetasPiezas() {
             </h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
               Escribe los datos del vehículo una vez y agrega una caja por cada paquete.
-              Cada caja se imprime en su propia hoja (4×3&quot;).
+              Cada caja se imprime en su propia hoja (4×2&quot;).
             </p>
           </div>
           <span className="hidden sm:block text-white/90">
