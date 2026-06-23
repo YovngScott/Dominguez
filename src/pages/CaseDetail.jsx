@@ -7,7 +7,7 @@ import DocumentManager from "../components/DocumentManager";
 import SignaturePad from "../components/SignaturePad";
 import Icon from "../components/Icon";
 import { ESTADOS } from "../lib/estados";
-import { rd } from "../lib/cotizacion";
+import { rd, nombrePieza } from "../lib/cotizacion";
 
 const ESTADO_ORDEN = ["en_espera_piezas", "listo_para_trabajar", "entregado"];
 
@@ -34,6 +34,7 @@ export default function CaseDetail() {
   const [firmaUrl, setFirmaUrl] = useState(null);
   const [showFirma, setShowFirma] = useState(false);
   const [guardandoFirma, setGuardandoFirma] = useState(false);
+  const [generandoTrabajo, setGenerandoTrabajo] = useState(false);
 
   async function loadCaso() {
     const { data } = await supabase
@@ -142,6 +143,60 @@ export default function CaseDetail() {
     }
   }
 
+  // Genera la hoja "Trabajo a realizar" con las piezas y la mano de obra
+  // tomadas de las cotizaciones del vehículo. Se imprime y se pone en el carro.
+  async function imprimirTrabajo() {
+    setGenerandoTrabajo(true);
+    try {
+      const filtros = [`caso_id.eq.${casoId}`];
+      if (caso.chasis?.trim()) filtros.push(`chasis.ilike.${caso.chasis.trim()}`);
+      const { data: cots } = await supabase
+        .from("cotizaciones")
+        .select("items_piezas, items_mano_obra, created_at")
+        .or(filtros.join(","))
+        .order("created_at", { ascending: false });
+
+      // Junta piezas (sin repetir) y mano de obra de todas las cotizaciones.
+      const piezasMap = new Map();
+      const mano = [];
+      const manoVistas = new Set();
+      (cots || []).forEach((c) => {
+        (c.items_piezas || []).forEach((it) => {
+          const nombre = nombrePieza(it);
+          const k = nombre.toLowerCase();
+          if (nombre && !piezasMap.has(k)) piezasMap.set(k, { nombre, cantidad: Number(it.cantidad) || 1 });
+        });
+        (c.items_mano_obra || []).forEach((it) => {
+          const desc = it.pieza ? `${it.nombre} · ${nombrePieza({ ...it, nombre: it.pieza })}` : it.nombre;
+          const k = (desc || "").toLowerCase();
+          if (desc && !manoVistas.has(k)) {
+            manoVistas.add(k);
+            mano.push({ descripcion: desc, cantidad: Number(it.cantidad) || 1 });
+          }
+        });
+      });
+
+      const { generarPdfTrabajo } = await import("../lib/trabajoPdf");
+      const blob = await generarPdfTrabajo({
+        caso: {
+          aseguradora_nombre: caso.aseguradora?.nombre,
+          cliente_nombre: caso.cliente?.nombre_completo,
+          cliente_telefono: caso.cliente?.telefono,
+          marca: caso.marca?.nombre,
+          modelo: caso.modelo?.nombre,
+          anio: caso.anio,
+          placa: caso.placa,
+          numero_reclamo: caso.numero_reclamo,
+        },
+        piezas: [...piezasMap.values()],
+        manoObra: mano,
+      });
+      window.open(URL.createObjectURL(blob), "_blank");
+    } finally {
+      setGenerandoTrabajo(false);
+    }
+  }
+
   async function eliminarCaso() {
     if (!confirm("¿Eliminar este caso? Se borrarán también sus fotos y documentos. Esta acción no se puede deshacer.")) {
       return;
@@ -182,6 +237,16 @@ export default function CaseDetail() {
           ← {caso.aseguradora?.nombre}
         </Link>
         <div className="flex gap-2">
+          {enTaller && (
+            <button
+              onClick={imprimirTrabajo}
+              disabled={generandoTrabajo}
+              className="btn-primary text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
+            >
+              <Icon name="clipboard" className="w-4 h-4" />
+              {generandoTrabajo ? "Generando…" : "Trabajo a realizar"}
+            </button>
+          )}
           <Link to={`/ordenes/nueva?caso=${casoId}`} className="btn-ghost text-sm py-2 px-3 gap-1.5">
             <Icon name="clipboard" className="w-4 h-4" /> Recibo
           </Link>
