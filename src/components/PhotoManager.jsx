@@ -36,15 +36,19 @@ export default function PhotoManager({ casoId }) {
       .eq("caso_id", casoId)
       .order("uploaded_at", { ascending: false });
 
-    const conUrls = await Promise.all(
-      (data || []).map(async (f) => {
-        const { data: signed } = await supabase.storage
-          .from("fotos-casos")
-          .createSignedUrl(f.storage_path, SIGNED_URL_TTL);
-        return { ...f, signedUrl: signed?.signedUrl };
-      })
-    );
-    setFotos(conUrls);
+    const filas = data || [];
+    const paths = filas.map((f) => f.storage_path);
+
+    // Una sola petición para firmar todas las URLs (en vez de una por foto).
+    let firmadas = [];
+    if (paths.length) {
+      const { data: signed } = await supabase.storage
+        .from("fotos-casos")
+        .createSignedUrls(paths, SIGNED_URL_TTL);
+      firmadas = signed || [];
+    }
+    const urlPorPath = new Map(firmadas.map((s) => [s.path, s.signedUrl]));
+    setFotos(filas.map((f) => ({ ...f, signedUrl: urlPorPath.get(f.storage_path) })));
   }
 
   useEffect(() => {
@@ -58,8 +62,8 @@ export default function PhotoManager({ casoId }) {
       setError("Selecciona una categoría antes de subir fotos.");
       return;
     }
-    if (fotos.length + files.length > 50) {
-      setError(`Este caso solo admite 50 fotos en total (tiene ${fotos.length}).`);
+    if (fotos.length + files.length > 100) {
+      setError(`Este caso solo admite 100 fotos en total (tiene ${fotos.length}).`);
       return;
     }
 
@@ -70,11 +74,12 @@ export default function PhotoManager({ casoId }) {
     for (let i = 0; i < files.length; i++) {
       try {
         const compressed = await compressImage(files[i]);
-        const path = `${casoId}/${activeCat}/${uuid()}.jpg`;
+        const ext = compressed.type === "image/webp" ? "webp" : "jpg";
+        const path = `${casoId}/${activeCat}/${uuid()}.${ext}`;
 
         const { error: uploadErr } = await supabase.storage
           .from("fotos-casos")
-          .upload(path, compressed, { contentType: "image/jpeg" });
+          .upload(path, compressed, { contentType: compressed.type });
         if (uploadErr) throw uploadErr;
 
         const { data: signed } = await supabase.storage
@@ -114,7 +119,10 @@ export default function PhotoManager({ casoId }) {
     if (!lista.length || descargando) return;
     setError("");
     const base = (nombreCat || "fotos").replace(/[^\wáéíóúñ\s-]/gi, "").trim() || "fotos";
-    const nombreArchivo = (i) => `${base}-${String(i + 1).padStart(2, "0")}.jpg`;
+    const nombreArchivo = (i) => {
+      const ext = (lista[i].storage_path.split(".").pop() || "jpg").toLowerCase();
+      return `${base}-${String(i + 1).padStart(2, "0")}.${ext}`;
+    };
 
     let dirHandle = null;
     if (window.showDirectoryPicker) {
@@ -174,7 +182,7 @@ export default function PhotoManager({ casoId }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="text-lg font-semibold text-slate-800">Fotos ({fotos.length}/50)</h2>
+        <h2 className="text-lg font-semibold text-slate-800">Fotos ({fotos.length}/100)</h2>
         <button
           type="button"
           onClick={() => setComparar((v) => !v)}
@@ -225,7 +233,7 @@ export default function PhotoManager({ casoId }) {
             <button
               type="button"
               onClick={() => cameraInputRef.current?.click()}
-              disabled={subiendo || fotos.length >= 50}
+              disabled={subiendo || fotos.length >= 100}
               className="bg-slate-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-800 disabled:opacity-50 inline-flex items-center justify-center gap-2"
             >
               <Icon name="camera" className="w-4 h-4" /> Tomar foto
@@ -233,7 +241,7 @@ export default function PhotoManager({ casoId }) {
             <button
               type="button"
               onClick={() => galleryInputRef.current?.click()}
-              disabled={subiendo || fotos.length >= 50}
+              disabled={subiendo || fotos.length >= 100}
               className="bg-slate-100 text-slate-800 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 disabled:opacity-50 inline-flex items-center justify-center gap-2"
             >
               <Icon name="image" className="w-4 h-4" /> Subir desde galería
@@ -293,7 +301,7 @@ export default function PhotoManager({ casoId }) {
                     onClick={() => setLightbox(f)}
                     className="block w-full aspect-square rounded-lg overflow-hidden bg-slate-100"
                   >
-                    <img src={f.signedUrl} alt={f.categoria?.nombre} className="w-full h-full object-cover" />
+                    <img src={f.signedUrl} alt={f.categoria?.nombre} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   </button>
                   <button
                     onClick={() => eliminarFoto(f)}
@@ -340,7 +348,7 @@ function ColumnaComparacion({ titulo, fotos, onVer }) {
               onClick={() => onVer(f)}
               className="block w-full aspect-square rounded-lg overflow-hidden bg-slate-100"
             >
-              <img src={f.signedUrl} alt="" className="w-full h-full object-cover" />
+              <img src={f.signedUrl} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             </button>
           ))}
         </div>

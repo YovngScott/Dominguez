@@ -76,6 +76,8 @@ escritorio y en tablet (patio del taller).
    24. `24_etiquetas_cajas.sql` — una etiqueta ahora puede tener varias cajas
        (cada una con sus piezas, una hoja por caja). Agrega la columna `cajas`
        y migra las etiquetas viejas. Ejecutar una vez.
+   25. `25_fotos_100.sql` — sube el máximo de fotos por caso de 50 a 100.
+       Ejecutar una vez.
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.

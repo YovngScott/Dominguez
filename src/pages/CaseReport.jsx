@@ -39,15 +39,16 @@ export default function CaseReport() {
         .eq("caso_id", casoId)
         .order("uploaded_at");
 
-      const conUrls = await Promise.all(
-        (fotosData || []).map(async (f) => {
-          const { data: s } = await supabase.storage
-            .from("fotos-casos")
-            .createSignedUrl(f.storage_path, 3600);
-          return { ...f, url: s?.signedUrl };
-        })
-      );
-      setFotos(conUrls);
+      const filas = fotosData || [];
+      const paths = filas.map((f) => f.storage_path);
+      let firmadas = [];
+      if (paths.length) {
+        // Una sola petición para firmar todas las URLs (en vez de una por foto).
+        const { data: signed } = await supabase.storage.from("fotos-casos").createSignedUrls(paths, 3600);
+        firmadas = signed || [];
+      }
+      const urlPorPath = new Map(firmadas.map((s) => [s.path, s.signedUrl]));
+      setFotos(filas.map((f) => ({ ...f, url: urlPorPath.get(f.storage_path) })));
 
       if (data?.firma_entrega_url) {
         const { data: s } = await supabase.storage
