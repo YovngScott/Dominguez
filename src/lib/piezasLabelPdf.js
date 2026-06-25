@@ -86,20 +86,14 @@ function encabezado(doc, caso, medir) {
 }
 
 // Dibuja una hoja completa: encabezado + "PIEZAS"/indicador de caja + lista.
-function renderHoja(doc, caso, pagina, totalCajas) {
-  const { grupo, cajaIdx, grupoIdx, totalGrupos } = pagina;
+function renderHoja(doc, caso, grupo) {
   let y = encabezado(doc, caso, false);
 
-  // Encabezado de piezas + indicador de caja
+  // Encabezado de piezas
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(...TINTA);
   doc.text(`PIEZAS (${grupo.length})`, M, y);
-
-  let cajaTxt = "";
-  if (totalCajas > 1) cajaTxt = `CAJA ${cajaIdx + 1} DE ${totalCajas}`;
-  if (totalGrupos > 1) cajaTxt += `${cajaTxt ? " · " : ""}${grupoIdx + 1}/${totalGrupos}`;
-  if (cajaTxt) doc.text(cajaTxt, M + contentW, y, { align: "right" });
   y += 3.6;
 
   // Lista de piezas (cada pieza envuelve si no cabe en el ancho)
@@ -182,7 +176,6 @@ function normalizarCajas(cajas, piezas) {
  */
 export async function generarPdfEtiquetas({ caso = {}, cajas = null, piezas = null }) {
   const listaCajas = normalizarCajas(cajas, piezas);
-  const totalCajas = listaCajas.length;
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [LABEL_W, LABEL_H] });
 
@@ -191,17 +184,16 @@ export async function generarPdfEtiquetas({ caso = {}, cajas = null, piezas = nu
   const yPiezas = encabezado(doc, caso, true) + 3.6; // +3.6 = línea "PIEZAS (n)"
   const espacioPiezas = LABEL_H - PIE - yPiezas;
 
-  const paginas = [];
-  listaCajas.forEach((piezasCaja, ci) => {
-    const grupos = repartirPorEspacio(doc, piezasCaja, espacioPiezas);
-    grupos.forEach((grupo, gi) => {
-      paginas.push({ grupo, cajaIdx: ci, grupoIdx: gi, totalGrupos: grupos.length });
-    });
+  // Una hoja por cada grupo de piezas que cabe; si una caja no cabe, se
+  // reparte en varias hojas.
+  const hojas = [];
+  listaCajas.forEach((piezasCaja) => {
+    repartirPorEspacio(doc, piezasCaja, espacioPiezas).forEach((grupo) => hojas.push(grupo));
   });
 
-  paginas.forEach((pagina, idx) => {
+  hojas.forEach((grupo, idx) => {
     if (idx > 0) doc.addPage([LABEL_W, LABEL_H], "landscape");
-    renderHoja(doc, caso, pagina, totalCajas);
+    renderHoja(doc, caso, grupo);
   });
 
   return doc.output("blob");
