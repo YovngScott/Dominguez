@@ -39,16 +39,21 @@ export default function EtiquetasHistorial() {
   async function reimprimir(et) {
     setImprimiendoId(et.id);
     try {
-      const caso = {
-        marca: et.marca,
-        modelo: et.modelo,
-        anio: et.anio,
-        aseguradora_nombre: et.aseguradora_nombre,
-        numero_reclamo: et.numero_reclamo,
+      const payload = {
+        caso: {
+          marca: et.marca,
+          modelo: et.modelo,
+          anio: et.anio,
+          aseguradora_nombre: et.aseguradora_nombre,
+          numero_reclamo: et.numero_reclamo,
+        },
+        cajas: cajasDe(et),
       };
-      const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
-      const blob = await generarPdfEtiquetas({ caso, cajas: cajasDe(et) });
-      window.open(URL.createObjectURL(blob), "_blank");
+      const { imprimirEtiquetas } = await import("../lib/printServer");
+      const res = await imprimirEtiquetas(payload);
+      if (res.modo === "pdf") window.open(URL.createObjectURL(res.blob), "_blank");
+    } catch (err) {
+      alert(err.message || "No se pudo imprimir.");
     } finally {
       setImprimiendoId(null);
     }

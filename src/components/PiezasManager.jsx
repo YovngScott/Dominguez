@@ -130,13 +130,13 @@ export default function PiezasManager({ casoId, caso }) {
     setImprimiendo(true);
     try {
       const seleccionadas = piezas.filter((p) => seleccion.has(p.clave));
-      const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
-      const blob = await generarPdfEtiquetas({ caso: infoCaso || {}, piezas: seleccionadas });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      // Imprime directo en la térmica si hay print server; si no, abre el PDF.
+      const { imprimirEtiquetas: enviar } = await import("../lib/printServer");
+      const res = await enviar({ caso: infoCaso || {}, piezas: seleccionadas });
+      if (res.modo === "pdf") window.open(URL.createObjectURL(res.blob), "_blank");
       setMostrarEtiquetas(false);
-    } catch {
-      setError("No se pudo generar las etiquetas.");
+    } catch (err) {
+      setError(err.message || "No se pudo imprimir las etiquetas.");
     } finally {
       setImprimiendo(false);
     }

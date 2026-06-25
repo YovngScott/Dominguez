@@ -4,6 +4,14 @@ import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import { agregarPiezaCatalogo } from "../lib/catalogo";
+import {
+  imprimirEtiquetas,
+  servidorDisponible,
+  listarImpresoras,
+  impresoraGuardada,
+  guardarImpresora,
+  elegirImpresoraEtiquetas,
+} from "../lib/printServer";
 
 // Formulario para imprimir etiquetas de piezas POR CAJA. Los datos del
 // vehículo/seguro se escriben una vez (arriba) y se comparten; abajo se
@@ -29,8 +37,11 @@ export default function EtiquetasPiezas() {
   // Cada caja es un arreglo de piezas [{ nombre, cantidad }].
   const [cajas, setCajas] = useState([[]]);
   const [error, setError] = useState("");
+  const [ok, setOk] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
   const [guardadoId, setGuardadoId] = useState(null);
+  const [impresoras, setImpresoras] = useState([]); // [{name,...}] si hay print server
+  const [impresoraSel, setImpresoraSel] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -44,6 +55,20 @@ export default function EtiquetasPiezas() {
       setPiezasCatalogo((pc || []).map((p) => ({ id: p.nombre, label: p.nombre })));
     }
     load();
+  }, []);
+
+  // Detecta el print server (impresión directa) y carga las impresoras
+  useEffect(() => {
+    async function detectar() {
+      if (!(await servidorDisponible())) return;
+      const ps = await listarImpresoras().catch(() => []);
+      if (!ps.length) return;
+      setImpresoras(ps);
+      const guardada = impresoraGuardada() || elegirImpresoraEtiquetas(ps);
+      setImpresoraSel(guardada);
+      guardarImpresora(guardada);
+    }
+    detectar();
   }, []);
 
   // Modo edición: carga la etiqueta guardada
@@ -146,6 +171,7 @@ export default function EtiquetasPiezas() {
 
   async function imprimir() {
     setError("");
+    setOk("");
     const validas = cajasConPiezas();
     if (!validas.length) return setError("Agrega al menos una pieza en alguna caja.");
 
@@ -157,18 +183,27 @@ export default function EtiquetasPiezas() {
         /* si falla el guardado igual se imprime */
       }
 
-      const caso = {
-        marca: form.marca,
-        modelo: form.modelo,
-        anio: form.anio,
-        aseguradora_nombre: form.aseguradora,
-        numero_reclamo: form.reclamo,
+      const payload = {
+        caso: {
+          marca: form.marca,
+          modelo: form.modelo,
+          anio: form.anio,
+          aseguradora_nombre: form.aseguradora,
+          numero_reclamo: form.reclamo,
+        },
+        cajas: validas.map((piezas) => ({ piezas })),
       };
-      const { generarPdfEtiquetas } = await import("../lib/piezasLabelPdf");
-      const blob = await generarPdfEtiquetas({ caso, cajas: validas.map((piezas) => ({ piezas })) });
-      window.open(URL.createObjectURL(blob), "_blank");
-    } catch {
-      setError("No se pudo generar las etiquetas.");
+
+      // Imprime directo en la térmica si hay print server; si no, abre el PDF.
+      const res = await imprimirEtiquetas(payload);
+      if (res.modo === "directo") {
+        const n = validas.length;
+        setOk(`Enviado a la impresora (${n} etiqueta${n === 1 ? "" : "s"}).`);
+      } else {
+        window.open(URL.createObjectURL(res.blob), "_blank");
+      }
+    } catch (err) {
+      setError(err.message || "No se pudo imprimir las etiquetas.");
     } finally {
       setImprimiendo(false);
     }
@@ -207,19 +242,42 @@ export default function EtiquetasPiezas() {
       </div>
 
       {/* Acciones (reposicionadas arriba) */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-3">
         <button
           onClick={imprimir}
           disabled={imprimiendo}
           className="btn-primary gap-1.5 disabled:opacity-50"
         >
           <Icon name="printer" className="w-4 h-4" />
-          {imprimiendo ? "Generando…" : editando ? "Guardar e imprimir" : "Imprimir etiquetas"}
+          {imprimiendo ? "Imprimiendo…" : editando ? "Guardar e imprimir" : "Imprimir etiquetas"}
         </button>
         <Link to={editando ? "/piezas/etiquetas/historial" : "/piezas"} className="btn-ghost">
           Cancelar
         </Link>
+
+        {/* Selector de impresora (solo si el print server está activo) */}
+        {impresoras.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-[var(--ink-soft)] sm:ml-auto">
+            <Icon name="printer" className="w-4 h-4" />
+            <select
+              value={impresoraSel}
+              onChange={(e) => {
+                setImpresoraSel(e.target.value);
+                guardarImpresora(e.target.value);
+              }}
+              className="input py-1.5 text-sm max-w-[12rem]"
+            >
+              {impresoras.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
+      {ok && <p className="text-sm text-emerald-600 mb-4 font-medium">✓ {ok}</p>}
+      {error && <p className="text-sm text-[var(--brand-red)] mb-4">{error}</p>}
 
       <div className="space-y-5">
         {/* Vehículo y seguro */}
@@ -279,8 +337,6 @@ export default function EtiquetasPiezas() {
         <button onClick={agregarCaja} className="btn-ghost w-full gap-1.5 border-dashed">
           <Icon name="plus" className="w-4 h-4" /> Agregar caja
         </button>
-
-        {error && <p className="text-sm text-[var(--brand-red)]">{error}</p>}
 
         <p className="text-xs text-[var(--ink-soft)] text-center">
           {cajas.length} caja(s) · {totalPiezas} pieza(s) en total

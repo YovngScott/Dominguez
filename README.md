@@ -116,6 +116,33 @@ cualquier lugar. La forma más simple (gratis):
    del `.env`).
 4. Deploy. Obtendrás una URL `https://…` para usar en la tablet y el iPhone.
 
+## 2.c. Impresión directa de etiquetas (KT Print Server)
+
+Las etiquetas de piezas (4x2") pueden imprimirse **directo** en la impresora
+térmica, sin abrir el diálogo de impresión de la PC. Para eso se usa la app
+**KT Print Server** (corre en `http://127.0.0.1:9100` en la PC conectada a la
+impresora) y la app le envía la etiqueta en **ZPL** (`src/lib/piezasLabelZpl.js`,
+cliente en `src/lib/printServer.js`).
+
+Cómo funciona al pulsar **Imprimir etiquetas**:
+
+1. La app pregunta al print server si está activo (`/health`).
+2. Si lo está: genera el ZPL y lo manda a la impresora elegida (`POST /print/label`).
+   No se abre nada — sale directo.
+3. Si no lo está (o el navegador bloquea la conexión): cae automáticamente al
+   PDF de siempre para imprimir a mano.
+
+**Requisito de dominio (CORS):** el print server solo acepta conexiones desde
+los dominios de su lista (`app.dominguezautopintura.com`,
+`app-dev.dominguezautopintura.com`, `localhost:8085`). Por eso, para que la
+impresión directa funcione, la app debe abrirse desde
+`https://app.dominguezautopintura.com` (agregar ese dominio como *custom domain*
+del proyecto en Vercel y apuntar el DNS). Desde otra URL (p. ej. la de
+`*.vercel.app`) el navegador bloquea la conexión al print server y la app usa el
+PDF. La impresora se elige automáticamente (la térmica de etiquetas) y se puede
+cambiar con el selector que aparece junto al botón cuando el print server está
+activo.
+
 ## 3. Estructura de Storage y por qué no se satura el espacio
 
 Buckets (ver `sql/04_storage_setup.sql`):
