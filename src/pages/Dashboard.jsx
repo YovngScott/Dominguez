@@ -109,51 +109,6 @@ export default function Dashboard() {
           <Metrica valor={metricas.enTaller} etiqueta="Vehículos en el taller" color="#0284c7" />
         </div>
 
-        {/* Alertas de casos estancados */}
-        {!loading && estancados.length > 0 && (
-          <div className="card p-5 mb-10 border-l-4" style={{ borderLeftColor: "#dc2626" }}>
-            <div className="flex items-center gap-2 mb-3">
-              <Icon name="clock" className="w-5 h-5 text-[var(--brand-red)]" />
-              <h2 className="text-lg font-bold text-[var(--ink)]">Casos que requieren atención</h2>
-              <span className="text-xs font-semibold text-[var(--ink-soft)] bg-[var(--paper)] px-2 py-0.5 rounded-full">
-                {estancados.length}
-              </span>
-            </div>
-            <div className="divide-y divide-[var(--line)]">
-              {estancados.map((c) => {
-                const est = ESTADOS[c.estado];
-                const col = COLOR_NIVEL[c.nivel];
-                return (
-                  <Link
-                    key={c.id}
-                    to={`/casos/${c.id}`}
-                    className="flex items-center justify-between gap-3 py-2.5 hover:bg-[var(--paper)] px-2 rounded-lg"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-[var(--ink)] truncate">
-                        {[c.marca?.nombre, c.modelo?.nombre].filter(Boolean).join(" ") || "Vehículo"}
-                        {c.placa ? ` · ${c.placa}` : ""}
-                      </p>
-                      <p className="text-xs text-[var(--ink-soft)] truncate">
-                        {c.aseguradora?.nombre}
-                        {est ? ` · ${est.label}` : ""}
-                        {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
-                      </p>
-                    </div>
-                    <span
-                      className="text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap inline-flex items-center gap-1.5"
-                      style={{ backgroundColor: col.bg, color: col.text }}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: col.dot }} />
-                      {c.dias} día{c.dias === 1 ? "" : "s"}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-[var(--ink)]">Aseguradoras</h2>
@@ -206,6 +161,51 @@ export default function Dashboard() {
                 </span>
               </Link>
             ))}
+          </div>
+        )}
+
+        {/* Alertas de casos estancados (después de las aseguradoras) */}
+        {!loading && estancados.length > 0 && (
+          <div className="card p-5 mt-10 border-l-4" style={{ borderLeftColor: "#dc2626" }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Icon name="clock" className="w-5 h-5 text-[var(--brand-red)]" />
+              <h2 className="text-lg font-bold text-[var(--ink)]">Casos que requieren atención</h2>
+              <span className="text-xs font-semibold text-[var(--ink-soft)] bg-[var(--paper)] px-2 py-0.5 rounded-full">
+                {estancados.length}
+              </span>
+            </div>
+            <div className="divide-y divide-[var(--line)]">
+              {estancados.map((c) => {
+                const est = ESTADOS[c.estado];
+                const col = COLOR_NIVEL[c.nivel];
+                return (
+                  <Link
+                    key={c.id}
+                    to={`/casos/${c.id}`}
+                    className="flex items-center justify-between gap-3 py-2.5 hover:bg-[var(--paper)] px-2 rounded-lg"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold text-[var(--ink)] truncate">
+                        {[c.marca?.nombre, c.modelo?.nombre].filter(Boolean).join(" ") || "Vehículo"}
+                        {c.placa ? ` · ${c.placa}` : ""}
+                      </p>
+                      <p className="text-xs text-[var(--ink-soft)] truncate">
+                        {c.aseguradora?.nombre}
+                        {est ? ` · ${est.label}` : ""}
+                        {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
+                      </p>
+                    </div>
+                    <span
+                      className="text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap inline-flex items-center gap-1.5"
+                      style={{ backgroundColor: col.bg, color: col.text }}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: col.dot }} />
+                      {c.dias} día{c.dias === 1 ? "" : "s"}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
