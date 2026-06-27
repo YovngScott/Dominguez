@@ -87,18 +87,26 @@ function etiqueta(caso, grupo) {
   z += `^FO${LX},${y}^A0N,26,26^FD${ascii(`PIEZAS (${grupo.length})`)}^FS`;
   y += 34;
 
-  // Lista de piezas con casilla
-  const pieceH = 28;
-  const textX = LX + 38;
-  const textW = W - textX - LX - 56; // deja espacio a la derecha para "xN"
+  // Lista de piezas con casilla. El tamaño depende de CUÁNTAS piezas haya:
+  // pocas = letra grande (legible de lejos en el almacén); muchas = letra
+  // normal para que quepan todas.
+  const n = grupo.length;
+  const pieceH = n <= 1 ? 56 : n === 2 ? 46 : n === 3 ? 38 : n === 4 ? 32 : 26;
+  const boxS = n <= 1 ? 38 : n === 2 ? 32 : n <= 4 ? 28 : 24;
+  const gap = n <= 2 ? 12 : 7;
+  const textX = LX + boxS + 12;
+  const textW = W - textX - LX - 64; // espacio a la derecha para "xN"
+
   grupo.forEach((p) => {
-    z += `^FO${LX},${y - 2}^GB26,26,3^FS`; // casilla
     const nl = Math.min(2, lineas(p.nombre, pieceH, textW));
-    z += campo(textX, y, pieceH, p.nombre || "Pieza", textW, 2);
+    const boxY = y + Math.max(0, Math.round((pieceH - boxS) / 2)); // casilla centrada con la 1ª línea
+    z += `^FO${LX},${boxY}^GB${boxS},${boxS},3^FS`;
+    z += `^FO${textX},${y}^A0N,${pieceH},${pieceH}^FB${textW},2,0,L^FD${ascii(p.nombre || "Pieza")}^FS`;
     if (Number(p.cantidad) > 1) {
-      z += `^FO${W - LX - 52},${y}^A0N,24,24^FD${ascii(`x${p.cantidad}`)}^FS`;
+      const qh = Math.min(34, Math.round(pieceH * 0.6));
+      z += `^FO${W - LX - 58},${y}^A0N,${qh},${qh}^FD${ascii(`x${p.cantidad}`)}^FS`;
     }
-    y += Math.max(32, nl * (pieceH + 2)) + 6;
+    y += Math.max(boxS, nl * (pieceH + 4)) + gap;
   });
 
   z += "^XZ";

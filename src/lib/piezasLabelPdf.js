@@ -89,35 +89,43 @@ function encabezado(doc, caso, medir) {
 function renderHoja(doc, caso, grupo) {
   let y = encabezado(doc, caso, false);
 
+  // Tamaño de las piezas según CUÁNTAS haya: pocas = letra grande (legible de
+  // lejos en el almacén); muchas = letra normal para que quepan todas.
+  const n = grupo.length;
+  const fS = n <= 1 ? 18 : n === 2 ? 15 : n === 3 ? 12 : n === 4 ? 10.5 : PIEZA_FONT;
+  const lH = n <= 1 ? 7.6 : n === 2 ? 6.4 : n === 3 ? 5.2 : n === 4 ? 4.6 : PIEZA_LINE_H;
+  const boxS = n <= 1 ? 5.4 : n === 2 ? 4.6 : n === 3 ? 3.8 : n === 4 ? 3.2 : 2.7;
+  const pad = n <= 2 ? 2.4 : PIEZA_PAD;
+  const textX = M + boxS + 2.7;
+  const textW = contentW - (boxS + 2.7) - 9; // espacio a la derecha para "xN"
+
   // Encabezado de piezas
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(...TINTA);
   doc.text(`PIEZAS (${grupo.length})`, M, y);
-  y += 3.6;
+  // Holgura para que la 1ª pieza (que puede ser grande) no se encime con esto.
+  y += Math.max(3.6, fS * 0.34);
 
-  // Lista de piezas (cada pieza envuelve si no cabe en el ancho)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(PIEZA_FONT);
   grupo.forEach((p) => {
-    const lineas = doc.splitTextToSize(p.nombre || "Pieza", contentW - 16);
+    const lineas = doc.splitTextToSize(p.nombre || "Pieza", textW);
 
     // casilla para marcar a mano (alineada a la 1ª línea)
     doc.setDrawColor(...TINTA);
     doc.setLineWidth(0.3);
-    doc.rect(M, y - 2.3, 2.7, 2.7);
+    doc.rect(M, y - boxS * 0.85, boxS, boxS);
 
-    doc.setFontSize(PIEZA_FONT);
+    doc.setFontSize(fS);
     doc.setTextColor(...TINTA);
-    lineas.forEach((ln, li) => doc.text(ln, M + 5.4, y + li * PIEZA_LINE_H));
+    lineas.forEach((ln, li) => doc.text(ln, textX, y + li * lH));
 
     if (p.cantidad > 1) {
-      doc.setFontSize(7.5);
+      doc.setFontSize(Math.min(8, fS * 0.55));
       doc.setTextColor(...GRIS);
       doc.text(`x${p.cantidad}`, M + contentW, y, { align: "right" });
-      doc.setFontSize(PIEZA_FONT);
     }
-    y += lineas.length * PIEZA_LINE_H + PIEZA_PAD;
+    y += lineas.length * lH + pad;
   });
 
   // Pie
