@@ -63,59 +63,29 @@ function PrivateLayout({ children }) {
             <Logo size={42} />
           </Link>
 
-          {/* Navegación de escritorio */}
-          <nav className="hidden lg:flex items-center gap-1">
-            <Link to="/cotizaciones/nueva" className="btn-primary text-sm py-2 px-3 mr-1">
-              + Cotización
-            </Link>
-            {NAV.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                className={({ isActive }) =>
-                  `text-sm font-medium px-3 py-2 rounded-lg transition-colors ${
-                    isActive
-                      ? "text-[var(--brand-red)] bg-[var(--brand-red-50)]"
-                      : "text-[var(--ink-soft)] hover:text-[var(--brand-red)]"
-                  }`
-                }
-              >
-                {n.label}
-              </NavLink>
-            ))}
-            <button
-              onClick={signOut}
-              className="text-sm font-medium text-[var(--ink-soft)] hover:text-[var(--brand-red)] px-3 py-2 rounded-lg"
-            >
-              Cerrar sesión
-            </button>
-          </nav>
-
-          {/* Botón hamburguesa (móvil / tablet) */}
-          <button
-            onClick={() => setMenuOpen((v) => !v)}
-            className="lg:hidden w-11 h-11 -mr-1 rounded-xl flex items-center justify-center text-[var(--ink)] hover:bg-[var(--paper)] active:scale-95 transition"
-            aria-label="Abrir menú"
-            aria-expanded={menuOpen}
-          >
-            <Icon name={menuOpen ? "close" : "menu"} className="w-6 h-6" strokeWidth={2} />
-          </button>
-        </div>
-
-        {/* Panel desplegable (móvil / tablet) */}
-        <div
-          className={`lg:hidden overflow-hidden transition-all duration-300 ease-out ${
-            menuOpen ? "max-h-[640px] opacity-100" : "max-h-0 opacity-0"
-          }`}
-        >
-          <nav className="px-4 pb-4 pt-1 flex flex-col gap-1.5">
+          {/* Acción rápida + botón de menú (todas las pantallas) */}
+          <div className="flex items-center gap-2">
             <Link
               to="/cotizaciones/nueva"
               onClick={() => setMenuOpen(false)}
-              className="btn-primary justify-center py-3 mb-1"
+              className="btn-primary text-sm py-2 px-3 whitespace-nowrap"
             >
-              + Nueva cotización
+              + Cotización
             </Link>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="w-11 h-11 -mr-1 rounded-xl flex items-center justify-center text-[var(--ink)] hover:bg-[var(--paper)] active:scale-95 transition"
+              aria-label="Menú"
+              aria-expanded={menuOpen}
+            >
+              <Icon name={menuOpen ? "close" : "menu"} className="w-6 h-6" strokeWidth={2} />
+            </button>
+          </div>
+        </div>
+
+        {/* Menú desplegable (escritorio y móvil) */}
+        {menuOpen && (
+          <nav className="absolute right-4 sm:right-6 top-full mt-1 z-40 w-[min(20rem,calc(100vw-2rem))] bg-white rounded-2xl shadow-xl border border-[var(--line)] p-2 flex flex-col gap-1 max-h-[80vh] overflow-y-auto">
             {NAV.map((n) => (
               <NavLink
                 key={n.to}
@@ -142,7 +112,7 @@ function PrivateLayout({ children }) {
                 )}
               </NavLink>
             ))}
-            <div className="h-px bg-[var(--line)] my-1.5" />
+            <div className="h-px bg-[var(--line)] my-1" />
             <button
               onClick={() => {
                 setMenuOpen(false);
@@ -156,7 +126,7 @@ function PrivateLayout({ children }) {
               Cerrar sesión
             </button>
           </nav>
-        </div>
+        )}
       </header>
 
       {/* Fondo para cerrar tocando fuera del menú */}
@@ -165,7 +135,7 @@ function PrivateLayout({ children }) {
           aria-hidden="true"
           tabIndex={-1}
           onClick={() => setMenuOpen(false)}
-          className="lg:hidden fixed inset-0 z-10 bg-black/20 cursor-default"
+          className="fixed inset-0 z-20 bg-black/20 cursor-default"
         />
       )}
 
