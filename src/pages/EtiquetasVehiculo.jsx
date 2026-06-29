@@ -5,13 +5,14 @@ import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import { imprimirVehiculo } from "../lib/printServer";
 
-// Crea la ETIQUETA DE VEHÍCULO: marca/modelo + trabajos a realizar (en grande).
+// Crea ETIQUETAS DE VEHÍCULO: marca/modelo + trabajos en grande. Se pueden
+// hacer varias etiquetas (una por puerta/zona): cada una se imprime aparte.
 export default function EtiquetasVehiculo() {
   const [marcas, setMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [form, setForm] = useState({ marca: "", modelo: "", anio: "" });
-  const [trabajos, setTrabajos] = useState([]);
-  const [nuevo, setNuevo] = useState("");
+  // Cada unidad es una etiqueta = arreglo de trabajos (strings).
+  const [unidades, setUnidades] = useState([[]]);
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
@@ -34,31 +35,48 @@ export default function EtiquetasVehiculo() {
     loadModelos();
   }, [form.marca, marcas]);
 
-  function agregar() {
-    const t = nuevo.trim();
+  function agregarTrabajo(uIdx, texto) {
+    const t = (texto || "").trim();
     if (!t) return;
-    setTrabajos((prev) => [...prev, t]);
-    setNuevo("");
+    setUnidades((prev) => prev.map((u, i) => (i === uIdx ? [...u, t] : u)));
   }
-  function quitar(i) {
-    setTrabajos((prev) => prev.filter((_, idx) => idx !== i));
+  function quitarTrabajo(uIdx, tIdx) {
+    setUnidades((prev) => prev.map((u, i) => (i === uIdx ? u.filter((_, j) => j !== tIdx) : u)));
+  }
+  function agregarUnidad() {
+    setUnidades((prev) => [...prev, []]);
+  }
+  function quitarUnidad(uIdx) {
+    setUnidades((prev) => prev.filter((_, i) => i !== uIdx));
   }
 
   async function imprimir() {
     setError("");
     setOk("");
-    if (!trabajos.length) return setError("Agrega al menos un trabajo a realizar.");
+    const validas = unidades.filter((u) => u.length > 0);
+    if (!validas.length) return setError("Agrega al menos un trabajo en alguna etiqueta.");
     setImprimiendo(true);
     try {
-      const res = await imprimirVehiculo({ marca: form.marca, modelo: form.modelo, anio: form.anio, trabajos });
-      if (res.modo === "directo") setOk("Enviado a la impresora.");
-      else window.open(URL.createObjectURL(res.blob), "_blank");
+      const res = await imprimirVehiculo({
+        marca: form.marca,
+        modelo: form.modelo,
+        anio: form.anio,
+        unidades: validas,
+      });
+      if (res.modo === "directo") {
+        const n = validas.length;
+        setOk(`Enviado a la impresora (${n} etiqueta${n === 1 ? "" : "s"}).`);
+      } else {
+        window.open(URL.createObjectURL(res.blob), "_blank");
+      }
     } catch (err) {
       setError(err.message || "No se pudo imprimir la etiqueta.");
     } finally {
       setImprimiendo(false);
     }
   }
+
+  const totalTrabajos = unidades.reduce((a, u) => a + u.length, 0);
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
@@ -75,7 +93,7 @@ export default function EtiquetasVehiculo() {
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold mt-2">Trabajos a realizar</h1>
             <p className="text-white/60 mt-1 text-sm max-w-md">
-              Para pegar en el carro: marca/modelo y los trabajos en grande, legibles de lejos.
+              Una etiqueta por puerta/zona: cada una sale aparte, con sus trabajos en grande.
             </p>
           </div>
           <span className="hidden sm:block text-white/90">
@@ -87,7 +105,7 @@ export default function EtiquetasVehiculo() {
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <button onClick={imprimir} disabled={imprimiendo} className="btn-primary gap-1.5 disabled:opacity-50">
           <Icon name="printer" className="w-4 h-4" />
-          {imprimiendo ? "Imprimiendo…" : "Imprimir etiqueta"}
+          {imprimiendo ? "Imprimiendo…" : "Imprimir etiquetas"}
         </button>
         <Link to="/etiquetas" className="btn-ghost">Cancelar</Link>
       </div>
@@ -113,40 +131,86 @@ export default function EtiquetasVehiculo() {
           </div>
         </div>
 
-        <div className="card p-6">
-          <h2 className="font-bold text-[var(--ink)] mb-4">Trabajos a realizar ({trabajos.length})</h2>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              value={nuevo}
-              onChange={(e) => setNuevo(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), agregar())}
-              className="input flex-1"
-              placeholder="Ej. Cambio y Pintura de flear derecho"
-            />
-            <button onClick={agregar} className="btn-primary whitespace-nowrap gap-1.5">
-              <Icon name="plus" className="w-4 h-4" /> Agregar
-            </button>
-          </div>
+        {unidades.map((trabajos, i) => (
+          <UnidadCard
+            key={i}
+            indice={i}
+            total={unidades.length}
+            trabajos={trabajos}
+            onAgregar={(t) => agregarTrabajo(i, t)}
+            onQuitar={(j) => quitarTrabajo(i, j)}
+            onEliminar={() => quitarUnidad(i)}
+          />
+        ))}
 
-          {trabajos.length === 0 ? (
-            <p className="text-sm text-[var(--ink-soft)] mt-5 text-center py-6 border border-dashed border-[var(--line)] rounded-xl">
-              Aún no hay trabajos. Agrega los que se le harán al vehículo.
-            </p>
-          ) : (
-            <ul className="divide-y divide-[var(--line)] mt-4">
-              {trabajos.map((t, i) => (
-                <li key={i} className="flex items-center gap-3 py-2.5">
-                  <span className="text-[var(--ink-soft)] text-sm w-5">{i + 1}</span>
-                  <span className="flex-1 font-medium text-[var(--ink)]">{t}</span>
-                  <button onClick={() => quitar(i)} className="text-[var(--ink-soft)] hover:text-[var(--brand-red)] px-1" title="Quitar">
-                    <Icon name="trash" className="w-4 h-4" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <button onClick={agregarUnidad} className="btn-ghost w-full gap-1.5 border-dashed">
+          <Icon name="plus" className="w-4 h-4" /> Agregar etiqueta
+        </button>
+
+        <p className="text-xs text-[var(--ink-soft)] text-center">
+          {unidades.length} etiqueta(s) · {totalTrabajos} trabajo(s) en total
+        </p>
       </div>
+    </div>
+  );
+}
+
+// Una etiqueta = un grupo de trabajos (se imprime aparte).
+function UnidadCard({ indice, total, trabajos, onAgregar, onQuitar, onEliminar }) {
+  const [nuevo, setNuevo] = useState("");
+
+  function agregar() {
+    if (!nuevo.trim()) return;
+    onAgregar(nuevo);
+    setNuevo("");
+  }
+
+  return (
+    <div className="card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-[var(--ink)]">
+          Etiqueta {indice + 1}{" "}
+          <span className="text-[var(--ink-soft)] font-normal">
+            ({trabajos.length} trabajo{trabajos.length === 1 ? "" : "s"})
+          </span>
+        </h2>
+        {total > 1 && (
+          <button onClick={onEliminar} className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)] inline-flex items-center gap-1" title="Eliminar etiqueta">
+            <Icon name="trash" className="w-4 h-4" /> Quitar
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={nuevo}
+          onChange={(e) => setNuevo(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), agregar())}
+          className="input flex-1"
+          placeholder="Ej. Cambio y Pintura de flear derecho"
+        />
+        <button onClick={agregar} className="btn-primary whitespace-nowrap gap-1.5">
+          <Icon name="plus" className="w-4 h-4" /> Agregar
+        </button>
+      </div>
+
+      {trabajos.length === 0 ? (
+        <p className="text-sm text-[var(--ink-soft)] mt-5 text-center py-6 border border-dashed border-[var(--line)] rounded-xl">
+          Aún no hay trabajos en esta etiqueta.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--line)] mt-4">
+          {trabajos.map((t, j) => (
+            <li key={j} className="flex items-center gap-3 py-2.5">
+              <span className="text-[var(--ink-soft)] text-sm w-5">{j + 1}</span>
+              <span className="flex-1 font-medium text-[var(--ink)]">{t}</span>
+              <button onClick={() => onQuitar(j)} className="text-[var(--ink-soft)] hover:text-[var(--brand-red)] px-1" title="Quitar">
+                <Icon name="trash" className="w-4 h-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
