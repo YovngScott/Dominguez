@@ -232,11 +232,11 @@ export default function CaseDetail() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <Link
           to={`/aseguradoras/${caso.aseguradora_id}`}
-          className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]"
+          className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)] truncate max-w-full"
         >
           ← {caso.aseguradora?.nombre}
         </Link>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {enTaller && (
             <button
               onClick={imprimirTrabajo}
@@ -274,7 +274,7 @@ export default function CaseDetail() {
         {/* Estado */}
         <div className="mt-5">
           <p className="field-label">Estado del caso</p>
-          <div className="inline-flex flex-wrap gap-1 bg-[var(--paper)] p-1 rounded-xl">
+          <div className="flex flex-wrap gap-1 bg-[var(--paper)] p-1 rounded-xl">
             {ESTADO_ORDEN.map((estado) => {
               const e = ESTADOS[estado];
               const activo = estadoActivo === estado;
@@ -282,12 +282,12 @@ export default function CaseDetail() {
                 <button
                   key={estado}
                   onClick={() => actualizarEstado(estado)}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all inline-flex items-center gap-1.5 ${
+                  className={`flex-1 min-w-[8.5rem] px-3 py-2 rounded-lg text-sm font-semibold transition-all inline-flex items-center justify-center gap-1.5 ${
                     activo ? "bg-white shadow-sm" : "text-[var(--ink-soft)] hover:bg-white/60"
                   }`}
                   style={activo ? { color: e.accent } : {}}
                 >
-                  <Icon name={e.icon} className="w-4 h-4" /> {e.label}
+                  <Icon name={e.icon} className="w-4 h-4 shrink-0" /> {e.label}
                 </button>
               );
             })}
@@ -490,9 +490,9 @@ function TabButton({ active, onClick, children }) {
 
 function Info({ label, value }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[var(--ink-soft)] text-xs uppercase tracking-wide">{label}</p>
-      <p className="font-semibold text-[var(--ink)]">{value || "—"}</p>
+      <p className="font-semibold text-[var(--ink)] break-words">{value || "—"}</p>
     </div>
   );
 }

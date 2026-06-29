@@ -181,7 +181,7 @@ export default function PiezasManager({ casoId, caso }) {
             {recibidasCount} de {piezas.length} recibidas · {pendientes} pendiente(s)
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={abrirEtiquetas}
             disabled={!piezas.length}
