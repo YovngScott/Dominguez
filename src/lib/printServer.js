@@ -90,3 +90,29 @@ export async function imprimirEtiquetas(payload) {
   const blob = await generarPdfEtiquetas(payload);
   return { modo: "pdf", blob };
 }
+
+/**
+ * Imprime la ETIQUETA DE VEHÍCULO (marca/modelo + trabajos a realizar).
+ * payload = { marca, modelo, anio, trabajos: [string] }
+ */
+export async function imprimirVehiculo(payload) {
+  if (await servidorDisponible()) {
+    const { generarZplVehiculo } = await import("./vehiculoLabelZpl");
+    const zpl = generarZplVehiculo(payload);
+
+    let printer = impresoraGuardada();
+    if (!printer) {
+      const ps = await listarImpresoras().catch(() => []);
+      printer = elegirImpresoraEtiquetas(ps);
+      guardarImpresora(printer);
+    }
+    if (!printer) throw new Error("El print server no tiene una impresora de etiquetas configurada.");
+
+    await imprimirZpl(zpl, printer);
+    return { modo: "directo", printer };
+  }
+
+  const { generarPdfVehiculo } = await import("./vehiculoLabelPdf");
+  const blob = await generarPdfVehiculo(payload);
+  return { modo: "pdf", blob };
+}
