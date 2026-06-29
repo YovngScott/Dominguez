@@ -26,6 +26,7 @@ const EtiquetasPiezas = lazy(() => import("./pages/EtiquetasPiezas"));
 const EtiquetasHistorial = lazy(() => import("./pages/EtiquetasHistorial"));
 const EtiquetasHub = lazy(() => import("./pages/EtiquetasHub"));
 const EtiquetasVehiculo = lazy(() => import("./pages/EtiquetasVehiculo"));
+const Tramos = lazy(() => import("./pages/Tramos"));
 const ClientList = lazy(() => import("./pages/ClientList"));
 const CitasList = lazy(() => import("./pages/CitasList"));
 const Reportes = lazy(() => import("./pages/Reportes"));
@@ -33,6 +34,7 @@ const Reportes = lazy(() => import("./pages/Reportes"));
 const NAV = [
   { to: "/cotizaciones", label: "Cotizaciones", icon: "receipt" },
   { to: "/piezas", label: "Piezas", icon: "layers" },
+  { to: "/tramos", label: "Tramos", icon: "grid" },
   { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
   { to: "/ordenes", label: "Recibos", icon: "clipboard" },
   { to: "/clientes", label: "Clientes", icon: "user" },
@@ -313,6 +315,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <PiezasCaso />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/tramos"
+        element={
+          <PrivateLayout>
+            <Tramos />
           </PrivateLayout>
         }
       />

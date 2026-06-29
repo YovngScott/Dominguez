@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza } from "../lib/cotizacion";
+import { TRAMOS } from "../lib/tramos";
 import Icon from "./Icon";
 
 // Clave estable para identificar una pieza entre cotizaciones del mismo caso.
@@ -14,6 +15,7 @@ const clave = (s) => (s || "").trim().toLowerCase();
 export default function PiezasManager({ casoId, caso }) {
   const [piezas, setPiezas] = useState([]); // [{ clave, nombre, cantidad, cotizacion }]
   const [recibidas, setRecibidas] = useState(new Set()); // claves recibidas
+  const [tramos, setTramos] = useState({}); // clave -> tramo (ej. "B2")
   const [infoCaso, setInfoCaso] = useState(caso || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,9 +53,14 @@ export default function PiezasManager({ casoId, caso }) {
 
     const { data: rec } = await supabase
       .from("piezas_recibidas")
-      .select("pieza_clave")
+      .select("pieza_clave, tramo")
       .eq("caso_id", casoId);
     setRecibidas(new Set((rec || []).map((r) => r.pieza_clave)));
+    const tmap = {};
+    (rec || []).forEach((r) => {
+      if (r.tramo) tmap[r.pieza_clave] = r.tramo;
+    });
+    setTramos(tmap);
     setLoading(false);
   }
 
@@ -95,6 +102,20 @@ export default function PiezasManager({ casoId, caso }) {
     }
   }
 
+  async function setTramo(p, valor) {
+    setTramos((prev) => {
+      const n = { ...prev };
+      if (valor) n[p.clave] = valor;
+      else delete n[p.clave];
+      return n;
+    });
+    await supabase
+      .from("piezas_recibidas")
+      .update({ tramo: valor || null })
+      .eq("caso_id", casoId)
+      .eq("pieza_clave", p.clave);
+  }
+
   async function exportar() {
     setExportando(true);
     try {
@@ -131,8 +152,13 @@ export default function PiezasManager({ casoId, caso }) {
     try {
       const seleccionadas = piezas.filter((p) => seleccion.has(p.clave));
       // Imprime directo en la térmica si hay print server; si no, abre el PDF.
+      // QR → abre el caso para ver dónde está guardada cada pieza (su tramo).
       const { imprimirEtiquetas: enviar } = await import("../lib/printServer");
-      const res = await enviar({ caso: infoCaso || {}, piezas: seleccionadas });
+      const res = await enviar({
+        caso: infoCaso || {},
+        piezas: seleccionadas,
+        qrUrl: `https://dominguez.vercel.app/piezas/${casoId}`,
+      });
       if (res.modo === "pdf") window.open(URL.createObjectURL(res.blob), "_blank");
       setMostrarEtiquetas(false);
     } catch (err) {
@@ -185,11 +211,8 @@ export default function PiezasManager({ casoId, caso }) {
           {piezas.map((p) => {
             const recibida = recibidas.has(p.clave);
             return (
-              <li key={p.clave}>
-                <button
-                  onClick={() => toggle(p)}
-                  className="w-full flex items-center gap-3 py-3 text-left hover:bg-[var(--paper)] px-2 rounded-lg"
-                >
+              <li key={p.clave} className="flex items-center gap-2 py-1.5 px-2 hover:bg-[var(--paper)] rounded-lg">
+                <button onClick={() => toggle(p)} className="flex-1 flex items-center gap-3 py-1.5 text-left min-w-0">
                   <span
                     className={`w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${
                       recibida ? "bg-emerald-500 border-emerald-500 text-white" : "border-[var(--ink-soft)]"
@@ -198,7 +221,7 @@ export default function PiezasManager({ casoId, caso }) {
                     {recibida && <Icon name="check" className="w-4 h-4" strokeWidth={3} />}
                   </span>
                   <span
-                    className={`flex-1 font-medium ${
+                    className={`flex-1 font-medium truncate ${
                       recibida ? "text-[var(--ink-soft)] line-through" : "text-[var(--ink)]"
                     }`}
                   >
@@ -207,14 +230,32 @@ export default function PiezasManager({ casoId, caso }) {
                   {p.cantidad > 1 && (
                     <span className="text-xs text-[var(--ink-soft)] whitespace-nowrap">x{p.cantidad}</span>
                   )}
-                  <span
-                    className={`text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                      recibida ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                </button>
+
+                {recibida ? (
+                  // Espacio del anaquel donde quedó guardada (editable)
+                  <select
+                    value={tramos[p.clave] || ""}
+                    onChange={(e) => setTramo(p, e.target.value)}
+                    title="Tramo (lugar en el anaquel)"
+                    className={`text-xs font-semibold rounded-lg border px-2 py-1.5 shrink-0 ${
+                      tramos[p.clave]
+                        ? "border-sky-300 bg-sky-50 text-sky-700"
+                        : "border-[var(--line)] text-[var(--ink-soft)]"
                     }`}
                   >
-                    {recibida ? "Recibida" : "Pendiente"}
+                    <option value="">Tramo…</option>
+                    {TRAMOS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap bg-amber-50 text-amber-600 shrink-0">
+                    Pendiente
                   </span>
-                </button>
+                )}
               </li>
             );
           })}

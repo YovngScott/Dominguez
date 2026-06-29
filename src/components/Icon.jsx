@@ -167,6 +167,14 @@ const PATHS = {
       <circle cx="7.5" cy="7.5" r="1.5" />
     </>
   ),
+  grid: (
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </>
+  ),
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.8 }) {

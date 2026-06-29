@@ -38,29 +38,36 @@ function campo(x, y, fontH, texto, anchoDots, maxLineas) {
 }
 
 // Construye una etiqueta (un ^XA…^XZ) con el encabezado + un grupo de piezas.
-function etiqueta(caso, grupo) {
+// Si hay qrUrl, dibuja un QR arriba a la derecha (abre el caso al escanearlo).
+function etiqueta(caso, grupo, qrUrl) {
   let z = `^XA^PW${W}^LL${H}^LH0,0`;
   let y = 16;
+
+  // QR arriba a la derecha (reduce el ancho del encabezado para no encimarse)
+  const headW = qrUrl ? RW - 150 : RW;
+  if (qrUrl) {
+    z += `^FO${W - 8 - 132},10^BQN,2,4^FDLA,${ascii(qrUrl)}^FS`;
+  }
 
   // Vehículo
   const veh = [caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ") || "-";
   const vehH = 40;
-  const vehL = Math.min(2, lineas(veh, vehH, RW));
-  z += campo(LX, y, vehH, veh, RW, 2);
+  const vehL = Math.min(2, lineas(veh, vehH, headW));
+  z += campo(LX, y, vehH, veh, headW, 2);
   y += vehL * (vehH + 2) + 6;
 
   // Aseguradora
   if (ascii(caso.aseguradora_nombre)) {
     const h = 32;
-    const l = Math.min(2, lineas(caso.aseguradora_nombre, h, RW));
-    z += campo(LX, y, h, caso.aseguradora_nombre, RW, 2);
+    const l = Math.min(2, lineas(caso.aseguradora_nombre, h, headW));
+    z += campo(LX, y, h, caso.aseguradora_nombre, headW, 2);
     y += l * (h + 2) + 4;
   }
 
   // Reclamo (prominente)
   if (ascii(caso.numero_reclamo)) {
     const h = 30;
-    z += campo(LX, y, h, `Reclamo ${ascii(caso.numero_reclamo)}`, RW, 1);
+    z += campo(LX, y, h, `Reclamo ${ascii(caso.numero_reclamo)}`, headW, 1);
     y += h + 6;
   }
 
@@ -73,8 +80,10 @@ function etiqueta(caso, grupo) {
   if (sec.length) {
     const h = 20;
     const txt = sec.join("   -   ");
-    const l = Math.min(2, lineas(txt, h, RW));
-    z += campo(LX, y, h, txt, RW, 2);
+    // bajo el QR ya hay espacio: si el encabezado superó la zona del QR usa todo el ancho
+    const w = y > 150 ? RW : headW;
+    const l = Math.min(2, lineas(txt, h, w));
+    z += campo(LX, y, h, txt, w, 2);
     y += l * (h + 2) + 4;
   }
 
@@ -155,12 +164,12 @@ function repartir(caso, piezasCaja) {
  * Devuelve el ZPL (varias etiquetas concatenadas) para imprimir directo.
  * Mismos parámetros que generarPdfEtiquetas.
  */
-export function generarZplEtiquetas({ caso = {}, cajas = null, piezas = null }) {
+export function generarZplEtiquetas({ caso = {}, cajas = null, piezas = null, qrUrl = null }) {
   const listaCajas = normalizarCajas(cajas, piezas);
   let zpl = "";
   listaCajas.forEach((piezasCaja) => {
     repartir(caso, piezasCaja).forEach((grupo) => {
-      zpl += etiqueta(caso, grupo);
+      zpl += etiqueta(caso, grupo, qrUrl);
     });
   });
   return zpl;
