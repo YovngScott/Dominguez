@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza } from "../lib/cotizacion";
 import { TRAMOS } from "../lib/tramos";
@@ -195,6 +196,9 @@ export default function PiezasManager({ casoId, caso }) {
           >
             <Icon name="printer" className="w-4 h-4" /> {exportando ? "Generando…" : "Exportar PDF"}
           </button>
+          <Link to="/tramos" className="btn-ghost text-sm py-2 px-3 gap-1.5">
+            <Icon name="grid" className="w-4 h-4" /> Ver anaquel
+          </Link>
         </div>
       </div>
 

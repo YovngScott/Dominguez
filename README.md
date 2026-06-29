@@ -80,6 +80,9 @@ escritorio y en tablet (patio del taller).
        Ejecutar una vez.
    26. `27_piezas_tramo.sql` — agrega la ubicación física (tramo/anaquel) a
        cada pieza recibida, para la vista de Tramos. Ejecutar una vez.
+   27. `28_etiqueta_caso.sql` — vincula cada etiqueta de piezas al caso del
+       vehículo (para el QR) y guarda el cliente/teléfono de la etiqueta.
+       Ejecutar una vez.
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.

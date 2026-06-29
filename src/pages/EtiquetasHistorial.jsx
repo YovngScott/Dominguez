@@ -48,6 +48,7 @@ export default function EtiquetasHistorial() {
           numero_reclamo: et.numero_reclamo,
         },
         cajas: cajasDe(et),
+        qrUrl: et.caso_id ? `https://dominguez.vercel.app/piezas/${et.caso_id}` : null,
       };
       const { imprimirEtiquetas } = await import("../lib/printServer");
       const res = await imprimirEtiquetas(payload);

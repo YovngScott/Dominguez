@@ -3,7 +3,13 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
-import { agregarPiezaCatalogo } from "../lib/catalogo";
+import {
+  agregarPiezaCatalogo,
+  findOrCreateMarca,
+  findOrCreateModelo,
+  findOrCreateAseguradora,
+  getAseguradoraGeneralId,
+} from "../lib/catalogo";
 import {
   imprimirEtiquetas,
   servidorDisponible,
@@ -12,6 +18,8 @@ import {
   guardarImpresora,
   elegirImpresoraEtiquetas,
 } from "../lib/printServer";
+
+const PUBLIC_URL = "https://dominguez.vercel.app";
 
 // Formulario para imprimir etiquetas de piezas POR CAJA. Los datos del
 // vehículo/seguro se escriben una vez (arriba) y se comparten; abajo se
@@ -27,6 +35,8 @@ export default function EtiquetasPiezas() {
   const [piezasCatalogo, setPiezasCatalogo] = useState([]);
 
   const [form, setForm] = useState({
+    cliente: "",
+    telefono: "",
     marca: "",
     modelo: "",
     anio: "",
@@ -40,6 +50,7 @@ export default function EtiquetasPiezas() {
   const [ok, setOk] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
   const [guardadoId, setGuardadoId] = useState(null);
+  const [casoVinculado, setCasoVinculado] = useState(null); // caso del vehículo
   const [impresoras, setImpresoras] = useState([]); // [{name,...}] si hay print server
   const [impresoraSel, setImpresoraSel] = useState("");
 
@@ -78,12 +89,15 @@ export default function EtiquetasPiezas() {
       const { data } = await supabase.from("etiquetas_piezas").select("*").eq("id", etiquetaId).single();
       if (data) {
         setForm({
+          cliente: data.cliente_nombre || "",
+          telefono: data.telefono || "",
           marca: data.marca || "",
           modelo: data.modelo || "",
           anio: data.anio || "",
           aseguradora: data.aseguradora_nombre || "",
           reclamo: data.numero_reclamo || "",
         });
+        setCasoVinculado(data.caso_id || null);
         const cs = (data.cajas || []).map((c) => c.piezas || []);
         // Compatibilidad con etiquetas viejas (una sola lista de piezas)
         setCajas(cs.length ? cs : [data.piezas || []]);
@@ -145,13 +159,98 @@ export default function EtiquetasPiezas() {
     return cajas.filter((c) => c.length > 0);
   }
 
-  async function guardarEtiqueta(cajasValidas) {
+  // Busca o crea el caso del vehículo y le agrega una cotización con las piezas
+  // de la etiqueta (así quedan "en el sistema"). Devuelve el caso_id.
+  async function vincularCaso(cajasValidas) {
+    if (casoVinculado) return casoVinculado; // ya vinculado (edición / 2º clic)
+
+    const { data: userData } = await supabase.auth.getUser();
+    const piezasPlanas = cajasValidas.flat();
+    const anioNum = /^\d+$/.test((form.anio || "").trim()) ? Number(form.anio) : null;
+
+    // 1) Reusar caso por reclamo
+    let casoId = null;
+    if (form.reclamo.trim()) {
+      const { data: m } = await supabase
+        .from("casos")
+        .select("id")
+        .ilike("numero_reclamo", form.reclamo.trim())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      casoId = m?.id || null;
+    }
+
+    const asegNombre = form.aseguradora.trim();
+    let aseguradoraId = asegNombre ? await findOrCreateAseguradora(asegNombre) : null;
+    if (!aseguradoraId) aseguradoraId = await getAseguradoraGeneralId();
+
+    // 2) Crear el caso si no existe (cliente puede ir vacío → "Sin nombre")
+    if (!casoId) {
+      const { data: cliente } = await supabase
+        .from("clientes")
+        .insert({
+          nombre_completo: form.cliente.trim() || "Sin nombre",
+          telefono: form.telefono.trim() || null,
+        })
+        .select()
+        .single();
+      const marcaId = await findOrCreateMarca(form.marca);
+      const modeloId = await findOrCreateModelo(marcaId, form.modelo);
+      const { data: nuevo } = await supabase
+        .from("casos")
+        .insert({
+          cliente_id: cliente.id,
+          aseguradora_id: aseguradoraId,
+          estado: "en_espera_piezas",
+          marca_id: marcaId,
+          modelo_id: modeloId,
+          anio: anioNum,
+          numero_reclamo: form.reclamo || null,
+          created_by: userData?.user?.id,
+        })
+        .select("id")
+        .single();
+      casoId = nuevo?.id || null;
+    }
+
+    // 3) Cotización con las piezas (precio 0) → aparecen en Cotizaciones/Piezas
+    if (casoId && piezasPlanas.length) {
+      const { data: numero } = await supabase.rpc("siguiente_numero_cotizacion");
+      await supabase.from("cotizaciones").insert({
+        numero,
+        estado: "generada",
+        caso_id: casoId,
+        cliente_nombre: form.cliente.trim() || "Sin nombre",
+        marca: form.marca || null,
+        modelo: form.modelo || null,
+        anio: anioNum,
+        aseguradora_id: aseguradoraId,
+        aseguradora_nombre: asegNombre || "General",
+        numero_reclamo: form.reclamo || null,
+        items_piezas: piezasPlanas.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad || 1, precio: 0, itbis_pct: 0 })),
+        items_mano_obra: [],
+        subtotal: 0,
+        itbis: 0,
+        total: 0,
+        created_by: userData?.user?.id,
+      });
+    }
+
+    setCasoVinculado(casoId);
+    return casoId;
+  }
+
+  async function guardarEtiqueta(cajasValidas, casoId) {
     const payload = {
+      cliente_nombre: form.cliente || null,
+      telefono: form.telefono || null,
       marca: form.marca || null,
       modelo: form.modelo || null,
       anio: form.anio || null,
       aseguradora_nombre: form.aseguradora || null,
       numero_reclamo: form.reclamo || null,
+      caso_id: casoId || null,
       cajas: cajasValidas.map((piezas) => ({ piezas })),
       piezas: cajasValidas.flat(), // lista plana (compatibilidad / búsqueda)
     };
@@ -177,8 +276,15 @@ export default function EtiquetasPiezas() {
 
     setImprimiendo(true);
     try {
+      // Crea/encuentra el caso del vehículo y mete las piezas como cotización.
+      let casoId = null;
       try {
-        await guardarEtiqueta(validas);
+        casoId = await vincularCaso(validas);
+      } catch {
+        /* si falla el vínculo, igual se imprime (sin QR al caso) */
+      }
+      try {
+        await guardarEtiqueta(validas, casoId);
       } catch {
         /* si falla el guardado igual se imprime */
       }
@@ -192,6 +298,7 @@ export default function EtiquetasPiezas() {
           numero_reclamo: form.reclamo,
         },
         cajas: validas.map((piezas) => ({ piezas })),
+        qrUrl: casoId ? `${PUBLIC_URL}/piezas/${casoId}` : null,
       };
 
       // Imprime directo en la térmica si hay print server; si no, abre el PDF.
@@ -282,8 +389,17 @@ export default function EtiquetasPiezas() {
       <div className="space-y-5">
         {/* Vehículo y seguro */}
         <div className="card p-6">
-          <h2 className="font-bold text-[var(--ink)] mb-4">Vehículo y seguro</h2>
+          <h2 className="font-bold text-[var(--ink)] mb-1">Vehículo y seguro</h2>
+          <p className="text-xs text-[var(--ink-soft)] mb-4">
+            Puedes dejar los datos del dueño vacíos y completarlos luego desde el caso.
+          </p>
           <div className="grid sm:grid-cols-2 gap-4">
+            <Campo label="Asegurado / dueño">
+              <input value={form.cliente} onChange={(e) => up("cliente", e.target.value)} className="input" placeholder="(opcional)" />
+            </Campo>
+            <Campo label="Teléfono">
+              <input value={form.telefono} onChange={(e) => up("telefono", e.target.value)} className="input" placeholder="(opcional)" />
+            </Campo>
             <Campo label="Aseguradora">
               <Combobox
                 items={aseguradoras}
