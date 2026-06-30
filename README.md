@@ -83,6 +83,8 @@ escritorio y en tablet (patio del taller).
    27. `28_etiqueta_caso.sql` — vincula cada etiqueta de piezas al caso del
        vehículo (para el QR) y guarda el cliente/teléfono de la etiqueta.
        Ejecutar una vez.
+   28. `29_aseguradora_contactos.sql` — contactos (correos) de cada
+       aseguradora, para enviarles la cotización por correo. Ejecutar una vez.
 3. Ve a **Authentication > Users** y crea manualmente un usuario (correo +
    contraseña) por cada administrador del taller. No hay registro público:
    el acceso es exclusivo para administradores que tú creas a mano.
@@ -147,6 +149,24 @@ del proyecto en Vercel y apuntar el DNS). Desde otra URL (p. ej. la de
 PDF. La impresora se elige automáticamente (la térmica de etiquetas) y se puede
 cambiar con el selector que aparece junto al botón cuando el print server está
 activo.
+
+## 2.d. Envío de cotizaciones por correo (Brevo)
+
+Desde la vista de una cotización, el botón **"Enviar por correo"** la manda a
+los contactos de la aseguradora (con el PDF y, opcional, las fotos de daños
+adjuntos). El envío lo hace una **función serverless** (`api/enviar-correo.js`)
+que usa **[Brevo](https://www.brevo.com/es/)**; la API key vive solo en el
+servidor (nunca en el navegador).
+
+Para activarlo, en **Vercel → Settings → Environment Variables** agrega:
+
+- `BREVO_API_KEY` = la API key de Brevo (Settings → SMTP & API → API Keys).
+
+Luego **Redeploy** el proyecto. El remitente configurado es
+`segurosycotizaciones@dominguezapintura.com` (debe estar verificado en Brevo
+para buena entrega). Los contactos por aseguradora se guardan en la tabla
+`aseguradora_contactos` y se pueden agregar al vuelo desde el mismo modal de
+envío.
 
 ## 3. Estructura de Storage y por qué no se satura el espacio
 

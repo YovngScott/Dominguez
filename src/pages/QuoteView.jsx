@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { calcularItem, nombrePieza, rd } from "../lib/cotizacion";
 import Icon from "../components/Icon";
+import EnviarCorreoModal from "../components/EnviarCorreoModal";
 
 export default function QuoteView() {
   const { cotId } = useParams();
@@ -12,6 +13,7 @@ export default function QuoteView() {
   const [evidencias, setEvidencias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [eliminando, setEliminando] = useState(false);
+  const [enviarCorreoOpen, setEnviarCorreoOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -81,6 +83,9 @@ export default function QuoteView() {
           >
             <Icon name="trash" className="w-4 h-4" /> {eliminando ? "Eliminando…" : "Eliminar"}
           </button>
+          <button onClick={() => setEnviarCorreoOpen(true)} className="btn-ghost gap-1.5">
+            <Icon name="receipt" className="w-4 h-4" /> Enviar por correo
+          </button>
           {pdfUrl && (
             <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn-primary gap-1.5">
               <Icon name="file" className="w-4 h-4" /> Ver / Descargar PDF
@@ -88,6 +93,15 @@ export default function QuoteView() {
           )}
         </div>
       </div>
+
+      {enviarCorreoOpen && (
+        <EnviarCorreoModal
+          cot={cot}
+          pdfUrl={pdfUrl}
+          evidencias={evidencias}
+          onClose={() => setEnviarCorreoOpen(false)}
+        />
+      )}
 
       {cot.caso_id && (
         <div className="card p-4 mb-5 bg-[var(--brand-red-50)] border-[var(--brand-red)]">
