@@ -33,12 +33,12 @@ const Reportes = lazy(() => import("./pages/Reportes"));
 
 const NAV = [
   { to: "/cotizaciones", label: "Cotizaciones", icon: "receipt" },
-  { to: "/piezas", label: "Piezas", icon: "layers" },
-  { to: "/tramos", label: "Tramos", icon: "grid" },
-  { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
   { to: "/ordenes", label: "Recibos", icon: "clipboard" },
-  { to: "/clientes", label: "Clientes", icon: "user" },
+  { to: "/piezas", label: "Piezas", icon: "layers" },
+  { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
+  { to: "/tramos", label: "Tramos", icon: "grid" },
   { to: "/citas", label: "Citas", icon: "clock" },
+  { to: "/clientes", label: "Clientes", icon: "user" },
   { to: "/reportes", label: "Reportes", icon: "file" },
 ];
 
@@ -46,6 +46,9 @@ function PrivateLayout({ children }) {
   const { session, loading, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  // En el formulario de cotización (crear/editar) se oculta el botón "+ Cotización".
+  const enFormCotizacion =
+    location.pathname === "/cotizaciones/nueva" || /^\/cotizaciones\/[^/]+\/editar$/.test(location.pathname);
 
   // Cierra el menú móvil al navegar a otra página
   useEffect(() => {
@@ -70,13 +73,15 @@ function PrivateLayout({ children }) {
 
           {/* Acción rápida + botón de menú (todas las pantallas) */}
           <div className="flex items-center gap-2">
-            <Link
-              to="/cotizaciones/nueva"
-              onClick={() => setMenuOpen(false)}
-              className="btn-primary text-sm py-2 px-3 whitespace-nowrap"
-            >
-              + Cotización
-            </Link>
+            {!enFormCotizacion && (
+              <Link
+                to="/cotizaciones/nueva"
+                onClick={() => setMenuOpen(false)}
+                className="btn-primary text-sm py-2 px-3 whitespace-nowrap"
+              >
+                + Cotización
+              </Link>
+            )}
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className="w-11 h-11 -mr-1 rounded-xl flex items-center justify-center text-[var(--ink)] hover:bg-[var(--paper)] active:scale-95 transition"
