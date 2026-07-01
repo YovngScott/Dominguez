@@ -19,12 +19,6 @@ const LEGAL =
   "que se haya notificado al cliente que su vehículo está listo para entregar éste no fuere retirado, el cliente deberá pagar " +
   "por uso de garage la suma de cien pesos (RD$100.00) diarios, hasta el momento en que el vehículo sea retirado.";
 
-const LEGAL_BOLD = [
-  "LA EMPRESA NO ES RESPONSABLE POR DAÑOS SUFRIDOS EN CASO DE INCENDIO, ACCIDENTE, MOTÍN, HURACANES Y/O CONSECUENCIA DE MOVIMIENTOS TELÚRICOS O CUALQUIER OTRA CAUSA FUERA DE NUESTRO CONTROL.",
-  "HE LEÍDO Y ACEPTADO TODAS LAS ESTIPULACIONES Y CONDICIONES INDICADAS. LOS PAGOS DEBERÁN REALIZARSE ANTES DE RETIRAR EL VEHÍCULO.",
-  "NOTA: LA EMPRESA NO ES RESPONSABLE DE OBJETOS PERSONALES O DE VALOR DEJADOS EN EL VEHÍCULO.",
-];
-
 const TINTA = [17, 17, 17];
 const GRIS = [110, 116, 128];
 const GRIS_CLARO = [148, 153, 163];
@@ -234,19 +228,6 @@ export async function generarPdfOrden(orden) {
   doc.text(colA, M + 5, y + 5.5);
   doc.text(colB, M + 6 + legalColW, y + 5.5);
   y += legalH + 4;
-
-  // Avisos legales (discretos: gris claro y pequeño, presentes pero poco
-  // visibles a simple vista, sin recuadro rojo).
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(5);
-  const boldLines = LEGAL_BOLD.map((t) => doc.splitTextToSize(t, contentW));
-  doc.setTextColor(...GRIS_CLARO);
-  let by = y + 3;
-  boldLines.forEach((ls) => {
-    doc.text(ls, M, by);
-    by += ls.length * 2.35 + 0.6;
-  });
-  y = by + 6;
 
   // ===== Firmas + sello =====
   const yFirma = Math.max(y + 14, H - 24);

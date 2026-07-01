@@ -82,17 +82,15 @@ export default function PhotoManager({ casoId }) {
           .upload(path, compressed, { contentType: compressed.type });
         if (uploadErr) throw uploadErr;
 
-        const { data: signed } = await supabase.storage
-          .from("fotos-casos")
-          .createSignedUrl(path, SIGNED_URL_TTL);
-
         const { data: userData } = await supabase.auth.getUser();
 
+        // No guardamos la URL firmada: expira en 1 h y al cargar siempre se
+        // vuelve a firmar desde storage_path. Guardarla solo ocupaba espacio.
         await supabase.from("fotos_caso").insert({
           caso_id: casoId,
           categoria_id: activeCat,
           storage_path: path,
-          url: signed?.signedUrl || "",
+          url: "",
           uploaded_by: userData?.user?.id,
         });
       } catch (err) {

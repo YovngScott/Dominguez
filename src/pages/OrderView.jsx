@@ -60,21 +60,33 @@ export default function OrderView() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Recibo No. {orden.numero}</h1>
           <p className="text-[var(--ink-soft)]">{orden.cliente}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
           {orden.caso_id && (
-            <Link to={`/casos/${orden.caso_id}`} className="btn-ghost">Ver caso</Link>
+            <Link
+              to={`/casos/${orden.caso_id}`}
+              className="btn-ghost justify-center px-3"
+            >
+              Ver caso
+            </Link>
           )}
-          <Link to={`/ordenes/${orden.id}/editar`} className="btn-ghost gap-1.5">
+          <Link
+            to={`/ordenes/${orden.id}/editar`}
+            className="btn-ghost justify-center gap-1.5 px-3"
+          >
             <Icon name="pencil" className="w-4 h-4" /> Editar
           </Link>
           <button
             onClick={eliminar}
             disabled={eliminando}
-            className="btn-ghost gap-1.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
+            className="btn-ghost justify-center gap-1.5 px-3 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
           >
             <Icon name="trash" className="w-4 h-4" /> {eliminando ? "Eliminando…" : "Eliminar"}
           </button>
-          <button onClick={imprimir} disabled={generando} className="btn-primary gap-1.5">
+          <button
+            onClick={imprimir}
+            disabled={generando}
+            className="btn-primary justify-center gap-1.5 px-3 col-span-2 sm:col-span-1"
+          >
             <Icon name="printer" className="w-4 h-4" />
             {generando ? "Generando…" : "Imprimir / PDF"}
           </button>

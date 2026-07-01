@@ -59,14 +59,14 @@ export default function OrdersList() {
       ) : (
         <div className="card divide-y divide-[var(--line)] overflow-hidden">
           {lista.map((o) => (
-            <Link key={o.id} to={`/ordenes/${o.id}`} className="flex items-center justify-between px-5 py-4 hover:bg-[var(--paper)]">
-              <div>
-                <p className="font-bold text-[var(--ink)]">Recibo No. {o.numero} · {o.cliente}</p>
-                <p className="text-sm text-[var(--ink-soft)]">
+            <Link key={o.id} to={`/ordenes/${o.id}`} className="flex items-center justify-between gap-3 px-4 sm:px-5 py-4 hover:bg-[var(--paper)]">
+              <div className="min-w-0">
+                <p className="font-bold text-[var(--ink)] truncate">Recibo No. {o.numero} · {o.cliente}</p>
+                <p className="text-sm text-[var(--ink-soft)] truncate">
                   {[o.marca, o.modelo].filter(Boolean).join(" ")}{o.placa ? ` · ${o.placa}` : ""}
                 </p>
               </div>
-              <span className="text-sm text-[var(--ink-soft)]">{ddmmaaaa(o.fecha)}</span>
+              <span className="text-sm text-[var(--ink-soft)] shrink-0">{ddmmaaaa(o.fecha)}</span>
             </Link>
           ))}
         </div>
