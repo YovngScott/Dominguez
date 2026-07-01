@@ -6,10 +6,35 @@ import Icon from "../components/Icon";
 import { ESTADOS } from "../lib/estados";
 import { diasDesde, nivelAlerta, COLOR_NIVEL } from "../lib/aging";
 
+// Cada métrica: etiqueta, color y qué casos activos incluye.
+const METRICAS = [
+  { key: "activos", etiqueta: "Casos activos", color: "var(--ink)", filtro: () => true },
+  {
+    key: "espera",
+    etiqueta: "En espera de piezas",
+    color: "#d97706",
+    filtro: (c) => !["vehiculo_en_taller", "listo_para_trabajar", "entregado"].includes(c.estado),
+  },
+  {
+    key: "listos",
+    etiqueta: "Listos para trabajar",
+    color: "#059669",
+    filtro: (c) => c.estado === "listo_para_trabajar",
+  },
+  {
+    key: "enTaller",
+    etiqueta: "Vehículos en el taller",
+    color: "#0284c7",
+    filtro: (c) => c.estado === "vehiculo_en_taller",
+  },
+];
+
 export default function Dashboard() {
   const [aseguradoras, setAseguradoras] = useState([]);
   const [conteos, setConteos] = useState({});
   const [metricas, setMetricas] = useState({ espera: 0, listos: 0, enTaller: 0, activos: 0 });
+  const [casosActivos, setCasosActivos] = useState([]);
+  const [metricaSel, setMetricaSel] = useState(null);
   const [estancados, setEstancados] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -79,6 +104,7 @@ export default function Dashboard() {
       setAseguradoras(asegs || []);
       setConteos(counts);
       setMetricas(m);
+      setCasosActivos(activos);
       setEstancados(conAlerta);
       setLoading(false);
     }
@@ -101,13 +127,52 @@ export default function Dashboard() {
       </section>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-        {/* Métricas */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-          <Metrica valor={metricas.activos} etiqueta="Casos activos" color="var(--ink)" />
-          <Metrica valor={metricas.espera} etiqueta="En espera de piezas" color="#d97706" />
-          <Metrica valor={metricas.listos} etiqueta="Listos para trabajar" color="#059669" />
-          <Metrica valor={metricas.enTaller} etiqueta="Vehículos en el taller" color="#0284c7" />
+        {/* Métricas (botones): al pulsar se despliega la lista de casos */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {METRICAS.map((mt) => (
+            <Metrica
+              key={mt.key}
+              valor={metricas[mt.key]}
+              etiqueta={mt.etiqueta}
+              color={mt.color}
+              activa={metricaSel === mt.key}
+              onClick={() => setMetricaSel((v) => (v === mt.key ? null : mt.key))}
+            />
+          ))}
         </div>
+
+        {/* Lista de la métrica seleccionada (deslizable) */}
+        {metricaSel && (() => {
+          const mt = METRICAS.find((m) => m.key === metricaSel);
+          const lista = casosActivos.filter(mt.filtro);
+          return (
+            <div className="card p-5 mb-10">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: mt.color }} />
+                <h2 className="text-lg font-bold text-[var(--ink)]">{mt.etiqueta}</h2>
+                <span className="text-xs font-semibold text-[var(--ink-soft)] bg-[var(--paper)] px-2 py-0.5 rounded-full">
+                  {lista.length}
+                </span>
+                <button
+                  onClick={() => setMetricaSel(null)}
+                  className="ml-auto text-[var(--ink-soft)] hover:text-[var(--brand-red)]"
+                  aria-label="Cerrar"
+                >
+                  <Icon name="close" className="w-5 h-5" />
+                </button>
+              </div>
+              {lista.length === 0 ? (
+                <p className="text-sm text-[var(--ink-soft)] py-2">No hay casos en esta categoría.</p>
+              ) : (
+                <div className="divide-y divide-[var(--line)] max-h-80 overflow-y-auto">
+                  {lista.map((c) => (
+                    <CasoRow key={c.id} c={c} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -174,7 +239,7 @@ export default function Dashboard() {
                 {estancados.length}
               </span>
             </div>
-            <div className="divide-y divide-[var(--line)]">
+            <div className="divide-y divide-[var(--line)] max-h-96 overflow-y-auto">
               {estancados.map((c) => {
                 const est = ESTADOS[c.estado];
                 const col = COLOR_NIVEL[c.nivel];
@@ -213,13 +278,45 @@ export default function Dashboard() {
   );
 }
 
-function Metrica({ valor, etiqueta, color }) {
+function Metrica({ valor, etiqueta, color, activa, onClick }) {
   return (
-    <div className="card p-5">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`card p-5 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg ${
+        activa ? "ring-2 ring-[var(--brand-red)] border-[var(--brand-red)]" : "hover:border-[var(--brand-red)]"
+      }`}
+    >
       <p className="text-3xl font-extrabold" style={{ color }}>
         {valor}
       </p>
       <p className="text-sm text-[var(--ink-soft)] mt-1">{etiqueta}</p>
-    </div>
+    </button>
+  );
+}
+
+function CasoRow({ c }) {
+  const est = ESTADOS[c.estado];
+  return (
+    <Link
+      to={`/casos/${c.id}`}
+      className="flex items-center justify-between gap-3 py-2.5 hover:bg-[var(--paper)] px-2 rounded-lg"
+    >
+      <div className="min-w-0">
+        <p className="font-semibold text-[var(--ink)] truncate">
+          {[c.marca?.nombre, c.modelo?.nombre].filter(Boolean).join(" ") || "Vehículo"}
+          {c.placa ? ` · ${c.placa}` : ""}
+        </p>
+        <p className="text-xs text-[var(--ink-soft)] truncate">
+          {c.aseguradora?.nombre}
+          {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
+        </p>
+      </div>
+      {est && (
+        <span className={`text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${est.chip}`}>
+          {est.short}
+        </span>
+      )}
+    </Link>
   );
 }
