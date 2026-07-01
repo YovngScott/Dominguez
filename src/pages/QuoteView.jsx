@@ -72,22 +72,33 @@ export default function QuoteView() {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">{cot.numero}</h1>
           <p className="text-[var(--ink-soft)]">{cot.cliente_nombre}</p>
         </div>
-        <div className="flex gap-2">
-          <Link to={`/cotizaciones/${cot.id}/editar`} className="btn-ghost gap-1.5">
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+          <Link
+            to={`/cotizaciones/${cot.id}/editar`}
+            className="btn-ghost justify-center gap-1.5 px-3"
+          >
             <Icon name="pencil" className="w-4 h-4" /> Editar
           </Link>
           <button
             onClick={eliminar}
             disabled={eliminando}
-            className="btn-ghost gap-1.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
+            className="btn-ghost justify-center gap-1.5 px-3 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
           >
             <Icon name="trash" className="w-4 h-4" /> {eliminando ? "Eliminando…" : "Eliminar"}
           </button>
-          <button onClick={() => setEnviarCorreoOpen(true)} className="btn-ghost gap-1.5">
+          <button
+            onClick={() => setEnviarCorreoOpen(true)}
+            className="btn-ghost justify-center gap-1.5 px-3"
+          >
             <Icon name="receipt" className="w-4 h-4" /> Enviar por correo
           </button>
           {pdfUrl && (
-            <a href={pdfUrl} target="_blank" rel="noreferrer" className="btn-primary gap-1.5">
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-primary justify-center gap-1.5 px-3"
+            >
               <Icon name="file" className="w-4 h-4" /> Ver / Descargar PDF
             </a>
           )}
