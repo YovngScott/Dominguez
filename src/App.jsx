@@ -4,6 +4,7 @@ import { useAuth } from "./hooks/useAuth";
 import Logo from "./components/Logo";
 import Icon from "./components/Icon";
 import Login from "./pages/Login";
+import { aplicarTema, temaOscuroGuardado } from "./lib/theme";
 
 // Cada página se carga bajo demanda (code-splitting): el navegador solo
 // descarga el código de la pantalla que se está abriendo, no el de toda la
@@ -45,7 +46,16 @@ const NAV = [
 function PrivateLayout({ children }) {
   const { session, loading, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [oscuro, setOscuro] = useState(temaOscuroGuardado);
   const location = useLocation();
+
+  function toggleTema() {
+    setOscuro((v) => {
+      const nuevo = !v;
+      aplicarTema(nuevo);
+      return nuevo;
+    });
+  }
   // En el formulario de cotización (crear/editar) se oculta el botón "+ Cotización".
   const enFormCotizacion =
     location.pathname === "/cotizaciones/nueva" || /^\/cotizaciones\/[^/]+\/editar$/.test(location.pathname);
@@ -122,6 +132,33 @@ function PrivateLayout({ children }) {
                 )}
               </NavLink>
             ))}
+            <div className="h-px bg-[var(--line)] my-1" />
+            <button
+              type="button"
+              role="switch"
+              aria-checked={oscuro}
+              onClick={toggleTema}
+              className="flex items-center gap-3 px-3 py-3 rounded-xl font-semibold text-[var(--ink)] hover:bg-[var(--paper)]"
+            >
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[var(--brand-red-50)] text-[var(--brand-red)]">
+                <Icon name="moon" className="w-5 h-5" />
+              </span>
+              <span className="flex-1 text-left">Modo oscuro</span>
+              {/* Interruptor estilo iOS */}
+              <span
+                className="relative inline-flex h-7 w-[3.25rem] items-center rounded-full px-0.5 transition-colors duration-300 ease-out shrink-0"
+                style={{ backgroundColor: oscuro ? "#34c759" : "#d1d5db" }}
+              >
+                <span
+                  className="h-6 w-6 rounded-full transition-transform duration-300 ease-out"
+                  style={{
+                    backgroundColor: "#fff",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.35)",
+                    transform: oscuro ? "translateX(1.5rem)" : "translateX(0)",
+                  }}
+                />
+              </span>
+            </button>
             <div className="h-px bg-[var(--line)] my-1" />
             <button
               onClick={() => {

@@ -235,22 +235,18 @@ export async function generarPdfOrden(orden) {
   doc.text(colB, M + 6 + legalColW, y + 5.5);
   y += legalH + 4;
 
-  // Avisos en negritas (callout rojo)
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.9);
-  const boldLines = LEGAL_BOLD.map((t) => doc.splitTextToSize(t, contentW - 10));
-  const boldH = boldLines.reduce((acc, ls) => acc + ls.length * 3.2, 0) + 6;
-  doc.setFillColor(...ROJO_CLARO);
-  doc.setDrawColor(...ROJO);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(M, y, contentW, boldH, 2.5, 2.5, "FD");
-  doc.setTextColor(...ROJO);
-  let by = y + 4.6;
+  // Avisos legales (discretos: gris claro y pequeño, presentes pero poco
+  // visibles a simple vista, sin recuadro rojo).
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(5);
+  const boldLines = LEGAL_BOLD.map((t) => doc.splitTextToSize(t, contentW));
+  doc.setTextColor(...GRIS_CLARO);
+  let by = y + 3;
   boldLines.forEach((ls) => {
-    doc.text(ls, M + 5, by);
-    by += ls.length * 3.2;
+    doc.text(ls, M, by);
+    by += ls.length * 2.35 + 0.6;
   });
-  y += boldH + 9;
+  y = by + 6;
 
   // ===== Firmas + sello =====
   const yFirma = Math.max(y + 14, H - 24);

@@ -4,6 +4,11 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 
+// Aplica el tema guardado antes del render para evitar parpadeo (FOUC).
+if (localStorage.getItem('tema') === 'dark') {
+  document.documentElement.classList.add('dark')
+}
+
 // Tras cada despliegue, los archivos .js cambian de nombre. Si alguien tiene
 // la página abierta desde antes (o el navegador cacheó el HTML viejo), un
 // import dinámico puede apuntar a un archivo que ya no existe. En ese caso

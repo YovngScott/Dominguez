@@ -11,6 +11,24 @@
   --ink-soft: #3f3f46;
   --paper: #f5f6f8;
   --line: #e6e7eb;
+  --surface: #ffffff;   /* tarjetas, inputs, header */
+  --surface-2: #f3f4f6; /* superficie secundaria / hover */
+  --banner: #0b0b0c;    /* franjas oscuras (se mantienen oscuras en dark) */
+}
+
+/* === Modo oscuro (estilo iOS) === */
+html.dark {
+  color-scheme: dark;
+  --brand-red: #ff4d4a;
+  --brand-red-600: #ff6b68;
+  --brand-red-50: #2a1513;
+  --ink: #f2f3f5;
+  --ink-soft: #9aa1ad;
+  --paper: #0b0c0f;
+  --line: #262a32;
+  --surface: #16181d;
+  --surface-2: #21242c;
+  --banner: #0a0b0e;
 }
 
 body {
@@ -38,12 +56,13 @@ select {
     border-radius: 0.6rem;
     border: 1px solid var(--line);
     padding: 0.6rem 0.85rem;
-    background-color: #fff;
+    background-color: var(--surface);
     color: var(--ink);
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   .input::placeholder {
-    color: #9aa0aa;
+    color: var(--ink-soft);
+    opacity: 0.7;
   }
   .input:focus {
     outline: none;
@@ -51,8 +70,8 @@ select {
     box-shadow: 0 0 0 3px var(--brand-red-50);
   }
   .input:disabled {
-    background-color: #f3f4f6;
-    color: #9aa0aa;
+    background-color: var(--surface-2);
+    color: var(--ink-soft);
   }
 
   .btn-primary {
@@ -84,7 +103,7 @@ select {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    background-color: #fff;
+    background-color: var(--surface);
     color: var(--ink);
     font-weight: 600;
     border: 1px solid var(--line);
@@ -97,7 +116,7 @@ select {
   }
 
   .card {
-    background-color: #fff;
+    background-color: var(--surface);
     border: 1px solid var(--line);
     border-radius: 1rem;
     box-shadow: 0 1px 2px rgba(11, 11, 12, 0.04);
@@ -111,6 +130,63 @@ select {
     display: block;
   }
 }
+
+/* ===========================================================
+   Anulaciones de utilidades crudas en modo oscuro.
+   Reglas sin @layer → ganan a las utilidades de Tailwind por
+   especificidad (.dark .clase) sin necesidad de !important.
+   =========================================================== */
+html.dark .bg-white { background-color: var(--surface); }
+html.dark .bg-slate-50,
+html.dark .bg-slate-100 { background-color: var(--surface-2); }
+html.dark .bg-slate-200 { background-color: #2b2f38; }
+html.dark .bg-slate-300 { background-color: #363b45; }
+html.dark .bg-slate-700 { background-color: #2b2f38; }
+html.dark .bg-slate-800 { background-color: #24272f; }
+html.dark .bg-slate-900 { background-color: #1f232a; }
+
+/* Franjas oscuras (banners/hero): se mantienen oscuras */
+html.dark .bg-\[var\(--ink\)\] { background-color: var(--banner); }
+
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 { color: var(--ink); }
+html.dark .text-slate-600,
+html.dark .text-slate-500,
+html.dark .text-slate-400,
+html.dark .text-gray-500 { color: var(--ink-soft); }
+
+html.dark .border-slate-100,
+html.dark .border-slate-200 { border-color: var(--line); }
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: var(--line); }
+
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-200:hover { background-color: var(--surface-2); }
+html.dark .hover\:bg-slate-300:hover { background-color: #363b45; }
+html.dark .hover\:bg-slate-800:hover { background-color: #24272f; }
+
+/* Tonos de estado (los -50/-100 claros → translúcidos en oscuro) */
+html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.16); }
+html.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.22); }
+html.dark .bg-amber-50 { background-color: rgba(217, 119, 6, 0.16); }
+html.dark .bg-amber-100 { background-color: rgba(217, 119, 6, 0.22); }
+html.dark .bg-sky-50,
+html.dark .bg-sky-50\/60 { background-color: rgba(2, 132, 199, 0.16); }
+html.dark .bg-sky-100 { background-color: rgba(2, 132, 199, 0.24); }
+html.dark .text-emerald-600,
+html.dark .text-emerald-700 { color: #34d399; }
+html.dark .text-amber-600,
+html.dark .text-amber-700 { color: #fbbf24; }
+html.dark .text-sky-600,
+html.dark .text-sky-700 { color: #38bdf8; }
+html.dark .border-sky-200,
+html.dark .border-sky-300 { border-color: rgba(56, 189, 248, 0.4); }
+html.dark .border-emerald-200 { border-color: rgba(52, 211, 153, 0.4); }
+html.dark .border-amber-200 { border-color: rgba(251, 191, 36, 0.4); }
+
+/* Sombras un poco más marcadas en oscuro */
+html.dark .card { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
 
 @media print {
   :root,
