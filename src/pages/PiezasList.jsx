@@ -14,15 +14,26 @@ export default function PiezasList() {
 
   useEffect(() => {
     async function load() {
-      const { data: cots } = await supabase
-        .from("cotizaciones")
-        .select(
-          "caso_id, cliente_nombre, marca, modelo, placa, chasis, numero_reclamo, aseguradora_nombre, items_piezas, created_at"
-        )
-        .not("caso_id", "is", null)
-        .order("created_at", { ascending: false });
+      const [{ data: cots }, { data: etqs }] = await Promise.all([
+        supabase
+          .from("cotizaciones")
+          .select(
+            "caso_id, cliente_nombre, marca, modelo, placa, chasis, numero_reclamo, aseguradora_nombre, items_piezas, created_at"
+          )
+          .not("caso_id", "is", null)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("etiquetas_piezas")
+          .select(
+            "caso_id, cliente_nombre, marca, modelo, numero_reclamo, aseguradora_nombre, piezas, created_at"
+          )
+          .not("caso_id", "is", null)
+          .order("created_at", { ascending: false }),
+      ]);
 
       // Agrupa por caso: info más reciente + conjunto de claves de piezas.
+      // Las piezas provienen de cotizaciones y de etiquetas (que vinculan
+      // piezas al caso sin crear cotización).
       const porCaso = new Map();
       (cots || []).forEach((c) => {
         if (!porCaso.has(c.caso_id)) {
@@ -31,6 +42,16 @@ export default function PiezasList() {
         const reg = porCaso.get(c.caso_id);
         (c.items_piezas || []).forEach((it) => {
           const k = clave(nombrePieza(it));
+          if (k) reg.claves.add(k);
+        });
+      });
+      (etqs || []).forEach((e) => {
+        if (!porCaso.has(e.caso_id)) {
+          porCaso.set(e.caso_id, { caso_id: e.caso_id, info: e, claves: new Set() });
+        }
+        const reg = porCaso.get(e.caso_id);
+        (e.piezas || []).forEach((it) => {
+          const k = clave(it.nombre || nombrePieza(it));
           if (k) reg.claves.add(k);
         });
       });

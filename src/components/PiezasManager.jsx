@@ -29,15 +29,26 @@ export default function PiezasManager({ casoId, caso }) {
     setLoading(true);
     setError("");
 
-    const { data: cots } = await supabase
-      .from("cotizaciones")
-      .select(
-        "numero, cliente_nombre, marca, modelo, anio, color, placa, chasis, numero_reclamo, aseguradora_nombre, items_piezas, created_at"
-      )
-      .eq("caso_id", casoId)
-      .order("created_at", { ascending: true });
+    const [{ data: cots }, { data: etqs }] = await Promise.all([
+      supabase
+        .from("cotizaciones")
+        .select(
+          "numero, cliente_nombre, marca, modelo, anio, color, placa, chasis, numero_reclamo, aseguradora_nombre, items_piezas, created_at"
+        )
+        .eq("caso_id", casoId)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("etiquetas_piezas")
+        .select(
+          "cliente_nombre, marca, modelo, anio, numero_reclamo, aseguradora_nombre, piezas, created_at"
+        )
+        .eq("caso_id", casoId)
+        .order("created_at", { ascending: true }),
+    ]);
 
-    // Lista única de piezas a partir de todas las cotizaciones del caso.
+    // Lista única de piezas: primero desde las cotizaciones y luego desde las
+    // etiquetas de piezas (las etiquetas vinculan las piezas al caso sin crear
+    // una cotización).
     const map = new Map();
     (cots || []).forEach((c) => {
       (c.items_piezas || []).forEach((it) => {
@@ -49,8 +60,21 @@ export default function PiezasManager({ casoId, caso }) {
         }
       });
     });
+    (etqs || []).forEach((e) => {
+      (e.piezas || []).forEach((it) => {
+        const nombre = it.nombre || nombrePieza(it);
+        const k = clave(nombre);
+        if (!k) return;
+        if (!map.has(k)) {
+          map.set(k, { clave: k, nombre, cantidad: Number(it.cantidad) || 1, cotizacion: null });
+        }
+      });
+    });
     setPiezas([...map.values()]);
-    if (!caso && cots?.length) setInfoCaso(cots[cots.length - 1]);
+    if (!caso) {
+      if (cots?.length) setInfoCaso(cots[cots.length - 1]);
+      else if (etqs?.length) setInfoCaso(etqs[etqs.length - 1]);
+    }
 
     const { data: rec } = await supabase
       .from("piezas_recibidas")

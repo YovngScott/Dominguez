@@ -159,13 +159,13 @@ export default function EtiquetasPiezas() {
     return cajas.filter((c) => c.length > 0);
   }
 
-  // Busca o crea el caso del vehículo y le agrega una cotización con las piezas
-  // de la etiqueta (así quedan "en el sistema"). Devuelve el caso_id.
-  async function vincularCaso(cajasValidas) {
+  // Busca o crea el caso del vehículo. Las piezas quedan vinculadas al caso a
+  // través de la propia etiqueta (etiquetas_piezas.caso_id + piezas), sin crear
+  // una cotización. Devuelve el caso_id.
+  async function vincularCaso() {
     if (casoVinculado) return casoVinculado; // ya vinculado (edición / 2º clic)
 
     const { data: userData } = await supabase.auth.getUser();
-    const piezasPlanas = cajasValidas.flat();
     const anioNum = /^\d+$/.test((form.anio || "").trim()) ? Number(form.anio) : null;
 
     // 1) Reusar caso por reclamo
@@ -214,29 +214,6 @@ export default function EtiquetasPiezas() {
       casoId = nuevo?.id || null;
     }
 
-    // 3) Cotización con las piezas (precio 0) → aparecen en Cotizaciones/Piezas
-    if (casoId && piezasPlanas.length) {
-      const { data: numero } = await supabase.rpc("siguiente_numero_cotizacion");
-      await supabase.from("cotizaciones").insert({
-        numero,
-        estado: "generada",
-        caso_id: casoId,
-        cliente_nombre: form.cliente.trim() || "Sin nombre",
-        marca: form.marca || null,
-        modelo: form.modelo || null,
-        anio: anioNum,
-        aseguradora_id: aseguradoraId,
-        aseguradora_nombre: asegNombre || "General",
-        numero_reclamo: form.reclamo || null,
-        items_piezas: piezasPlanas.map((p) => ({ nombre: p.nombre, cantidad: p.cantidad || 1, precio: 0, itbis_pct: 0 })),
-        items_mano_obra: [],
-        subtotal: 0,
-        itbis: 0,
-        total: 0,
-        created_by: userData?.user?.id,
-      });
-    }
-
     setCasoVinculado(casoId);
     return casoId;
   }
@@ -279,7 +256,7 @@ export default function EtiquetasPiezas() {
       // Crea/encuentra el caso del vehículo y mete las piezas como cotización.
       let casoId = null;
       try {
-        casoId = await vincularCaso(validas);
+        casoId = await vincularCaso();
       } catch {
         /* si falla el vínculo, igual se imprime (sin QR al caso) */
       }
