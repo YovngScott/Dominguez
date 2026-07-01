@@ -4,5 +4,8 @@
 -- filas existentes. Ejecutar una sola vez en Supabase.
 UPDATE fotos_caso SET url = '' WHERE url <> '';
 
--- Recupera el espacio físico de las filas actualizadas.
-VACUUM (ANALYZE) fotos_caso;
+-- Nota: no se incluye VACUUM porque el editor SQL de Supabase corre todo dentro
+-- de una transacción y VACUUM no puede ejecutarse ahí. No hace falta: el
+-- autovacuum de Postgres recupera el espacio automáticamente. Si quisieras
+-- forzarlo, ejecuta "VACUUM (ANALYZE) fotos_caso;" por separado vía psql (no en
+-- el editor web).
