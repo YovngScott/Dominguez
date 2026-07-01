@@ -1,11 +1,11 @@
 /**
  * Redimensiona y comprime una imagen en el navegador antes de subirla.
  * Evita saturar el bucket de Storage cuando se cargan hasta 100 fotos por caso:
- * una foto de cámara de tablet (4-12 MB) se reduce típicamente a 120-300 KB
+ * una foto de cámara de tablet (4-12 MB) se reduce típicamente a 150-350 KB
  * sin pérdida visible en pantalla ni al imprimir un reporte.
  *
- * Usa WebP (pesa ~30% menos que JPEG con la misma calidad visual); si el
- * navegador no lo soporta, cae a JPEG automáticamente.
+ * Usa JPEG: para fotografías es el formato más liviano y con soporte universal
+ * (WhatsApp, Windows, impresoras, etc.). PNG pesaría mucho más en fotos.
  */
 export async function compressImage(file, { maxWidth = 1600, quality = 0.78 } = {}) {
   const bitmap = await createImageBitmap(file);
@@ -17,18 +17,17 @@ export async function compressImage(file, { maxWidth = 1600, quality = 0.78 } = 
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
+  // Fondo blanco: las fotos JPEG no soportan transparencia; sin esto, las zonas
+  // transparentes saldrían negras.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close?.();
 
-  let blob = await aBlob(canvas, "image/webp", quality);
-  let tipo = "image/webp";
-  if (!blob) {
-    blob = await aBlob(canvas, "image/jpeg", quality);
-    tipo = "image/jpeg";
-  }
+  const blob = await aBlob(canvas, "image/jpeg", quality);
 
-  const ext = tipo === "image/webp" ? ".webp" : ".jpg";
-  return new File([blob], file.name.replace(/\.\w+$/, ext), { type: tipo });
+  const ext = ".jpg";
+  return new File([blob], file.name.replace(/\.\w+$/, ext), { type: "image/jpeg" });
 }
 
 function aBlob(canvas, type, quality) {
