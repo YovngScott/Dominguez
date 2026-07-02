@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { enviarCorreo } from "../lib/enviarCorreo";
 import Icon from "./Icon";
+
+const SEGUNDOS_PARA_DESHACER = 8;
 
 // Modal para enviar la cotización por correo a los contactos de la aseguradora.
 // Adjunta el PDF de la cotización y (opcional) las fotos de los daños.
@@ -14,6 +16,18 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
+  // Ventana para deshacer el envío: al pulsar "Enviar" se arma una cuenta
+  // regresiva y el correo solo sale de verdad si no se cancela a tiempo.
+  const [cuentaAtras, setCuentaAtras] = useState(null);
+  const timeoutRef = useRef(null);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(timeoutRef.current);
+      clearInterval(intervalRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -79,12 +93,29 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
 <p>Saludos cordiales,<br><b>Dominguez Auto Pintura</b></p>`;
   }
 
-  async function enviar() {
+  function iniciarEnvio() {
     setError("");
     setOk("");
     const to = contactos.filter((c) => seleccion.has(c.id)).map((c) => ({ email: c.email, name: c.nombre || c.email }));
     if (!to.length) return setError("Selecciona al menos un contacto.");
     if (!pdfUrl) return setError("Esta cotización no tiene PDF para adjuntar.");
+
+    setCuentaAtras(SEGUNDOS_PARA_DESHACER);
+    intervalRef.current = setInterval(() => {
+      setCuentaAtras((s) => (s > 1 ? s - 1 : s));
+    }, 1000);
+    timeoutRef.current = setTimeout(() => enviarAhora(to), SEGUNDOS_PARA_DESHACER * 1000);
+  }
+
+  function cancelarEnvio() {
+    clearTimeout(timeoutRef.current);
+    clearInterval(intervalRef.current);
+    setCuentaAtras(null);
+  }
+
+  async function enviarAhora(to) {
+    clearInterval(intervalRef.current);
+    setCuentaAtras(null);
 
     const attachment = [{ url: pdfUrl, name: `Cotizacion-${cot.numero || ""}.pdf` }];
     if (adjuntarFotos) {
@@ -153,13 +184,22 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
         {error && <p className="text-sm text-[var(--brand-red)] mb-3">{error}</p>}
         {ok && <p className="text-sm text-emerald-600 mb-3 font-medium">✓ {ok}</p>}
 
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="btn-ghost">Cerrar</button>
-          <button onClick={enviar} disabled={enviando} className="btn-primary gap-1.5 disabled:opacity-50">
-            <Icon name="receipt" className="w-4 h-4" />
-            {enviando ? "Enviando…" : "Enviar correo"}
-          </button>
-        </div>
+        {cuentaAtras != null ? (
+          <div className="flex items-center gap-3 justify-end">
+            <span className="text-sm text-[var(--ink-soft)]">Enviando en {cuentaAtras}s…</span>
+            <button onClick={cancelarEnvio} className="btn-primary gap-1.5">
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-3 justify-end">
+            <button onClick={onClose} className="btn-ghost">Cerrar</button>
+            <button onClick={iniciarEnvio} disabled={enviando} className="btn-primary gap-1.5 disabled:opacity-50">
+              <Icon name="receipt" className="w-4 h-4" />
+              {enviando ? "Enviando…" : "Enviar correo"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
