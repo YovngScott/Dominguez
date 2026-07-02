@@ -35,6 +35,11 @@ export default async function handler(req, res) {
   if (replyTo?.email) body.replyTo = replyTo;
   if (Array.isArray(attachment) && attachment.length) body.attachment = attachment;
 
+  // Copia oculta a la bandeja del negocio para que el envío quede visible en Gmail
+  // (Brevo entrega directo por API, sin pasar por Gmail, así que sin bcc no queda rastro ahí).
+  const bccEmail = process.env.BREVO_BCC_EMAIL;
+  if (bccEmail) body.bcc = [{ email: bccEmail }];
+
   try {
     const r = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",

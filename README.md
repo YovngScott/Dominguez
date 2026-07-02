@@ -161,6 +161,10 @@ servidor (nunca en el navegador).
 Para activarlo, en **Vercel → Settings → Environment Variables** agrega:
 
 - `BREVO_API_KEY` = la API key de Brevo (Settings → SMTP & API → API Keys).
+- `BREVO_BCC_EMAIL` (opcional) = un correo (p. ej. de Google Workspace) que
+  recibirá copia oculta de cada envío. Como Brevo entrega directo por API sin
+  pasar por Gmail, sin esto los correos enviados no aparecen en ningún
+  "Enviados" — con el bcc sí quedan visibles ahí.
 
 Luego **Redeploy** el proyecto. El remitente configurado es
 `segurosycotizaciones@dominguezapintura.com` (debe estar verificado en Brevo
