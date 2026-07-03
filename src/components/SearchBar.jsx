@@ -31,21 +31,41 @@ export default function SearchBar({ autoFocus = false }) {
       .or(`placa.ilike.%${q}%,chasis.ilike.%${q}%,numero_reclamo.ilike.%${q}%`)
       .limit(15);
 
-    const clientesMatch = await supabase
-      .from("clientes")
-      .select("id")
-      .ilike("nombre_completo", `%${q}%`)
-      .limit(15);
+    // Coincidencias en tablas relacionadas (cliente, marca, modelo): primero se
+    // buscan sus ids y luego los casos que los usan.
+    const [clientesMatch, marcasMatch, modelosMatch] = await Promise.all([
+      supabase.from("clientes").select("id").ilike("nombre_completo", `%${q}%`).limit(15),
+      supabase.from("marcas").select("id").ilike("nombre", `%${q}%`).limit(15),
+      supabase.from("modelos").select("id").ilike("nombre", `%${q}%`).limit(15),
+    ]);
 
     const clienteIds = (clientesMatch.data || []).map((c) => c.id);
+    const marcaIds = (marcasMatch.data || []).map((m) => m.id);
+    const modeloIds = (modelosMatch.data || []).map((m) => m.id);
 
     const byClientePromise = clienteIds.length
       ? supabase.from("casos").select(CASO_SELECT).in("cliente_id", clienteIds).limit(15)
       : Promise.resolve({ data: [] });
+    const byMarcaPromise = marcaIds.length
+      ? supabase.from("casos").select(CASO_SELECT).in("marca_id", marcaIds).limit(15)
+      : Promise.resolve({ data: [] });
+    const byModeloPromise = modeloIds.length
+      ? supabase.from("casos").select(CASO_SELECT).in("modelo_id", modeloIds).limit(15)
+      : Promise.resolve({ data: [] });
 
-    const [vehiculoRes, clienteRes] = await Promise.all([byVehiculo, byClientePromise]);
+    const [vehiculoRes, clienteRes, marcaRes, modeloRes] = await Promise.all([
+      byVehiculo,
+      byClientePromise,
+      byMarcaPromise,
+      byModeloPromise,
+    ]);
 
-    const merged = [...(vehiculoRes.data || []), ...(clienteRes.data || [])];
+    const merged = [
+      ...(vehiculoRes.data || []),
+      ...(clienteRes.data || []),
+      ...(marcaRes.data || []),
+      ...(modeloRes.data || []),
+    ];
     const dedup = Array.from(new Map(merged.map((c) => [c.id, c])).values());
 
     setResults(dedup);
@@ -67,7 +87,7 @@ export default function SearchBar({ autoFocus = false }) {
         autoFocus={autoFocus}
         value={query}
         onChange={handleChange}
-        placeholder="Placa, chasis, reclamo o nombre del asegurado…"
+        placeholder="Placa, chasis, reclamo, vehículo o asegurado…"
         className="w-full text-lg text-[var(--ink)] bg-white border border-transparent rounded-full px-6 py-3.5 shadow-lg focus:outline-none focus:ring-4 focus:ring-[var(--brand-red)]/30"
       />
 

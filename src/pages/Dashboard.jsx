@@ -120,7 +120,7 @@ export default function Dashboard() {
             ¿Qué caso buscas hoy?
           </h1>
           <p className="text-white/60 mt-2 mb-7">
-            Busca por placa, chasis, número de reclamo o nombre del asegurado.
+            Busca por placa, chasis, número de reclamo, vehículo o nombre del asegurado.
           </p>
           <SearchBar />
         </div>
