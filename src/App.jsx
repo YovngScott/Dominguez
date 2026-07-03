@@ -35,14 +35,16 @@ const ContactosList = lazy(() => import("./pages/ContactosList"));
 const CitasList = lazy(() => import("./pages/CitasList"));
 const Reportes = lazy(() => import("./pages/Reportes"));
 
+// Orden lógico por flujo de trabajo (de lo más usado a lo menos):
+// operación diaria → almacén de piezas → agenda/cierre → directorio → análisis.
 const NAV = [
   { to: "/cotizaciones", label: "Cotizaciones", icon: "receipt" },
   { to: "/ordenes", label: "Recibos", icon: "clipboard" },
   { to: "/piezas", label: "Piezas", icon: "layers" },
   { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
   { to: "/tramos", label: "Tramos", icon: "grid" },
-  { to: "/entregados", label: "Vehículos entregados", icon: "check" },
   { to: "/citas", label: "Citas", icon: "clock" },
+  { to: "/entregados", label: "Vehículos entregados", icon: "check" },
   { to: "/clientes", label: "Clientes", icon: "user" },
   { to: "/contactos", label: "Contactos", icon: "mail" },
   { to: "/reportes", label: "Reportes", icon: "file" },
