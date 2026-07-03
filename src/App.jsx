@@ -30,6 +30,7 @@ const EtiquetasVehiculo = lazy(() => import("./pages/EtiquetasVehiculo"));
 const Tramos = lazy(() => import("./pages/Tramos"));
 const ConvertirFotos = lazy(() => import("./pages/ConvertirFotos"));
 const ClientList = lazy(() => import("./pages/ClientList"));
+const ContactosList = lazy(() => import("./pages/ContactosList"));
 const CitasList = lazy(() => import("./pages/CitasList"));
 const Reportes = lazy(() => import("./pages/Reportes"));
 
@@ -41,6 +42,7 @@ const NAV = [
   { to: "/tramos", label: "Tramos", icon: "grid" },
   { to: "/citas", label: "Citas", icon: "clock" },
   { to: "/clientes", label: "Clientes", icon: "user" },
+  { to: "/contactos", label: "Contactos", icon: "mail" },
   { to: "/reportes", label: "Reportes", icon: "file" },
 ];
 
@@ -398,6 +400,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <ClientList />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/contactos"
+        element={
+          <PrivateLayout>
+            <ContactosList />
           </PrivateLayout>
         }
       />

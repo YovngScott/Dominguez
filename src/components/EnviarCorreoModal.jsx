@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { enviarCorreo } from "../lib/enviarCorreo";
 import Icon from "./Icon";
@@ -141,7 +142,10 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
           <button onClick={onClose} className="text-[var(--ink-soft)] hover:text-[var(--ink)] text-xl leading-none">✕</button>
         </div>
         <p className="text-sm text-[var(--ink-soft)] mb-4">
-          A los contactos de <strong>{cot.aseguradora_nombre || "la aseguradora"}</strong>.
+          A los contactos de <strong>{cot.aseguradora_nombre || "la aseguradora"}</strong>.{" "}
+          <Link to="/contactos" className="text-[var(--brand-red)] font-semibold hover:underline">
+            Administrar agenda
+          </Link>
         </p>
 
         {/* Contactos */}
