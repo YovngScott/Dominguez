@@ -28,14 +28,14 @@ function construirTexto({ nombre, fecha, hora, vehiculo, servicio }) {
   const lineas = [
     `Hola ${v(nombre, "")} 👋`.trim(),
     "",
-    "Tu cita en *Dominguez Auto Pintura* quedó registrada:",
+    "Su cita en *Dominguez Auto Pintura* quedó registrada:",
     "",
     `📅 Fecha: ${v(fecha)}`,
     `🕒 Hora: ${v(hora, "por confirmar")}`,
   ];
   if (v(vehiculo, "") !== "") lineas.push(`🚗 Vehículo: ${vehiculo}`);
   if (v(servicio, "") !== "") lineas.push(`🔧 Motivo: ${servicio}`);
-  lineas.push("", "Si necesitas reprogramar, respóndenos por aquí. ¡Te esperamos!");
+  lineas.push("", "Si necesita reprogramar, respóndanos por aquí. ¡Le esperamos!");
   return lineas.join("\n");
 }
 

@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
-import { linkWhatsappCita } from "../lib/whatsappLink";
 import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
 
 const ESTADOS = ["pendiente", "confirmada", "atendida", "cancelada"];
@@ -155,36 +154,13 @@ export default function CitasList() {
                     </option>
                   ))}
                 </select>
-                <div className="flex items-center gap-1.5">
-                  {c.telefono && (
-                    <a
-                      href={linkWhatsappCita({
-                        telefono: c.telefono,
-                        nombre: c.nombre,
-                        fecha: fechaLarga(c.fecha),
-                        hora: c.hora,
-                        vehiculo: [c.caso?.marca?.nombre, c.caso?.modelo?.nombre, c.caso?.placa]
-                          .filter(Boolean)
-                          .join(" "),
-                        servicio: c.motivo,
-                      })}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Enviar confirmación por WhatsApp"
-                      className="inline-flex items-center gap-1.5 text-sm font-semibold py-1.5 px-2.5 rounded-lg text-white hover:opacity-90"
-                      style={{ backgroundColor: "#25D366" }}
-                    >
-                      <Icon name="whatsapp" className="w-4 h-4" /> WhatsApp
-                    </a>
-                  )}
-                  <button
-                    onClick={() => eliminar(c)}
-                    className="btn-ghost text-sm py-1.5 px-2.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
-                    title="Eliminar"
-                  >
-                    <Icon name="trash" className="w-4 h-4" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => eliminar(c)}
+                  className="btn-ghost text-sm py-1.5 px-2.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
+                  title="Eliminar"
+                >
+                  <Icon name="trash" className="w-4 h-4" />
+                </button>
               </div>
             </div>
           ))}
