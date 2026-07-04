@@ -29,3 +29,6 @@ dist-ssr
 /*.pdf
 /tmp*.mjs
 /scripts/test_*.mjs
+
+# Codigo del servidor de impresion local (no pertenece a la web)
+index.js
