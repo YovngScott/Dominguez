@@ -32,6 +32,14 @@ export default function CitasList() {
   const [loading, setLoading] = useState(true);
   const [nuevo, setNuevo] = useState(false);
   const [error, setError] = useState("");
+  const [aviso, setAviso] = useState(null); // { tipo: "ok"|"fail"|"info", texto }
+
+  // El aviso de WhatsApp se oculta solo a los pocos segundos.
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 6000);
+    return () => clearTimeout(t);
+  }, [aviso]);
 
   // Filtros
   const [q, setQ] = useState("");
@@ -104,6 +112,21 @@ export default function CitasList() {
         </label>
       </div>
 
+      {aviso && (
+        <div
+          className={`mb-4 rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 ${
+            aviso.tipo === "ok"
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : aviso.tipo === "fail"
+              ? "bg-amber-50 text-amber-700 border border-amber-200"
+              : "bg-sky-50 text-sky-700 border border-sky-200"
+          }`}
+        >
+          <Icon name={aviso.tipo === "ok" ? "check" : "clock"} className="w-4 h-4 shrink-0" />
+          {aviso.texto}
+        </div>
+      )}
+
       {error && <p className="text-sm text-[var(--brand-red)] mb-3">{error}</p>}
 
       {loading ? (
@@ -170,9 +193,12 @@ export default function CitasList() {
       {nuevo && (
         <NuevaCitaModal
           onCancel={() => setNuevo(false)}
-          onSaved={() => {
+          onSaved={(info) => {
             setNuevo(false);
             load();
+            if (info?.wa === true) setAviso({ tipo: "ok", texto: `WhatsApp de confirmación enviado a ${info.nombre}.` });
+            else if (info?.wa === false)
+              setAviso({ tipo: "fail", texto: "La cita se guardó, pero no se pudo enviar el WhatsApp. Revisa la conexión de WhatsApp." });
           }}
         />
       )}
@@ -253,9 +279,10 @@ function NuevaCitaModal({ onCancel, onSaved }) {
       return;
     }
 
-    // Envío AUTOMÁTICO del WhatsApp de confirmación (Cloud API de Meta). No
-    // bloquea el cierre: si falla, la cita ya quedó guardada y queda el botón
-    // manual de WhatsApp en la tarjeta como respaldo.
+    // Envío AUTOMÁTICO del WhatsApp de confirmación (Evolution API). No bloquea
+    // el cierre: si falla, la cita ya quedó guardada. wa: null = sin teléfono,
+    // true = enviado, false = falló.
+    let wa = null;
     if (form.telefono?.trim()) {
       const casoSel = casos.find((c) => c.id === form.caso_id);
       const vehiculo = casoSel
@@ -270,13 +297,15 @@ function NuevaCitaModal({ onCancel, onSaved }) {
           vehiculo,
           servicio: form.motivo || "Cita",
         });
+        wa = true;
       } catch (err) {
+        wa = false;
         console.warn("No se pudo enviar el WhatsApp automático:", err.message);
       }
     }
 
     setGuardando(false);
-    onSaved();
+    onSaved({ wa, nombre: form.nombre });
   }
 
   return (

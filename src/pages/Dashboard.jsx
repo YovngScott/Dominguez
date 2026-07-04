@@ -37,6 +37,26 @@ export default function Dashboard() {
   const [metricaSel, setMetricaSel] = useState(null);
   const [estancados, setEstancados] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [waEstado, setWaEstado] = useState(null); // "open" | "connecting" | "close" | ...
+
+  // Estado de la conexión de WhatsApp (para avisar si se desvinculó).
+  useEffect(() => {
+    async function checkWa() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const r = await fetch("/api/whatsapp-estado", {
+          headers: { Authorization: `Bearer ${session?.access_token || ""}` },
+        });
+        const d = await r.json();
+        setWaEstado(d?.state || null);
+      } catch {
+        setWaEstado(null);
+      }
+    }
+    checkWa();
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -127,6 +147,23 @@ export default function Dashboard() {
       </section>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        {/* Aviso de conexión de WhatsApp (solo si NO está conectado) */}
+        {waEstado && waEstado !== "open" && (
+          <div className="card p-4 mb-6 border-l-4 flex items-center gap-3" style={{ borderLeftColor: "#d97706" }}>
+            <Icon name="whatsapp" className="w-5 h-5 text-amber-600 shrink-0" />
+            <div className="text-sm">
+              <p className="font-bold text-[var(--ink)]">
+                {waEstado === "connecting" ? "WhatsApp conectándose…" : "WhatsApp desconectado"}
+              </p>
+              <p className="text-[var(--ink-soft)]">
+                {waEstado === "connecting"
+                  ? "Espera unos segundos y recarga."
+                  : "No se enviarán las confirmaciones de citas hasta volver a vincular el teléfono."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Métricas (botones): al pulsar se despliega la lista de casos */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {METRICAS.map((mt) => (
