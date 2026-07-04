@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import { linkWhatsappCita } from "../lib/whatsappLink";
+import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
 
 const ESTADOS = ["pendiente", "confirmada", "atendida", "cancelada"];
 const ESTADO_COLOR = {
@@ -270,11 +271,35 @@ function NuevaCitaModal({ onCancel, onSaved }) {
       caso_id: form.caso_id || null,
       created_by: userData?.user?.id,
     });
-    setGuardando(false);
     if (e) {
+      setGuardando(false);
       setError(e.message || "No se pudo guardar la cita. ¿Ejecutaste la migración sql/16_citas.sql?");
       return;
     }
+
+    // Envío AUTOMÁTICO del WhatsApp de confirmación (Cloud API de Meta). No
+    // bloquea el cierre: si falla, la cita ya quedó guardada y queda el botón
+    // manual de WhatsApp en la tarjeta como respaldo.
+    if (form.telefono?.trim()) {
+      const casoSel = casos.find((c) => c.id === form.caso_id);
+      const vehiculo = casoSel
+        ? [casoSel.marca?.nombre, casoSel.modelo?.nombre, casoSel.placa].filter(Boolean).join(" ")
+        : "";
+      try {
+        await enviarWhatsappCita({
+          to: form.telefono,
+          nombre: form.nombre,
+          fecha: fechaLarga(form.fecha),
+          hora: form.hora || "por confirmar",
+          vehiculo,
+          servicio: form.motivo || "Cita",
+        });
+      } catch (err) {
+        console.warn("No se pudo enviar el WhatsApp automático:", err.message);
+      }
+    }
+
+    setGuardando(false);
     onSaved();
   }
 
