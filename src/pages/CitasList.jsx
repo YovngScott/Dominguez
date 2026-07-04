@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
-import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
+import { linkWhatsappCita } from "../lib/whatsappLink";
 
 const ESTADOS = ["pendiente", "confirmada", "atendida", "cancelada"];
 const ESTADO_COLOR = {
@@ -154,13 +154,36 @@ export default function CitasList() {
                     </option>
                   ))}
                 </select>
-                <button
-                  onClick={() => eliminar(c)}
-                  className="btn-ghost text-sm py-1.5 px-2.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
-                  title="Eliminar"
-                >
-                  <Icon name="trash" className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {c.telefono && (
+                    <a
+                      href={linkWhatsappCita({
+                        telefono: c.telefono,
+                        nombre: c.nombre,
+                        fecha: fechaLarga(c.fecha),
+                        hora: c.hora,
+                        vehiculo: [c.caso?.marca?.nombre, c.caso?.modelo?.nombre, c.caso?.placa]
+                          .filter(Boolean)
+                          .join(" "),
+                        servicio: c.motivo,
+                      })}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Enviar confirmación por WhatsApp"
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold py-1.5 px-2.5 rounded-lg text-white hover:opacity-90"
+                      style={{ backgroundColor: "#25D366" }}
+                    >
+                      <Icon name="whatsapp" className="w-4 h-4" /> WhatsApp
+                    </a>
+                  )}
+                  <button
+                    onClick={() => eliminar(c)}
+                    className="btn-ghost text-sm py-1.5 px-2.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
+                    title="Eliminar"
+                  >
+                    <Icon name="trash" className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -252,24 +275,6 @@ function NuevaCitaModal({ onCancel, onSaved }) {
       setError(e.message || "No se pudo guardar la cita. ¿Ejecutaste la migración sql/16_citas.sql?");
       return;
     }
-
-    // Confirmación por WhatsApp (no bloquea el guardado: si falla, la cita ya
-    // quedó guardada). Solo si hay teléfono.
-    if (form.telefono?.trim()) {
-      const casoSel = casos.find((c) => c.id === form.caso_id);
-      const vehiculo = casoSel
-        ? [casoSel.marca?.nombre, casoSel.modelo?.nombre, casoSel.placa].filter(Boolean).join(" ")
-        : "";
-      enviarWhatsappCita({
-        to: form.telefono,
-        nombre: form.nombre,
-        fecha: fechaLarga(form.fecha),
-        hora: form.hora || "por confirmar",
-        vehiculo,
-        servicio: form.motivo || "Cita",
-      }).catch((err) => console.warn("No se pudo enviar el WhatsApp de la cita:", err.message));
-    }
-
     onSaved();
   }
 

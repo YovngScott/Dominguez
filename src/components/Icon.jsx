@@ -183,6 +183,12 @@ const PATHS = {
     </>
   ),
   moon: <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />,
+  whatsapp: (
+    <>
+      <path d="M3 21l1.65-4.5A8 8 0 1 1 8 20.35z" />
+      <path d="M9 8.5c0 4 2.5 6.5 6.5 6.5.6-1.2.2-1.5-.5-2l-1.3-.6-.9 1a5 5 0 0 1-2.2-2.2l1-.9-.6-1.3c-.5-.7-.8-1.1-2-.5z" />
+    </>
+  ),
 };
 
 export default function Icon({ name, className = "w-5 h-5", strokeWidth = 1.8 }) {
