@@ -1,40 +1,53 @@
-// Función serverless (Vercel) que envía un mensaje de WhatsApp usando la
-// WhatsApp Cloud API oficial de Meta. El token y el phone-number-id viven solo
+// Función serverless (Vercel) que envía un WhatsApp de confirmación de cita a
+// través de Evolution API (desplegada en Railway). La clave y la URL viven solo
 // aquí (variables de entorno en Vercel), nunca en el navegador. Verifica que
 // quien la llama tenga sesión de Supabase, igual que /api/enviar-correo.
 //
-// Envía una plantilla (template) pre-aprobada en Meta. Por defecto:
-//   nombre: confirmacion_cita   idioma: es
-//   cuerpo con 5 variables → {{1}} nombre  {{2}} fecha  {{3}} hora
-//                            {{4}} vehículo  {{5}} servicio
-//
-// Variables de entorno necesarias (Vercel):
-//   WHATSAPP_TOKEN            → token de acceso (System User, permanente)
-//   WHATSAPP_PHONE_NUMBER_ID  → ID del número de teléfono de WhatsApp
-//   WHATSAPP_TEMPLATE         → (opcional) nombre de la plantilla. Def: confirmacion_cita
-//   WHATSAPP_LANG             → (opcional) código de idioma. Def: es
-//   WHATSAPP_DEFAULT_COUNTRY  → (opcional) código de país sin "+". Def: 1 (Rep. Dom.)
-//   GRAPH_API_VERSION         → (opcional) versión de la Graph API. Def: v21.0
+// Variables de entorno necesarias en Vercel:
+//   EVOLUTION_API_URL   → URL pública de Railway, sin barra final.
+//                         Ej: https://evolution-api-production-xxxx.up.railway.app
+//   EVOLUTION_API_KEY   → el mismo valor que pusiste en AUTHENTICATION_API_KEY en Railway.
+//   EVOLUTION_INSTANCE  → nombre de la instancia de WhatsApp que creaste (ej: "dominguez").
+//   WHATSAPP_DEFAULT_COUNTRY → (opcional) código de país sin "+". Def: 1 (Rep. Dom.)
 
-// Normaliza un teléfono a formato internacional que espera WhatsApp:
-// solo dígitos, con código de país y sin el "+". Ej. "809-555-1234" → "18095551234".
+// Normaliza el teléfono a solo dígitos con código de país (lo que espera
+// Evolution). RD: 10 dígitos locales → antepone el país. "809-555-1234" → "18095551234".
 function normalizarTelefono(raw, paisPorDefecto) {
   let d = String(raw || "").replace(/\D/g, "");
   if (!d) return "";
-  // Rep. Dom. y afines: 10 dígitos locales → anteponer país.
   if (d.length === 10) d = paisPorDefecto + d;
-  // 11 dígitos que ya empiezan por el país quedan igual.
   return d;
+}
+
+// Arma el texto del mensaje. WhatsApp usa *asteriscos* para negrita.
+function construirTexto({ nombre, fecha, hora, vehiculo, servicio }) {
+  const v = (x, alt = "—") => {
+    const s = String(x ?? "").trim();
+    return s || alt;
+  };
+  const lineas = [
+    `Hola ${v(nombre, "")} 👋`.trim(),
+    "",
+    "Tu cita en *Dominguez Auto Pintura* quedó registrada:",
+    "",
+    `📅 Fecha: ${v(fecha)}`,
+    `🕒 Hora: ${v(hora, "por confirmar")}`,
+  ];
+  if (v(vehiculo, "") !== "") lineas.push(`🚗 Vehículo: ${vehiculo}`);
+  if (v(servicio, "") !== "") lineas.push(`🔧 Motivo: ${servicio}`);
+  lineas.push("", "Si necesitas reprogramar, respóndenos por aquí. ¡Te esperamos!");
+  return lineas.join("\n");
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido." });
 
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneNumberId) {
+  const apiUrl = (process.env.EVOLUTION_API_URL || "").replace(/\/+$/, "");
+  const apiKey = process.env.EVOLUTION_API_KEY;
+  const instancia = process.env.EVOLUTION_INSTANCE;
+  if (!apiUrl || !apiKey || !instancia) {
     return res.status(500).json({
-      error: "Falta configurar WHATSAPP_TOKEN y WHATSAPP_PHONE_NUMBER_ID en Vercel.",
+      error: "Falta configurar EVOLUTION_API_URL, EVOLUTION_API_KEY y EVOLUTION_INSTANCE en Vercel.",
     });
   }
 
@@ -55,48 +68,26 @@ export default async function handler(req, res) {
   const { to, nombre, fecha, hora, vehiculo, servicio } = req.body || {};
 
   const paisPorDefecto = process.env.WHATSAPP_DEFAULT_COUNTRY || "1";
-  const destino = normalizarTelefono(to, paisPorDefecto);
-  if (!destino) return res.status(400).json({ error: "Falta un teléfono válido del destinatario." });
+  const number = normalizarTelefono(to, paisPorDefecto);
+  if (!number) return res.status(400).json({ error: "Falta un teléfono válido del destinatario." });
 
-  const template = process.env.WHATSAPP_TEMPLATE || "confirmacion_cita";
-  const lang = process.env.WHATSAPP_LANG || "es";
-  const version = process.env.GRAPH_API_VERSION || "v21.0";
+  const text = construirTexto({ nombre, fecha, hora, vehiculo, servicio });
 
-  // Los parámetros van en el mismo orden que las variables {{1}}..{{5}} de la
-  // plantilla. WhatsApp no permite parámetros vacíos: se rellenan con "—".
-  const val = (x) => {
-    const s = String(x ?? "").trim();
-    return s || "—";
-  };
-  const parametros = [nombre, fecha, hora, vehiculo, servicio].map((x) => ({
-    type: "text",
-    text: val(x),
-  }));
-
-  const body = {
-    messaging_product: "whatsapp",
-    to: destino,
-    type: "template",
-    template: {
-      name: template,
-      language: { code: lang },
-      components: [{ type: "body", parameters: parametros }],
-    },
-  };
-
+  // Evolution API v2 — enviar texto:  POST /message/sendText/{instance}
+  //   headers: { apikey }   body: { number, text }
   try {
-    const r = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+    const r = await fetch(`${apiUrl}/message/sendText/${encodeURIComponent(instancia)}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify(body),
+      headers: { apikey: apiKey, "content-type": "application/json" },
+      body: JSON.stringify({ number, text }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const msg = data?.error?.message || "Error al enviar el mensaje de WhatsApp.";
-      return res.status(r.status).json({ error: msg, code: data?.error?.code });
+      const msg = data?.message || data?.error || "Error al enviar el WhatsApp (Evolution).";
+      return res.status(r.status).json({ error: typeof msg === "string" ? msg : JSON.stringify(msg) });
     }
-    return res.status(200).json({ success: true, messageId: data?.messages?.[0]?.id });
+    return res.status(200).json({ success: true, id: data?.key?.id || data?.messageId || null });
   } catch (e) {
-    return res.status(502).json({ error: "No se pudo conectar con WhatsApp Cloud API: " + e.message });
+    return res.status(502).json({ error: "No se pudo conectar con Evolution API: " + e.message });
   }
 }
