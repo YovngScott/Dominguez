@@ -80,13 +80,19 @@ export default function CitasList() {
     setCitas((prev) => prev.filter((c) => c.id !== cita.id));
   }
 
+  // Una cita "cerrada" (atendida o cancelada) baja al final y se muestra tachada.
+  const cerrada = (c) => c.estado === "atendida" || c.estado === "cancelada";
+
   const term = q.trim().toLowerCase();
-  const lista = citas.filter((c) => {
-    if (term && !String(c.nombre).toLowerCase().includes(term)) return false;
-    if (fecha && c.fecha !== fecha) return false;
-    if (proximas && c.fecha < hoy()) return false;
-    return true;
-  });
+  const lista = citas
+    .filter((c) => {
+      if (term && !String(c.nombre).toLowerCase().includes(term)) return false;
+      if (fecha && c.fecha !== fecha) return false;
+      if (proximas && c.fecha < hoy()) return false;
+      return true;
+    })
+    // Estable: mantiene el orden por fecha/hora dentro de cada grupo.
+    .sort((a, b) => (cerrada(a) ? 1 : 0) - (cerrada(b) ? 1 : 0));
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -138,21 +144,30 @@ export default function CitasList() {
       ) : (
         <div className="space-y-3">
           {lista.map((c) => (
-            <div key={c.id} className="card p-4 flex items-start justify-between gap-3">
+            <div
+              key={c.id}
+              className={`card p-4 flex items-start justify-between gap-3 ${
+                cerrada(c) ? "opacity-60" : ""
+              }`}
+            >
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-[var(--ink)]">{c.nombre}</span>
+                  <span className={`font-bold text-[var(--ink)] ${cerrada(c) ? "line-through" : ""}`}>
+                    {c.nombre}
+                  </span>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ESTADO_COLOR[c.estado]}`}>
                     {c.estado}
                   </span>
                 </div>
-                <p className="text-sm text-[var(--ink-soft)] mt-0.5">
+                <p className={`text-sm text-[var(--ink-soft)] mt-0.5 ${cerrada(c) ? "line-through" : ""}`}>
                   <Icon name="clock" className="w-3.5 h-3.5 inline -mt-0.5 mr-1" />
                   {fechaLarga(c.fecha)}
                   {c.hora ? ` · ${c.hora}` : ""}
                   {c.telefono ? ` · ${c.telefono}` : ""}
                 </p>
-                {c.motivo && <p className="text-sm text-[var(--ink)] mt-1">{c.motivo}</p>}
+                {c.motivo && (
+                  <p className={`text-sm text-[var(--ink)] mt-1 ${cerrada(c) ? "line-through" : ""}`}>{c.motivo}</p>
+                )}
                 {c.nota && <p className="text-xs text-[var(--ink-soft)] mt-0.5">{c.nota}</p>}
                 {c.caso_id && (
                   <Link
