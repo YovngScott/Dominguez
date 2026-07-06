@@ -17,6 +17,7 @@ export default function PiezasManager({ casoId, caso }) {
   const [piezas, setPiezas] = useState([]); // [{ clave, nombre, cantidad, cotizacion }]
   const [recibidas, setRecibidas] = useState(new Set()); // claves recibidas
   const [tramos, setTramos] = useState({}); // clave -> tramo (ej. "B2")
+  const [casosRel, setCasosRel] = useState([casoId]); // casos del mismo reclamo
   const [infoCaso, setInfoCaso] = useState(caso || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -98,10 +99,16 @@ export default function PiezasManager({ casoId, caso }) {
       else if (etqs?.length) setInfoCaso(etqs[etqs.length - 1]);
     }
 
+    // Casos relacionados por reclamo (incluye este). El estado recibida/tramo
+    // se comparte entre ellos, así lo marcado al etiquetar en un caso se ve en
+    // el caso del vehículo aunque sean distintos.
+    const casoIds = [...new Set([casoId, ...etqs.map((e) => e.caso_id).filter(Boolean)])];
+    setCasosRel(casoIds);
+
     const { data: rec } = await supabase
       .from("piezas_recibidas")
       .select("pieza_clave, tramo")
-      .eq("caso_id", casoId);
+      .in("caso_id", casoIds);
     setRecibidas(new Set((rec || []).map((r) => r.pieza_clave)));
     const tmap = {};
     (rec || []).forEach((r) => {
@@ -128,7 +135,7 @@ export default function PiezasManager({ casoId, caso }) {
     setError("");
 
     if (yaRecibida) {
-      await supabase.from("piezas_recibidas").delete().eq("caso_id", casoId).eq("pieza_clave", p.clave);
+      await supabase.from("piezas_recibidas").delete().in("caso_id", casosRel).eq("pieza_clave", p.clave);
     } else {
       const { data: userData } = await supabase.auth.getUser();
       const { error: e } = await supabase.from("piezas_recibidas").insert({
@@ -159,7 +166,7 @@ export default function PiezasManager({ casoId, caso }) {
     await supabase
       .from("piezas_recibidas")
       .update({ tramo: valor || null })
-      .eq("caso_id", casoId)
+      .in("caso_id", casosRel)
       .eq("pieza_clave", p.clave);
   }
 
