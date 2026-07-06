@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
 import Icon from "./Icon";
+import Lightbox from "./Lightbox";
 
 const SIGNED_URL_TTL = 60 * 60; // 1 hora
 
@@ -315,16 +316,11 @@ export default function PhotoManager({ casoId }) {
       )}
 
       {lightbox && (
-        <div
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
-          onClick={() => setLightbox(null)}
-        >
-          <img
-            src={lightbox.signedUrl}
-            alt={lightbox.categoria?.nombre}
-            className="max-h-full max-w-full rounded-lg"
-          />
-        </div>
+        <Lightbox
+          src={lightbox.signedUrl}
+          alt={lightbox.categoria?.nombre || ""}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   );
