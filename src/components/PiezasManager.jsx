@@ -29,7 +29,10 @@ export default function PiezasManager({ casoId, caso }) {
     setLoading(true);
     setError("");
 
-    const [{ data: cots }, { data: etqs }] = await Promise.all([
+    const etqSelect =
+      "id, caso_id, cliente_nombre, marca, modelo, anio, numero_reclamo, aseguradora_nombre, piezas, created_at";
+    const [{ data: casoRow }, { data: cots }, { data: etqCaso }] = await Promise.all([
+      supabase.from("casos").select("numero_reclamo").eq("id", casoId).maybeSingle(),
       supabase
         .from("cotizaciones")
         .select(
@@ -39,12 +42,31 @@ export default function PiezasManager({ casoId, caso }) {
         .order("created_at", { ascending: true }),
       supabase
         .from("etiquetas_piezas")
-        .select(
-          "cliente_nombre, marca, modelo, anio, numero_reclamo, aseguradora_nombre, piezas, created_at"
-        )
+        .select(etqSelect)
         .eq("caso_id", casoId)
         .order("created_at", { ascending: true }),
     ]);
+
+    // Además de las etiquetas ya vinculadas a este caso, se traen TODAS las
+    // etiquetas cuyo número de reclamo coincide con el del caso. Así, si las
+    // piezas llegaron y se etiquetaron antes de registrar el vehículo (en otro
+    // caso), igual aparecen aquí vinculadas por reclamo.
+    const reclamo = (caso?.numero_reclamo || casoRow?.numero_reclamo || "").trim();
+    let etqs = [...(etqCaso || [])];
+    if (reclamo) {
+      const { data: etqRec } = await supabase
+        .from("etiquetas_piezas")
+        .select(etqSelect)
+        .ilike("numero_reclamo", reclamo)
+        .order("created_at", { ascending: true });
+      const vistos = new Set(etqs.map((e) => e.id));
+      (etqRec || []).forEach((e) => {
+        if (!vistos.has(e.id)) {
+          etqs.push(e);
+          vistos.add(e.id);
+        }
+      });
+    }
 
     // Lista única de piezas: primero desde las cotizaciones y luego desde las
     // etiquetas de piezas (las etiquetas vinculan las piezas al caso sin crear
