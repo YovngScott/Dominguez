@@ -296,6 +296,7 @@ function NuevaCitaModal({ onCancel, onSaved }) {
           hora: form.hora || "por confirmar",
           vehiculo,
           servicio: form.motivo || "Cita",
+          esHoy: form.fecha === hoy(),
         });
         wa = true;
       } catch (err) {
