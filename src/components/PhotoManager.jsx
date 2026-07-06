@@ -111,6 +111,27 @@ export default function PhotoManager({ casoId }) {
     setFotos((prev) => prev.filter((f) => f.id !== foto.id));
   }
 
+  // Elimina TODAS las fotos de la categoría activa (útil si se subieron mal).
+  async function eliminarTodas(lista, nombreCat) {
+    if (!lista.length) return;
+    if (
+      !confirm(
+        `¿Eliminar TODAS las ${lista.length} foto(s) de "${nombreCat}"? Esta acción no se puede deshacer.`
+      )
+    )
+      return;
+    setError("");
+    const paths = lista.map((f) => f.storage_path);
+    const ids = lista.map((f) => f.id);
+    const { error: e } = await supabase.from("fotos_caso").delete().in("id", ids);
+    if (e) {
+      setError("No se pudieron eliminar las fotos.");
+      return;
+    }
+    await supabase.storage.from("fotos-casos").remove(paths);
+    setFotos((prev) => prev.filter((f) => !ids.includes(f.id)));
+  }
+
   // Descarga TODAS las fotos de la categoría activa de una sola vez. En
   // Chrome/Edge deja elegir la carpeta destino y las guarda ahí; en otros
   // navegadores las baja una por una a la carpeta de descargas.
@@ -276,17 +297,28 @@ export default function PhotoManager({ casoId }) {
               <p className="text-sm text-slate-500">
                 {fotosCat.length} foto(s) en <strong className="text-slate-700">{catActiva?.nombre}</strong>
               </p>
-              <button
-                type="button"
-                onClick={() => descargarTodas(fotosCat, catActiva?.nombre)}
-                disabled={!!descargando}
-                className="text-sm font-medium px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 inline-flex items-center gap-1.5"
-              >
-                <Icon name="download" className="w-4 h-4" />
-                {descargando
-                  ? `Descargando ${descargando.actual}/${descargando.total}…`
-                  : `Descargar todas (${fotosCat.length})`}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => descargarTodas(fotosCat, catActiva?.nombre)}
+                  disabled={!!descargando}
+                  className="text-sm font-medium px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  <Icon name="download" className="w-4 h-4" />
+                  {descargando
+                    ? `Descargando ${descargando.actual}/${descargando.total}…`
+                    : `Descargar todas (${fotosCat.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => eliminarTodas(fotosCat, catActiva?.nombre)}
+                  disabled={!!descargando}
+                  className="text-sm font-medium px-3 py-1.5 rounded-lg bg-[var(--brand-red-50)] text-[var(--brand-red)] hover:bg-[var(--brand-red)] hover:text-white disabled:opacity-50 inline-flex items-center gap-1.5"
+                >
+                  <Icon name="trash" className="w-4 h-4" />
+                  Eliminar todas ({fotosCat.length})
+                </button>
+              </div>
             </div>
           )}
 
@@ -319,6 +351,7 @@ export default function PhotoManager({ casoId }) {
         <Lightbox
           src={lightbox.signedUrl}
           alt={lightbox.categoria?.nombre || ""}
+          filename={`${lightbox.categoria?.nombre || "foto"}.${(lightbox.storage_path.split(".").pop() || "jpg").toLowerCase()}`}
           onClose={() => setLightbox(null)}
         />
       )}

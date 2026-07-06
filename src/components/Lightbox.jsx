@@ -7,7 +7,7 @@ const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
 // Visor de foto a pantalla completa con zoom (rueda del mouse, doble clic,
 // pellizco en móvil) y arrastre para desplazar cuando está ampliada.
-export default function Lightbox({ src, alt = "", onClose }) {
+export default function Lightbox({ src, alt = "", filename = "foto.jpg", onClose }) {
   const [scale, setScale] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [arrastrando, setArrastrando] = useState(false);
@@ -17,6 +17,25 @@ export default function Lightbox({ src, alt = "", onClose }) {
   function reset() {
     setScale(1);
     setPos({ x: 0, y: 0 });
+  }
+
+  // Descarga la foto que se está viendo (fetch → blob, para forzar la descarga
+  // aunque la URL sea de otro origen).
+  async function descargar() {
+    try {
+      const resp = await fetch(src);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(src, "_blank");
+    }
   }
 
   function zoom(factor) {
@@ -94,6 +113,9 @@ export default function Lightbox({ src, alt = "", onClose }) {
         <BotonZoom onClick={() => zoom(1.3)} label="Acercar">+</BotonZoom>
         <BotonZoom onClick={reset} label="Restablecer">
           <span className="text-base leading-none">⟲</span>
+        </BotonZoom>
+        <BotonZoom onClick={descargar} label="Descargar">
+          <Icon name="download" className="w-5 h-5" />
         </BotonZoom>
         <BotonZoom onClick={onClose} label="Cerrar">
           <Icon name="close" className="w-5 h-5" strokeWidth={2} />
