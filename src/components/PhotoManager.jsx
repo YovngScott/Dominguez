@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
+import { subirFotoR2, urlsDescargaR2, eliminarFotosR2 } from "../lib/r2";
 import Icon from "./Icon";
 import Lightbox from "./Lightbox";
 
@@ -33,22 +34,32 @@ export default function PhotoManager({ casoId }) {
   async function loadFotos() {
     const { data } = await supabase
       .from("fotos_caso")
-      .select("id, storage_path, categoria_id, descripcion, uploaded_at, categoria:categorias_foto(nombre)")
+      .select("id, storage_path, storage_backend, categoria_id, descripcion, uploaded_at, categoria:categorias_foto(nombre)")
       .eq("caso_id", casoId)
       .order("uploaded_at", { ascending: false });
 
     const filas = data || [];
-    const paths = filas.map((f) => f.storage_path);
+    const urlPorPath = new Map();
 
-    // Una sola petición para firmar todas las URLs (en vez de una por foto).
-    let firmadas = [];
-    if (paths.length) {
+    // Las fotos nuevas están en Cloudflare R2; las viejas en Supabase Storage.
+    // Se firman por separado según el backend de cada una.
+    const r2Paths = filas.filter((f) => f.storage_backend === "r2").map((f) => f.storage_path);
+    const supaPaths = filas.filter((f) => f.storage_backend !== "r2").map((f) => f.storage_path);
+
+    if (supaPaths.length) {
       const { data: signed } = await supabase.storage
         .from("fotos-casos")
-        .createSignedUrls(paths, SIGNED_URL_TTL);
-      firmadas = signed || [];
+        .createSignedUrls(supaPaths, SIGNED_URL_TTL);
+      (signed || []).forEach((s) => urlPorPath.set(s.path, s.signedUrl));
     }
-    const urlPorPath = new Map(firmadas.map((s) => [s.path, s.signedUrl]));
+    if (r2Paths.length) {
+      try {
+        const urls = await urlsDescargaR2(r2Paths);
+        Object.entries(urls).forEach(([p, u]) => urlPorPath.set(p, u));
+      } catch {
+        /* si R2 falla, esas fotos quedan sin URL (no rompe el resto) */
+      }
+    }
     setFotos(filas.map((f) => ({ ...f, signedUrl: urlPorPath.get(f.storage_path) })));
   }
 
@@ -78,10 +89,8 @@ export default function PhotoManager({ casoId }) {
         const ext = compressed.type === "image/webp" ? "webp" : "jpg";
         const path = `${casoId}/${activeCat}/${uuid()}.${ext}`;
 
-        const { error: uploadErr } = await supabase.storage
-          .from("fotos-casos")
-          .upload(path, compressed, { contentType: compressed.type });
-        if (uploadErr) throw uploadErr;
+        // Sube a Cloudflare R2 (10 GB gratis) en vez de Supabase Storage.
+        await subirFotoR2(path, compressed, compressed.type);
 
         const { data: userData } = await supabase.auth.getUser();
 
@@ -91,6 +100,7 @@ export default function PhotoManager({ casoId }) {
           caso_id: casoId,
           categoria_id: activeCat,
           storage_path: path,
+          storage_backend: "r2",
           url: "",
           uploaded_by: userData?.user?.id,
         });
@@ -104,9 +114,17 @@ export default function PhotoManager({ casoId }) {
     loadFotos();
   }
 
+  // Borra los archivos del almacenamiento que corresponda (R2 o Supabase).
+  async function borrarDeStorage(fotos) {
+    const r2 = fotos.filter((f) => f.storage_backend === "r2").map((f) => f.storage_path);
+    const supa = fotos.filter((f) => f.storage_backend !== "r2").map((f) => f.storage_path);
+    if (r2.length) await eliminarFotosR2(r2).catch(() => {});
+    if (supa.length) await supabase.storage.from("fotos-casos").remove(supa);
+  }
+
   async function eliminarFoto(foto) {
     if (!confirm("¿Eliminar esta foto?")) return;
-    await supabase.storage.from("fotos-casos").remove([foto.storage_path]);
+    await borrarDeStorage([foto]);
     await supabase.from("fotos_caso").delete().eq("id", foto.id);
     setFotos((prev) => prev.filter((f) => f.id !== foto.id));
   }
@@ -121,14 +139,13 @@ export default function PhotoManager({ casoId }) {
     )
       return;
     setError("");
-    const paths = lista.map((f) => f.storage_path);
     const ids = lista.map((f) => f.id);
     const { error: e } = await supabase.from("fotos_caso").delete().in("id", ids);
     if (e) {
       setError("No se pudieron eliminar las fotos.");
       return;
     }
-    await supabase.storage.from("fotos-casos").remove(paths);
+    await borrarDeStorage(lista);
     setFotos((prev) => prev.filter((f) => !ids.includes(f.id)));
   }
 
