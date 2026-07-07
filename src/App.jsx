@@ -30,6 +30,7 @@ const EtiquetasVehiculo = lazy(() => import("./pages/EtiquetasVehiculo"));
 const Tramos = lazy(() => import("./pages/Tramos"));
 const ConvertirFotos = lazy(() => import("./pages/ConvertirFotos"));
 const Entregados = lazy(() => import("./pages/Entregados"));
+const Landing = lazy(() => import("./pages/Landing"));
 const ClientList = lazy(() => import("./pages/ClientList"));
 const ContactosList = lazy(() => import("./pages/ContactosList"));
 const CitasList = lazy(() => import("./pages/CitasList"));
@@ -214,6 +215,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Página pública para clientes (sin login) */}
+      <Route path="/agendar" element={<Suspense fallback={Cargando}>{<Landing />}</Suspense>} />
       <Route
         path="/"
         element={
