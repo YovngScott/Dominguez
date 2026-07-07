@@ -15,11 +15,11 @@ const ASEGURADORAS = [
 ];
 
 const SERVICIOS = [
-  { icon: "🔥", titulo: "Pintura al Horno", desc: "Acabado de fábrica con cabinas especializadas. Máxima durabilidad y brillo profesional." },
-  { icon: "🔨", titulo: "Desabolladura", desc: "Restauración precisa de la carrocería sin comprometer la pintura original." },
-  { icon: "🛠️", titulo: "Enderezado de Chasis", desc: "Máquinas especializadas para alineación perfecta y corrección estructural." },
-  { icon: "🔧", titulo: "Reemplazo de Piezas", desc: "Instalación de repuestos originales y alternativos de alta calidad." },
-  { icon: "✨", titulo: "Detailing y Brillo", desc: "Pulido profesional y cuidado exterior para renovar tu vehículo." },
+  { icon: "spray", titulo: "Pintura al Horno", desc: "Acabado de fábrica con cabinas especializadas. Máxima durabilidad y brillo profesional." },
+  { icon: "hammer", titulo: "Desabolladura", desc: "Restauración precisa de la carrocería sin comprometer la pintura original." },
+  { icon: "align", titulo: "Enderezado de Chasis", desc: "Máquinas especializadas para alineación perfecta y corrección estructural." },
+  { icon: "cog", titulo: "Reemplazo de Piezas", desc: "Instalación de repuestos originales y alternativos de alta calidad." },
+  { icon: "sparkles", titulo: "Detailing y Brillo", desc: "Pulido profesional y cuidado exterior para renovar tu vehículo." },
 ];
 
 const FAQ = [
@@ -219,10 +219,10 @@ function Servicios() {
         {SERVICIOS.map((s) => (
           <div key={s.titulo} className="bg-white border border-[#e6e7eb] rounded-2xl p-6 shadow-sm">
             <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4"
-              style={{ backgroundColor: "rgba(225,6,0,0.08)" }}
+              className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+              style={{ backgroundColor: "rgba(225,6,0,0.08)", color: ROJO }}
             >
-              {s.icon}
+              <Icon name={s.icon} className="w-6 h-6" strokeWidth={1.8} />
             </div>
             <h3 className="font-bold text-lg">{s.titulo}</h3>
             <p className="text-[#64748b] text-sm mt-1.5">{s.desc}</p>
