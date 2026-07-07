@@ -5,10 +5,6 @@ import { enviarCorreo } from "../lib/enviarCorreo";
 import Icon from "./Icon";
 
 const SEGUNDOS_PARA_DESHACER = 8;
-// Pausa entre cada envío cuando hay varios contactos, para no disparar los
-// filtros antispam del destinatario (envío "poco a poco").
-const PAUSA_ENTRE_ENVIOS_MS = 4000;
-const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Modal para enviar la cotización por correo a los contactos de la aseguradora.
 // Adjunta el PDF de la cotización y (opcional) las fotos de los daños.
@@ -19,7 +15,6 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
   const [nuevoEmail, setNuevoEmail] = useState("");
   const [adjuntarFotos, setAdjuntarFotos] = useState(evidencias.length > 0);
   const [enviando, setEnviando] = useState(false);
-  const [progreso, setProgreso] = useState(null); // { actual, total }
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   // Ventana para deshacer el envío: al pulsar "Enviar" se arma una cuenta
@@ -129,29 +124,15 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
     }
 
     setEnviando(true);
-    setProgreso({ actual: 0, total: to.length });
-
-    // Se envía UN correo por destinatario, con una pausa entre cada uno. Así
-    // cada mensaje lleva un solo receptor y no salen todos de golpe (mejor
-    // entregabilidad; evita el filtrado por ráfaga).
-    let enviados = 0;
-    const fallos = [];
-    for (let i = 0; i < to.length; i++) {
-      setProgreso({ actual: i + 1, total: to.length });
-      try {
-        await enviarCorreo({ to: [to[i]], subject: asunto(), htmlContent: cuerpo(), attachment });
-        enviados += 1;
-      } catch (err) {
-        fallos.push(to[i].email);
-        console.warn("Falló el envío a", to[i].email, err?.message);
-      }
-      if (i < to.length - 1) await dormir(PAUSA_ENTRE_ENVIOS_MS);
+    // UN solo correo con todos los destinatarios en el "Para" (no uno por uno).
+    try {
+      await enviarCorreo({ to, subject: asunto(), htmlContent: cuerpo(), attachment });
+      setOk(`Correo enviado a ${to.length} destinatario(s).`);
+    } catch (err) {
+      setError(err.message || "No se pudo enviar el correo.");
+    } finally {
+      setEnviando(false);
     }
-
-    setEnviando(false);
-    setProgreso(null);
-    if (enviados) setOk(`Correo enviado a ${enviados} de ${to.length} contacto(s).`);
-    if (fallos.length) setError(`No se pudo enviar a: ${fallos.join(", ")}.`);
   }
 
   return (
@@ -220,11 +201,7 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
             <button onClick={onClose} className="btn-ghost">Cerrar</button>
             <button onClick={iniciarEnvio} disabled={enviando} className="btn-primary gap-1.5 disabled:opacity-50">
               <Icon name="receipt" className="w-4 h-4" />
-              {enviando
-                ? progreso
-                  ? `Enviando ${progreso.actual}/${progreso.total}…`
-                  : "Enviando…"
-                : "Enviar correo"}
+              {enviando ? "Enviando…" : "Enviar correo"}
             </button>
           </div>
         )}
