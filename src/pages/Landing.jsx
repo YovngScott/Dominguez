@@ -398,8 +398,8 @@ function Formulario() {
             </div>
             <h3 className="text-xl font-extrabold">¡Solicitud recibida!</h3>
             <p className="text-[#64748b] mt-2">
-              Gracias, {f.nombre.split(" ")[0]}. Te contactaremos en menos de 24 horas. Si activaste WhatsApp,
-              recibirás una confirmación ahí mismo.
+              Gracias, {f.nombre.split(" ")[0]}. Tu cita queda <b>pendiente</b> hasta que uno de nuestros agentes
+              la confirme por WhatsApp. Te escribiremos en breve{f.email ? " y te enviamos un correo con los datos" : ""}.
             </p>
           </div>
         ) : (

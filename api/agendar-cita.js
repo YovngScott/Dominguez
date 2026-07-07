@@ -6,6 +6,32 @@ import { normalizarTelefono, enviarTextoWhatsapp, evolutionConfig } from "../wha
 
 const lim = (s, n) => String(s ?? "").trim().slice(0, n);
 
+// Escapa texto del usuario para meterlo con seguridad en el HTML del correo.
+const esc = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+// Envía un correo con Brevo (server-side; la API key vive en Vercel).
+async function enviarEmailBrevo({ to, subject, htmlContent, replyTo }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey || !to?.length) return;
+  const body = {
+    sender: { email: "segurosycotizaciones@dominguezapintura.com", name: "Dominguez Auto Pintura" },
+    to,
+    subject,
+    htmlContent,
+  };
+  if (replyTo?.email) body.replyTo = replyTo;
+  await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido." });
 
@@ -73,16 +99,19 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: "No se pudo registrar la solicitud: " + e.message });
   }
 
-  // Best-effort: WhatsApp de confirmación al cliente y aviso al taller.
+  // Best-effort: WhatsApp al cliente (cita PENDIENTE) y aviso al taller.
   if (evolutionConfig().ok) {
     const pais = process.env.WHATSAPP_DEFAULT_COUNTRY || "1";
     const numCliente = normalizarTelefono(telefono, pais);
     if (numCliente) {
       enviarTextoWhatsapp({
         number: numCliente,
-        text: `Hola ${nombre} 👋\n\nRecibimos su solicitud en *Dominguez Auto Pintura*${
-          vehiculo ? ` para su *${vehiculo}*` : ""
-        }. Le contactaremos en menos de 24 horas.\n\n¡Gracias por confiar en nosotros!`,
+        text:
+          `Hola ${nombre} 👋\n\n` +
+          `Recibimos su solicitud de cita en *Dominguez Auto Pintura*${vehiculo ? ` para su *${vehiculo}*` : ""}.\n\n` +
+          `⏳ Su cita queda *PENDIENTE* hasta que uno de nuestros agentes la *confirme* por este mismo WhatsApp. ` +
+          `Le responderemos en breve.\n\n` +
+          `¡Gracias por confiar en nosotros!`,
       }).catch(() => {});
     }
     const numTaller = normalizarTelefono(process.env.SHOP_WHATSAPP || "8095757986", pais);
@@ -94,6 +123,45 @@ export default async function handler(req, res) {
         }${aseguradora ? `\nAseguradora: ${aseguradora}` : ""}${mensaje ? `\nMensaje: ${mensaje}` : ""}`,
       }).catch(() => {});
     }
+  }
+
+  // Best-effort: correos con la información.
+  const filas = [
+    ["Nombre", nombre],
+    ["Teléfono", telefono],
+    ["Correo", email],
+    ["Vehículo", vehiculo],
+    ["Aseguradora", aseguradora],
+    ["Reclamo", reclamo],
+    ["Fecha preferida", fechaPref],
+    ["Mensaje", mensaje],
+  ]
+    .filter(([, v]) => v)
+    .map(([k, v]) => `<tr><td style="padding:4px 10px;color:#64748b">${k}</td><td style="padding:4px 10px;font-weight:600">${esc(v)}</td></tr>`)
+    .join("");
+  const tabla = `<table style="border-collapse:collapse;margin-top:8px">${filas}</table>`;
+
+  // 1) Aviso al taller (siempre).
+  const notifTo = process.env.AGENDAR_NOTIF_EMAIL || "segurosycotizaciones@dominguezapintura.com";
+  await enviarEmailBrevo({
+    to: [{ email: notifTo, name: "Dominguez Auto Pintura" }],
+    subject: `Nueva solicitud de cita — ${nombre}`,
+    htmlContent: `<p>Se recibió una nueva solicitud de cita desde la página web:</p>${tabla}
+      <p style="margin-top:12px">La cita quedó registrada como <b>pendiente</b> en el sistema.</p>`,
+    replyTo: email ? { email, name: nombre } : undefined,
+  });
+
+  // 2) Confirmación al cliente (solo si dejó correo).
+  if (email && email.includes("@")) {
+    await enviarEmailBrevo({
+      to: [{ email, name: nombre }],
+      subject: "Recibimos su solicitud — Dominguez Auto Pintura",
+      htmlContent: `<p>Hola ${esc(nombre)},</p>
+        <p>Recibimos su solicitud de cita${vehiculo ? ` para su <b>${esc(vehiculo)}</b>` : ""}.
+        Su cita queda <b>pendiente</b> hasta que uno de nuestros agentes la <b>confirme</b> (le escribiremos por WhatsApp).</p>
+        <p><b>Datos de su solicitud:</b></p>${tabla}
+        <p style="margin-top:12px">Gracias por confiar en nosotros.<br><b>Dominguez Auto Pintura</b><br>Av. Hatuey #16, Santiago · 809-575-7986</p>`,
+    });
   }
 
   return res.status(200).json({ success: true });
