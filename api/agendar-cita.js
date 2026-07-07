@@ -3,34 +3,9 @@
 // tabla tiene RLS solo para usuarios autenticados, por eso se hace aquí en el
 // servidor). Best-effort: confirma por WhatsApp al cliente y avisa al taller.
 import { normalizarTelefono, enviarTextoWhatsapp, evolutionConfig } from "../whatsapp/evolution.js";
+import { enviarEmailBrevo, escHtml as esc } from "../email/brevo.js";
 
 const lim = (s, n) => String(s ?? "").trim().slice(0, n);
-
-// Escapa texto del usuario para meterlo con seguridad en el HTML del correo.
-const esc = (s) =>
-  String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-
-// Envía un correo con Brevo (server-side; la API key vive en Vercel).
-async function enviarEmailBrevo({ to, subject, htmlContent, replyTo }) {
-  const apiKey = process.env.BREVO_API_KEY;
-  if (!apiKey || !to?.length) return;
-  const body = {
-    sender: { email: "segurosycotizaciones@dominguezapintura.com", name: "Dominguez Auto Pintura" },
-    to,
-    subject,
-    htmlContent,
-  };
-  if (replyTo?.email) body.replyTo = replyTo;
-  await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify(body),
-  }).catch(() => {});
-}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método no permitido." });
@@ -73,6 +48,7 @@ export default async function handler(req, res) {
     fecha,
     nombre,
     telefono,
+    email: email || null,
     motivo: vehiculo ? `Solicitud web · ${vehiculo}` : "Solicitud web",
     nota: notaPartes.join("\n") || null,
     estado: "pendiente",

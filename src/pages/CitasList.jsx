@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
+import { avisarCitaConfirmada } from "../lib/confirmarCita";
 
 const ESTADOS = ["pendiente", "confirmada", "atendida", "cancelada"];
 const ESTADO_COLOR = {
@@ -70,6 +71,30 @@ export default function CitasList() {
     const { error: e } = await supabase.from("citas").update({ estado }).eq("id", cita.id);
     if (e) return setError("No se pudo actualizar el estado de la cita.");
     setCitas((prev) => prev.map((c) => (c.id === cita.id ? { ...c, estado } : c)));
+
+    // Al confirmar: avisa al cliente (WhatsApp siempre; correo si vino de la web).
+    if (estado === "confirmada" && (cita.telefono || cita.email)) {
+      let vehiculo = "";
+      if (cita.caso) {
+        vehiculo = [cita.caso.marca?.nombre, cita.caso.modelo?.nombre, cita.caso.placa].filter(Boolean).join(" ");
+      } else if (cita.origen === "web") {
+        vehiculo = (cita.motivo || "").replace(/^solicitud web\s*·?\s*/i, "").trim();
+      }
+      try {
+        await avisarCitaConfirmada({
+          nombre: cita.nombre,
+          telefono: cita.telefono,
+          email: cita.email,
+          fecha: fechaLarga(cita.fecha),
+          hora: cita.hora,
+          vehiculo,
+          origen: cita.origen,
+        });
+        setAviso({ tipo: "ok", texto: `Confirmación enviada a ${cita.nombre}.` });
+      } catch {
+        setAviso({ tipo: "fail", texto: "La cita se confirmó, pero no se pudo enviar el aviso al cliente." });
+      }
+    }
   }
 
   async function eliminar(cita) {
