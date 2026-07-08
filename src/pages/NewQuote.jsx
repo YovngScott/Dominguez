@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import ItemModal from "../components/ItemModal";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
 import { agregarPiezaCatalogo, agregarServicioCatalogo, findOrCreateMarca, findOrCreateModelo } from "../lib/catalogo";
@@ -32,6 +33,7 @@ export default function NewQuote() {
   const [modelos, setModelos] = useState([]);
   const [piezasCatalogo, setPiezasCatalogo] = useState([]);
   const [serviciosCatalogo, setServiciosCatalogo] = useState([]);
+  const [confirmarBorrar, setConfirmarBorrar] = useState(null); // { tipo, index, nombre }
   const [error, setError] = useState("");
   const [estado, setEstado] = useState(""); // texto de progreso
   const [cargando, setCargando] = useState(editando);
@@ -609,7 +611,9 @@ export default function NewQuote() {
               return [nombrePieza(it), it.cantidad, rd(it.precio), rd(c.itbisMonto), rd(c.total)];
             }}
             onEdit={(i) => setModal({ tipo: "pieza", index: i })}
-            onDelete={(i) => borrarItem("pieza", i)}
+            onDelete={(i) =>
+              setConfirmarBorrar({ tipo: "pieza", index: i, nombre: nombrePieza(form.items_piezas[i]) })
+            }
           />
 
           {/* Mano de obra */}
@@ -626,7 +630,13 @@ export default function NewQuote() {
               return [desc, it.cantidad, rd(it.precio), rd(c.itbisMonto), rd(c.total)];
             }}
             onEdit={(i) => setModal({ tipo: "servicio", index: i })}
-            onDelete={(i) => borrarItem("servicio", i)}
+            onDelete={(i) =>
+              setConfirmarBorrar({
+                tipo: "servicio",
+                index: i,
+                nombre: form.items_mano_obra[i]?.nombre || "este servicio",
+              })
+            }
           />
 
           {/* Evidencias */}
@@ -712,6 +722,19 @@ export default function NewQuote() {
           onCancel={() => setModal(null)}
           sugerenciasPiezas={piezasCatalogo}
           sugerenciasServicios={serviciosCatalogo}
+        />
+      )}
+
+      {confirmarBorrar && (
+        <ConfirmDialog
+          titulo={confirmarBorrar.tipo === "pieza" ? "¿Eliminar esta pieza?" : "¿Eliminar este servicio?"}
+          mensaje={`Se quitará "${confirmarBorrar.nombre}" de la cotización. Esta acción no se puede deshacer.`}
+          confirmLabel="Sí, eliminar"
+          onCancel={() => setConfirmarBorrar(null)}
+          onConfirm={() => {
+            borrarItem(confirmarBorrar.tipo, confirmarBorrar.index);
+            setConfirmarBorrar(null);
+          }}
         />
       )}
     </div>
