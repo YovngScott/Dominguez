@@ -2,12 +2,21 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
+import SignaturePad from "../components/SignaturePad";
 import { obtenerFirmaClienteUrl } from "../lib/firmaCliente";
 
 function ddmmaaaa(iso) {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
+}
+
+function blobADataUrl(blob) {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onloadend = () => resolve(r.result);
+    r.readAsDataURL(blob);
+  });
 }
 
 export default function OrderView() {
@@ -17,6 +26,8 @@ export default function OrderView() {
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
+  const [firmando, setFirmando] = useState(false);
+  const [guardandoFirma, setGuardandoFirma] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -27,17 +38,41 @@ export default function OrderView() {
     load();
   }, [ordenId]);
 
-  async function imprimir() {
+  // Genera el PDF (con la firma dada, o la del recibo/caso) y lo abre.
+  async function generarEImprimir(firmaUrl) {
     setGenerando(true);
-    const { generarPdfOrden } = await import("../lib/ordenPdf");
-    const firmaClienteUrl = await obtenerFirmaClienteUrl(orden.caso_id);
-    const blob = await generarPdfOrden({
-      ...orden,
-      fecha: ddmmaaaa(orden.fecha),
-      firma_cliente_url: firmaClienteUrl,
-    });
-    window.open(URL.createObjectURL(blob), "_blank");
-    setGenerando(false);
+    try {
+      const { generarPdfOrden } = await import("../lib/ordenPdf");
+      const firma = firmaUrl || orden.firma_cliente_url || (await obtenerFirmaClienteUrl(orden.caso_id));
+      const blob = await generarPdfOrden({
+        ...orden,
+        fecha: ddmmaaaa(orden.fecha),
+        firma_cliente_url: firma,
+      });
+      window.open(URL.createObjectURL(blob), "_blank");
+    } finally {
+      setGenerando(false);
+    }
+  }
+
+  // Botón "Imprimir": si aún no hay firma, pide firmar primero.
+  function imprimir() {
+    if (orden.firma_cliente_url) generarEImprimir();
+    else setFirmando(true);
+  }
+
+  // El cliente firmó: guarda la firma en el recibo y luego imprime.
+  async function onFirmaConfirm(blob) {
+    setGuardandoFirma(true);
+    try {
+      const dataUrl = await blobADataUrl(blob);
+      await supabase.from("ordenes_reparacion").update({ firma_cliente_url: dataUrl }).eq("id", ordenId);
+      setOrden((o) => ({ ...o, firma_cliente_url: dataUrl }));
+      setFirmando(false);
+      await generarEImprimir(dataUrl);
+    } finally {
+      setGuardandoFirma(false);
+    }
   }
 
   async function eliminar() {
@@ -88,10 +123,30 @@ export default function OrderView() {
             className="btn-primary justify-center gap-1.5 px-3 col-span-2 sm:col-span-1"
           >
             <Icon name="printer" className="w-4 h-4" />
-            {generando ? "Generando…" : "Imprimir / PDF"}
+            {generando ? "Generando…" : orden.firma_cliente_url ? "Imprimir / PDF" : "Firmar e imprimir"}
           </button>
         </div>
       </div>
+
+      {orden.firma_cliente_url && (
+        <div className="flex items-center gap-2 -mt-3 mb-5 text-sm text-emerald-600">
+          <Icon name="check" className="w-4 h-4" /> Recibo firmado por el cliente.
+          <button onClick={() => setFirmando(true)} className="text-[var(--ink-soft)] underline hover:text-[var(--brand-red)]">
+            Volver a firmar
+          </button>
+        </div>
+      )}
+
+      {firmando && (
+        <SignaturePad
+          titulo="Firma del cliente"
+          descripcion="El cliente firma aquí para el recibo. Luego se genera el PDF con la firma."
+          confirmLabel="Firmar e imprimir"
+          submitting={guardandoFirma}
+          onConfirm={onFirmaConfirm}
+          onCancel={() => setFirmando(false)}
+        />
+      )}
 
       <div className="card p-6 grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
         <Dato k="Fecha" v={ddmmaaaa(orden.fecha)} />

@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
  * Panel de firma para tablet/escritorio. Devuelve la firma como Blob PNG.
  * Soporta táctil (Pointer Events) para usarse con el dedo en la tablet.
  */
-export default function SignaturePad({ onConfirm, onCancel, submitting }) {
+export default function SignaturePad({
+  onConfirm,
+  onCancel,
+  submitting,
+  titulo = "Firma de entrega",
+  descripcion = "El cliente firma aquí para confirmar que recibió el vehículo.",
+  confirmLabel = "Confirmar entrega",
+}) {
   const canvasRef = useRef(null);
   const drawing = useRef(false);
   const [vacio, setVacio] = useState(true);
@@ -66,10 +73,8 @@ export default function SignaturePad({ onConfirm, onCancel, submitting }) {
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="card w-full max-w-lg p-6">
-        <h3 className="text-lg font-bold text-[var(--ink)]">Firma de entrega</h3>
-        <p className="text-sm text-[var(--ink-soft)] mb-3">
-          El cliente firma aquí para confirmar que recibió el vehículo.
-        </p>
+        <h3 className="text-lg font-bold text-[var(--ink)]">{titulo}</h3>
+        <p className="text-sm text-[var(--ink-soft)] mb-3">{descripcion}</p>
 
         <canvas
           ref={canvasRef}
@@ -94,7 +99,7 @@ export default function SignaturePad({ onConfirm, onCancel, submitting }) {
               disabled={vacio || submitting}
               className="btn-primary"
             >
-              {submitting ? "Guardando…" : "Confirmar entrega"}
+              {submitting ? "Guardando…" : confirmLabel}
             </button>
           </div>
         </div>
