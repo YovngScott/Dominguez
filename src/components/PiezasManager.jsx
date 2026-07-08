@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza } from "../lib/cotizacion";
-import { TRAMOS } from "../lib/tramos";
+import { tramosDe } from "../lib/tramos";
 import Icon from "./Icon";
 
 // Clave estable para identificar una pieza entre cotizaciones del mismo caso.
@@ -18,6 +18,7 @@ export default function PiezasManager({ casoId, caso }) {
   const [recibidas, setRecibidas] = useState(new Set()); // claves recibidas
   const [tramos, setTramos] = useState({}); // clave -> tramo (ej. "B2")
   const [casosRel, setCasosRel] = useState([casoId]); // casos del mismo reclamo
+  const [asegNombre, setAsegNombre] = useState(""); // aseguradora del caso (para los tramos)
   const [infoCaso, setInfoCaso] = useState(caso || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -33,7 +34,11 @@ export default function PiezasManager({ casoId, caso }) {
     const etqSelect =
       "id, caso_id, cliente_nombre, marca, modelo, anio, numero_reclamo, aseguradora_nombre, piezas, created_at";
     const [{ data: casoRow }, { data: cots }, { data: etqCaso }] = await Promise.all([
-      supabase.from("casos").select("numero_reclamo").eq("id", casoId).maybeSingle(),
+      supabase
+        .from("casos")
+        .select("numero_reclamo, aseguradora:aseguradoras(nombre)")
+        .eq("id", casoId)
+        .maybeSingle(),
       supabase
         .from("cotizaciones")
         .select(
@@ -53,6 +58,9 @@ export default function PiezasManager({ casoId, caso }) {
     // piezas llegaron y se etiquetaron antes de registrar el vehículo (en otro
     // caso), igual aparecen aquí vinculadas por reclamo.
     const reclamo = (caso?.numero_reclamo || casoRow?.numero_reclamo || "").trim();
+    setAsegNombre(
+      caso?.aseguradora_nombre || casoRow?.aseguradora?.nombre || caso?.aseguradora?.nombre || ""
+    );
     let etqs = [...(etqCaso || [])];
     if (reclamo) {
       const { data: etqRec } = await supabase
@@ -302,7 +310,7 @@ export default function PiezasManager({ casoId, caso }) {
                     }`}
                   >
                     <option value="">Tramo…</option>
-                    {TRAMOS.map((t) => (
+                    {tramosDe(asegNombre).map((t) => (
                       <option key={t} value={t}>
                         {t}
                       </option>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
-import { TRAMOS } from "../lib/tramos";
+import { tramosDe, layoutTramos } from "../lib/tramos";
 
 // Vista del anaquel (tramos) por aseguradora: 3 de ancho × 4 de alto. Cada
 // casilla muestra qué piezas (y de qué vehículo) están guardadas ahí.
@@ -49,13 +49,19 @@ export default function Tramos() {
     return acc;
   }, {});
 
+  // Anaquel según la aseguradora activa (largo × alto).
+  const { cols, rows } = layoutTramos(activa);
+  const slots = tramosDe(activa);
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex items-center gap-2 mb-1">
         <Icon name="grid" className="w-6 h-6 text-[var(--brand-red)]" />
         <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Tramos</h1>
       </div>
-      <p className="text-sm text-[var(--ink-soft)] mb-5">Anaquel de piezas por aseguradora (3 × 4).</p>
+      <p className="text-sm text-[var(--ink-soft)] mb-5">
+        Anaquel de piezas por aseguradora ({cols} de largo × {rows} de alto).
+      </p>
 
       {/* Tabs de aseguradoras */}
       <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
@@ -84,8 +90,8 @@ export default function Tramos() {
       {loading ? (
         <p className="text-[var(--ink-soft)]">Cargando…</p>
       ) : (
-        <div className="grid grid-cols-3 gap-3">
-          {TRAMOS.map((slot) => {
+        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+          {slots.map((slot) => {
             const piezas = porTramo[slot] || [];
             const ocupado = piezas.length > 0;
             return (
