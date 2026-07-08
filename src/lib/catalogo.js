@@ -57,3 +57,11 @@ export async function agregarPiezaCatalogo(nombre) {
   await supabase.from("piezas_catalogo").insert({ nombre: n });
   // si ya existe, el unique constraint lo rechaza silenciosamente (ignoramos error)
 }
+
+// Agrega un servicio al catálogo si aún no existe (para autocompletar luego).
+export async function agregarServicioCatalogo(nombre) {
+  const n = (nombre || "").trim();
+  if (!n) return;
+  await supabase.from("servicios_catalogo").insert({ nombre: n });
+  // si ya existe, el unique constraint lo rechaza silenciosamente (ignoramos error)
+}

@@ -17,7 +17,14 @@ const VACIO = {
  * Modal para agregar/editar una pieza o un servicio.
  * tipo: "pieza" | "servicio"
  */
-export default function ItemModal({ tipo, initial, onConfirm, onCancel, sugerenciasPiezas = [] }) {
+export default function ItemModal({
+  tipo,
+  initial,
+  onConfirm,
+  onCancel,
+  sugerenciasPiezas = [],
+  sugerenciasServicios = [],
+}) {
   const [item, setItem] = useState({ ...VACIO, ...initial });
   const esServicio = tipo === "servicio";
 
@@ -43,12 +50,12 @@ export default function ItemModal({ tipo, initial, onConfirm, onCancel, sugerenc
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {esServicio && (
             <Campo label="Nombre del servicio" full>
-              <input
-                autoFocus
+              <Combobox
+                items={sugerenciasServicios}
                 value={item.nombre}
-                onChange={(e) => up("nombre", e.target.value)}
+                onChange={(val) => up("nombre", val)}
                 placeholder="ej. Pintura completa"
-                className="input"
+                allowCreate
               />
             </Campo>
           )}

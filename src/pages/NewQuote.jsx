@@ -5,7 +5,7 @@ import Combobox from "../components/Combobox";
 import ItemModal from "../components/ItemModal";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
-import { agregarPiezaCatalogo, findOrCreateMarca, findOrCreateModelo } from "../lib/catalogo";
+import { agregarPiezaCatalogo, agregarServicioCatalogo, findOrCreateMarca, findOrCreateModelo } from "../lib/catalogo";
 import { useFormDraft, clearFormDraft } from "../hooks/useFormDraft";
 import Icon from "../components/Icon";
 import {
@@ -31,6 +31,7 @@ export default function NewQuote() {
   const [marcas, setMarcas] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [piezasCatalogo, setPiezasCatalogo] = useState([]);
+  const [serviciosCatalogo, setServiciosCatalogo] = useState([]);
   const [error, setError] = useState("");
   const [estado, setEstado] = useState(""); // texto de progreso
   const [cargando, setCargando] = useState(editando);
@@ -70,15 +71,18 @@ export default function NewQuote() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: asegs }, { data: ms }, { data: piezas }, { data: catDanos }] = await Promise.all([
-        supabase.from("aseguradoras").select("*").eq("activo", true).order("orden"),
-        supabase.from("marcas").select("id, nombre").order("nombre"),
-        supabase.from("piezas_catalogo").select("nombre").order("nombre"),
-        supabase.from("categorias_foto").select("id").ilike("nombre", "%daño%").limit(1).maybeSingle(),
-      ]);
+      const [{ data: asegs }, { data: ms }, { data: piezas }, { data: servicios }, { data: catDanos }] =
+        await Promise.all([
+          supabase.from("aseguradoras").select("*").eq("activo", true).order("orden"),
+          supabase.from("marcas").select("id, nombre").order("nombre"),
+          supabase.from("piezas_catalogo").select("nombre").order("nombre"),
+          supabase.from("servicios_catalogo").select("nombre").order("nombre"),
+          supabase.from("categorias_foto").select("id").ilike("nombre", "%daño%").limit(1).maybeSingle(),
+        ]);
       setAseguradoras(asegs || []);
       setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
       setPiezasCatalogo((piezas || []).map((p) => ({ id: p.nombre, label: p.nombre })));
+      setServiciosCatalogo((servicios || []).map((s) => ({ id: s.nombre, label: s.nombre })));
       setCategoriaDanosId(catDanos?.id || null);
     }
     load();
@@ -179,6 +183,15 @@ export default function NewQuote() {
     if (limpio && !piezasCatalogo.some((p) => p.label.toLowerCase() === limpio.toLowerCase())) {
       agregarPiezaCatalogo(limpio);
       setPiezasCatalogo((prev) => [...prev, { id: limpio, label: limpio }]);
+    }
+
+    // Si es un servicio nuevo, también se guarda en su catálogo (igual que las marcas).
+    if (modal.tipo === "servicio") {
+      const serv = (item.nombre || "").trim();
+      if (serv && !serviciosCatalogo.some((s) => s.label.toLowerCase() === serv.toLowerCase())) {
+        agregarServicioCatalogo(serv);
+        setServiciosCatalogo((prev) => [...prev, { id: serv, label: serv }]);
+      }
     }
 
     setModal(null);
@@ -698,6 +711,7 @@ export default function NewQuote() {
           onConfirm={guardarItem}
           onCancel={() => setModal(null)}
           sugerenciasPiezas={piezasCatalogo}
+          sugerenciasServicios={serviciosCatalogo}
         />
       )}
     </div>
