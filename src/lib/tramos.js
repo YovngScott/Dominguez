@@ -32,5 +32,13 @@ export function tramosDe(aseguradora) {
   return slots;
 }
 
+// Muestra el tramo como número + letra ("B4" → "4B"). El valor guardado sigue
+// siendo letra+número; esto es solo para mostrarlo.
+export function formatoTramo(code) {
+  if (!code) return "";
+  const m = String(code).match(/^([A-Za-z])(\d+)$/);
+  return m ? `${m[2]}${m[1].toUpperCase()}` : String(code);
+}
+
 // Compatibilidad: lista por defecto (3 × 4) para código que aún importe TRAMOS.
 export const TRAMOS = tramosDe("");

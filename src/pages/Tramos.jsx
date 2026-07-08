@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
-import { tramosDe, layoutTramos } from "../lib/tramos";
+import { tramosDe, layoutTramos, formatoTramo } from "../lib/tramos";
 
 // Vista del anaquel (tramos) por aseguradora: 3 de ancho × 4 de alto. Cada
 // casilla muestra qué piezas (y de qué vehículo) están guardadas ahí.
@@ -102,7 +102,7 @@ export default function Tramos() {
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-extrabold text-[var(--ink)]">{slot}</span>
+                  <span className="font-extrabold text-[var(--ink)]">{formatoTramo(slot)}</span>
                   {ocupado && (
                     <span className="text-xs font-semibold text-sky-700 bg-sky-100 px-1.5 rounded-full">
                       {piezas.length}

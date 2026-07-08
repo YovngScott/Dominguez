@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza } from "../lib/cotizacion";
-import { tramosDe } from "../lib/tramos";
+import { formatoTramo } from "../lib/tramos";
+import TramoPicker from "./TramoPicker";
 import Icon from "./Icon";
 
 // Clave estable para identificar una pieza entre cotizaciones del mismo caso.
@@ -19,6 +20,7 @@ export default function PiezasManager({ casoId, caso }) {
   const [tramos, setTramos] = useState({}); // clave -> tramo (ej. "B2")
   const [casosRel, setCasosRel] = useState([casoId]); // casos del mismo reclamo
   const [asegNombre, setAsegNombre] = useState(""); // aseguradora del caso (para los tramos)
+  const [tramoPieza, setTramoPieza] = useState(null); // pieza cuyo selector de tramo está abierto
   const [infoCaso, setInfoCaso] = useState(caso || null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -298,24 +300,18 @@ export default function PiezasManager({ casoId, caso }) {
                 </button>
 
                 {recibida ? (
-                  // Espacio del anaquel donde quedó guardada (editable)
-                  <select
-                    value={tramos[p.clave] || ""}
-                    onChange={(e) => setTramo(p, e.target.value)}
-                    title="Tramo (lugar en el anaquel)"
-                    className={`text-xs font-semibold rounded-lg border px-2 py-1.5 shrink-0 ${
+                  // Espacio del anaquel donde quedó guardada (se elige en una grilla)
+                  <button
+                    onClick={() => setTramoPieza(p)}
+                    title="Elegir tramo en el anaquel"
+                    className={`text-sm font-extrabold rounded-lg border px-3 py-1.5 shrink-0 min-w-[3.5rem] ${
                       tramos[p.clave]
                         ? "border-sky-300 bg-sky-50 text-sky-700"
-                        : "border-[var(--line)] text-[var(--ink-soft)]"
+                        : "border-dashed border-[var(--line)] text-[var(--ink-soft)] font-semibold"
                     }`}
                   >
-                    <option value="">Tramo…</option>
-                    {tramosDe(asegNombre).map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    {tramos[p.clave] ? formatoTramo(tramos[p.clave]) : "Tramo…"}
+                  </button>
                 ) : (
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap bg-amber-50 text-amber-600 shrink-0">
                     Pendiente
@@ -325,6 +321,22 @@ export default function PiezasManager({ casoId, caso }) {
             );
           })}
         </ul>
+      )}
+
+      {tramoPieza && (
+        <TramoPicker
+          aseguradora={asegNombre}
+          valor={tramos[tramoPieza.clave] || ""}
+          onSelect={(code) => {
+            setTramo(tramoPieza, code);
+            setTramoPieza(null);
+          }}
+          onClear={() => {
+            setTramo(tramoPieza, "");
+            setTramoPieza(null);
+          }}
+          onClose={() => setTramoPieza(null)}
+        />
       )}
 
       {mostrarEtiquetas && (
