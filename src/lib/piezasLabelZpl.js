@@ -37,9 +37,18 @@ function campo(x, y, fontH, texto, anchoDots, maxLineas) {
   return `^FO${x},${y}^A0N,${fontH},${fontH}^FB${anchoDots},${nl},0,L^FD${t}^FS`;
 }
 
+// Fecha y hora actual, formato "dd/mm/aaaa hh:mm" (hora local).
+function fechaHoraAhora() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}  ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+const FOOTER_H = 34; // alto reservado abajo para la fecha/hora (no tapa piezas)
+
 // Construye una etiqueta (un ^XA…^XZ) con el encabezado + un grupo de piezas.
 // Si hay qrUrl, dibuja un QR arriba a la derecha (abre el caso al escanearlo).
-function etiqueta(caso, grupo, qrUrl) {
+function etiqueta(caso, grupo, qrUrl, sello) {
   let z = `^XA^PW${W}^LL${H}^LH0,0`;
   let y = 16;
 
@@ -118,6 +127,11 @@ function etiqueta(caso, grupo, qrUrl) {
     y += Math.max(boxS, nl * (pieceH + 4)) + gap;
   });
 
+  // Fecha y hora de impresión (pie de página, no tapa las piezas ni el QR).
+  if (sello) {
+    z += `^FO${LX},${H - 20}^A0N,18,18^FD${ascii(`Impreso: ${sello}`)}^FS`;
+  }
+
   z += "^XZ";
   return z;
 }
@@ -139,7 +153,7 @@ function repartir(caso, piezasCaja) {
   if (sec.length) header += Math.min(2, lineas(sec.join("   -   "), 20, RW)) * 22 + 4;
   header += 12 + 34; // divisor + "PIEZAS (n)"
 
-  const dispo = H - 2 - header; // alto disponible para piezas
+  const dispo = H - 2 - header - FOOTER_H; // alto para piezas (deja el pie de fecha)
   const textW = W - (LX + 38) - LX - 56;
 
   const grupos = [];
@@ -147,7 +161,7 @@ function repartir(caso, piezasCaja) {
   let alto = 0;
   for (const p of piezasCaja) {
     const nl = Math.min(2, lineas(p.nombre, 28, textW));
-    const h = Math.max(32, nl * 30) + 6;
+    const h = Math.max(40, nl * 34) + 8;
     if (actual.length && alto + h > dispo) {
       grupos.push(actual);
       actual = [];
@@ -166,10 +180,11 @@ function repartir(caso, piezasCaja) {
  */
 export function generarZplEtiquetas({ caso = {}, cajas = null, piezas = null, qrUrl = null }) {
   const listaCajas = normalizarCajas(cajas, piezas);
+  const sello = fechaHoraAhora();
   let zpl = "";
   listaCajas.forEach((piezasCaja) => {
     repartir(caso, piezasCaja).forEach((grupo) => {
-      zpl += etiqueta(caso, grupo, qrUrl);
+      zpl += etiqueta(caso, grupo, qrUrl, sello);
     });
   });
   return zpl;

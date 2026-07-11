@@ -132,9 +132,14 @@ function renderHoja(doc, caso, grupo) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(4.6);
   doc.setTextColor(...GRIS);
+  const ahora = new Date();
+  const fechaHora = `${ahora.toLocaleDateString("es-DO")} ${ahora.toLocaleTimeString("es-DO", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
   const piePartes = [
     caso.numero_poliza ? `Póliza ${caso.numero_poliza}` : null,
-    new Date().toLocaleDateString("es-DO"),
+    `Impreso: ${fechaHora}`,
   ].filter(Boolean);
   doc.text(piePartes.join("   ·   "), M, LABEL_H - 1.8);
 }
