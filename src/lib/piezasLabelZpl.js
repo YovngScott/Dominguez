@@ -59,10 +59,13 @@ function etiqueta(caso, grupo, qrUrl, sello) {
   let z = `^XA^PW${W}^LL${H}^LH0,0`;
   let y = 16;
 
-  // QR arriba a la derecha (reduce el ancho del encabezado para no encimarse)
-  const headW = qrUrl ? RW - 150 : RW;
+  // QR arriba a la derecha. Magnificación 3 (no 4): con la URL real (que lleva
+  // el UUID del caso) el QR es de ~41 módulos; a mag 4 se salía del borde y
+  // bajaba tapando la fecha. A mag 3 (~124 dots) cabe en su esquina.
+  const QRW = 128; // ancho aprox. del QR a mag 3
+  const headW = qrUrl ? RW - (QRW + 20) : RW;
   if (qrUrl) {
-    z += `^FO${W - 8 - 132},10^BQN,2,4^FDLA,${ascii(qrUrl)}^FS`;
+    z += `^FO${W - 8 - QRW},10^BQN,2,3^FDLA,${ascii(qrUrl)}^FS`;
   }
 
   // Vehículo
