@@ -116,10 +116,19 @@ export default function PiezasManager({ casoId, caso }) {
     const casoIds = [...new Set([casoId, ...etqs.map((e) => e.caso_id).filter(Boolean)])];
     setCasosRel(casoIds);
 
-    const { data: rec } = await supabase
+    // Se intenta leer con "entregada_at"; si la columna aún no existe (migración
+    // 38 sin correr), se reintenta sin ella para no romper la lista.
+    let recRes = await supabase
       .from("piezas_recibidas")
       .select("pieza_clave, tramo, entregada_at")
       .in("caso_id", casoIds);
+    if (recRes.error) {
+      recRes = await supabase
+        .from("piezas_recibidas")
+        .select("pieza_clave, tramo")
+        .in("caso_id", casoIds);
+    }
+    const rec = recRes.data;
     setRecibidas(new Set((rec || []).map((r) => r.pieza_clave)));
     setEntregadas(new Set((rec || []).filter((r) => r.entregada_at).map((r) => r.pieza_clave)));
     const tmap = {};
@@ -150,12 +159,16 @@ export default function PiezasManager({ casoId, caso }) {
       await supabase.from("piezas_recibidas").delete().in("caso_id", casosRel).eq("pieza_clave", p.clave);
     } else {
       const { data: userData } = await supabase.auth.getUser();
-      const { error: e } = await supabase.from("piezas_recibidas").insert({
-        caso_id: casoId,
-        pieza_clave: p.clave,
-        pieza_nombre: p.nombre,
-        recibida_by: userData?.user?.id,
-      });
+      // upsert: si la fila ya existía (índice único caso_id+pieza_clave), no falla.
+      const { error: e } = await supabase.from("piezas_recibidas").upsert(
+        {
+          caso_id: casoId,
+          pieza_clave: p.clave,
+          pieza_nombre: p.nombre,
+          recibida_by: userData?.user?.id,
+        },
+        { onConflict: "caso_id,pieza_clave", ignoreDuplicates: true }
+      );
       if (e) {
         // revierte el cambio optimista
         setRecibidas((prev) => {
