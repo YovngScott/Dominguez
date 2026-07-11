@@ -17,6 +17,7 @@ const clave = (s) => (s || "").trim().toLowerCase();
 export default function PiezasManager({ casoId, caso }) {
   const [piezas, setPiezas] = useState([]); // [{ clave, nombre, cantidad, cotizacion }]
   const [recibidas, setRecibidas] = useState(new Set()); // claves recibidas
+  const [entregadas, setEntregadas] = useState(new Set()); // claves entregadas a un reparador
   const [tramos, setTramos] = useState({}); // clave -> tramo (ej. "B2")
   const [casosRel, setCasosRel] = useState([casoId]); // casos del mismo reclamo
   const [asegNombre, setAsegNombre] = useState(""); // aseguradora del caso (para los tramos)
@@ -117,9 +118,10 @@ export default function PiezasManager({ casoId, caso }) {
 
     const { data: rec } = await supabase
       .from("piezas_recibidas")
-      .select("pieza_clave, tramo")
+      .select("pieza_clave, tramo, entregada_at")
       .in("caso_id", casoIds);
     setRecibidas(new Set((rec || []).map((r) => r.pieza_clave)));
+    setEntregadas(new Set((rec || []).filter((r) => r.entregada_at).map((r) => r.pieza_clave)));
     const tmap = {};
     (rec || []).forEach((r) => {
       if (r.tramo) tmap[r.pieza_clave] = r.tramo;
@@ -164,6 +166,23 @@ export default function PiezasManager({ casoId, caso }) {
         setError("No se pudo guardar. Ejecuta la migración sql/15_piezas_recibidas.sql en Supabase.");
       }
     }
+  }
+
+  // Marca/desmarca una pieza como ENTREGADA a un reparador. Al entregarla deja
+  // de ocupar espacio en el anaquel (Tramos), pero sigue tachada en la lista.
+  async function toggleEntregada(p) {
+    const ya = entregadas.has(p.clave);
+    setEntregadas((prev) => {
+      const n = new Set(prev);
+      if (ya) n.delete(p.clave);
+      else n.add(p.clave);
+      return n;
+    });
+    await supabase
+      .from("piezas_recibidas")
+      .update({ entregada_at: ya ? null : new Date().toISOString() })
+      .in("caso_id", casosRel)
+      .eq("pieza_clave", p.clave);
   }
 
   async function setTramo(p, valor) {
@@ -277,6 +296,7 @@ export default function PiezasManager({ casoId, caso }) {
         <ul className="divide-y divide-[var(--line)]">
           {piezas.map((p) => {
             const recibida = recibidas.has(p.clave);
+            const entregada = entregadas.has(p.clave);
             return (
               <li key={p.clave} className="flex items-center gap-2 py-1.5 px-2 hover:bg-[var(--paper)] rounded-lg">
                 <button onClick={() => toggle(p)} className="flex-1 flex items-center gap-3 py-1.5 text-left min-w-0">
@@ -299,23 +319,42 @@ export default function PiezasManager({ casoId, caso }) {
                   )}
                 </button>
 
-                {recibida ? (
-                  // Espacio del anaquel donde quedó guardada (se elige en una grilla)
-                  <button
-                    onClick={() => setTramoPieza(p)}
-                    title="Elegir tramo en el anaquel"
-                    className={`text-sm font-extrabold rounded-lg border px-3 py-1.5 shrink-0 min-w-[3.5rem] ${
-                      tramos[p.clave]
-                        ? "border-sky-300 bg-sky-50 text-sky-700"
-                        : "border-dashed border-[var(--line)] text-[var(--ink-soft)] font-semibold"
-                    }`}
-                  >
-                    {tramos[p.clave] ? formatoTramo(tramos[p.clave]) : "Tramo…"}
-                  </button>
-                ) : (
+                {!recibida ? (
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap bg-amber-50 text-amber-600 shrink-0">
                     Pendiente
                   </span>
+                ) : entregada ? (
+                  // Entregada a un reparador: fuera del anaquel. Click para deshacer.
+                  <button
+                    onClick={() => toggleEntregada(p)}
+                    title="Entregada a un reparador (toca para deshacer)"
+                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 bg-slate-100 text-slate-500"
+                  >
+                    <Icon name="truck" className="w-3.5 h-3.5" /> Entregada
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Espacio del anaquel (se elige en una grilla) */}
+                    <button
+                      onClick={() => setTramoPieza(p)}
+                      title="Elegir tramo en el anaquel"
+                      className={`text-sm font-extrabold rounded-lg border px-3 py-1.5 min-w-[3.5rem] ${
+                        tramos[p.clave]
+                          ? "border-sky-300 bg-sky-50 text-sky-700"
+                          : "border-dashed border-[var(--line)] text-[var(--ink-soft)] font-semibold"
+                      }`}
+                    >
+                      {tramos[p.clave] ? formatoTramo(tramos[p.clave]) : "Tramo…"}
+                    </button>
+                    {/* Entregar a un reparador (la saca del anaquel) */}
+                    <button
+                      onClick={() => toggleEntregada(p)}
+                      title="Marcar como entregada a un reparador"
+                      className="p-2 rounded-lg text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--brand-red)]"
+                    >
+                      <Icon name="truck" className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </li>
             );

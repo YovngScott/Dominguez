@@ -25,8 +25,6 @@ const PiezasList = lazy(() => import("./pages/PiezasList"));
 const PiezasCaso = lazy(() => import("./pages/PiezasCaso"));
 const EtiquetasPiezas = lazy(() => import("./pages/EtiquetasPiezas"));
 const EtiquetasHistorial = lazy(() => import("./pages/EtiquetasHistorial"));
-const EtiquetasHub = lazy(() => import("./pages/EtiquetasHub"));
-const EtiquetasVehiculo = lazy(() => import("./pages/EtiquetasVehiculo"));
 const Tramos = lazy(() => import("./pages/Tramos"));
 const ConvertirFotos = lazy(() => import("./pages/ConvertirFotos"));
 const Entregados = lazy(() => import("./pages/Entregados"));
@@ -398,15 +396,7 @@ export default function App() {
         path="/etiquetas"
         element={
           <PrivateLayout>
-            <EtiquetasHub />
-          </PrivateLayout>
-        }
-      />
-      <Route
-        path="/etiquetas/vehiculo"
-        element={
-          <PrivateLayout>
-            <EtiquetasVehiculo />
+            <EtiquetasHistorial />
           </PrivateLayout>
         }
       />

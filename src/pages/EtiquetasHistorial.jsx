@@ -77,12 +77,11 @@ export default function EtiquetasHistorial() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      <Link to="/piezas" className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]">
-        ← Piezas
-      </Link>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 mt-3 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Etiquetas generadas</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Etiquetas</h1>
+          <p className="text-sm text-[var(--ink-soft)]">Etiquetas de piezas generadas.</p>
+        </div>
         <Link to="/piezas/etiquetas" className="btn-primary gap-1.5">
           <Icon name="plus" className="w-4 h-4" /> Nueva etiqueta
         </Link>

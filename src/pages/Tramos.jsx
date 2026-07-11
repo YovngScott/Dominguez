@@ -25,7 +25,8 @@ export default function Tramos() {
                aseguradora:aseguradoras(nombre),
                marca:marcas(nombre), modelo:modelos(nombre))`
           )
-          .not("tramo", "is", null),
+          .not("tramo", "is", null)
+          .is("entregada_at", null),
       ]);
       setAseguradoras(asegs || []);
       setItems(rec || []);
