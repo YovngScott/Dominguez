@@ -37,14 +37,21 @@ function campo(x, y, fontH, texto, anchoDots, maxLineas) {
   return `^FO${x},${y}^A0N,${fontH},${fontH}^FB${anchoDots},${nl},0,L^FD${t}^FS`;
 }
 
+// Tamaño de las piezas según cuántas haya: pocas = letra grande (legible de
+// lejos); muchas = letra normal para que quepan todas.
+function sizing(n) {
+  const pieceH = n <= 1 ? 56 : n === 2 ? 46 : n === 3 ? 38 : n === 4 ? 32 : 26;
+  const boxS = n <= 1 ? 38 : n === 2 ? 32 : n <= 4 ? 28 : 24;
+  const gap = n <= 2 ? 12 : 7;
+  return { pieceH, boxS, gap };
+}
+
 // Fecha y hora actual, formato "dd/mm/aaaa hh:mm" (hora local).
 function fechaHoraAhora() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, "0");
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}  ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
-
-const FOOTER_H = 34; // alto reservado abajo para la fecha/hora (no tapa piezas)
 
 // Construye una etiqueta (un ^XA…^XZ) con el encabezado + un grupo de piezas.
 // Si hay qrUrl, dibuja un QR arriba a la derecha (abre el caso al escanearlo).
@@ -96,6 +103,13 @@ function etiqueta(caso, grupo, qrUrl, sello) {
     y += l * (h + 2) + 4;
   }
 
+  // Fecha y hora (encima de la línea, alineada a la derecha).
+  if (sello) {
+    const h = 24;
+    z += `^FO${LX},${y}^A0N,${h},${h}^FB${RW},1,0,R^FD${ascii(sello)}^FS`;
+    y += h + 4;
+  }
+
   // Línea divisoria
   y += 2;
   z += `^FO${LX},${y}^GB${RW},2,2^FS`;
@@ -108,10 +122,7 @@ function etiqueta(caso, grupo, qrUrl, sello) {
   // Lista de piezas con casilla. El tamaño depende de CUÁNTAS piezas haya:
   // pocas = letra grande (legible de lejos en el almacén); muchas = letra
   // normal para que quepan todas.
-  const n = grupo.length;
-  const pieceH = n <= 1 ? 56 : n === 2 ? 46 : n === 3 ? 38 : n === 4 ? 32 : 26;
-  const boxS = n <= 1 ? 38 : n === 2 ? 32 : n <= 4 ? 28 : 24;
-  const gap = n <= 2 ? 12 : 7;
+  const { pieceH, boxS, gap } = sizing(grupo.length);
   const textX = LX + boxS + 12;
   const textW = W - textX - LX - 64; // espacio a la derecha para "xN"
 
@@ -126,11 +137,6 @@ function etiqueta(caso, grupo, qrUrl, sello) {
     }
     y += Math.max(boxS, nl * (pieceH + 4)) + gap;
   });
-
-  // Fecha y hora de impresión (pie de página, no tapa las piezas ni el QR).
-  if (sello) {
-    z += `^FO${LX},${H - 20}^A0N,18,18^FD${ascii(`Impreso: ${sello}`)}^FS`;
-  }
 
   z += "^XZ";
   return z;
@@ -151,17 +157,20 @@ function repartir(caso, piezasCaja) {
   if (ascii(caso.numero_reclamo)) header += 36;
   const sec = [caso.placa, caso.chasis, caso.cliente_nombre].filter(Boolean);
   if (sec.length) header += Math.min(2, lineas(sec.join("   -   "), 20, RW)) * 22 + 4;
+  header += 28; // línea de fecha/hora
   header += 12 + 34; // divisor + "PIEZAS (n)"
 
-  const dispo = H - 2 - header - FOOTER_H; // alto para piezas (deja el pie de fecha)
+  const dispo = H - 2 - header; // alto disponible para piezas
   const textW = W - (LX + 38) - LX - 56;
 
   const grupos = [];
   let actual = [];
   let alto = 0;
   for (const p of piezasCaja) {
-    const nl = Math.min(2, lineas(p.nombre, 28, textW));
-    const h = Math.max(40, nl * 34) + 8;
+    // Se estima con fuente 32 (la que usa un grupo de 4) para que los nombres
+    // largos que envuelven a 2 líneas hagan agrupar menos y no se corten.
+    const nl = Math.min(2, lineas(p.nombre, 32, textW));
+    const h = Math.max(34, nl * 34) + 6;
     if (actual.length && alto + h > dispo) {
       grupos.push(actual);
       actual = [];
