@@ -58,6 +58,34 @@ export async function estadoWhatsapp() {
   }
 }
 
+// Pide a Evolution el QR (imagen) para vincular el WhatsApp. Si se pasa
+// `number` (teléfono con código de país), Evolution devuelve además un código
+// de emparejamiento de 8 caracteres como alternativa a escanear el QR.
+// Devuelve { ok, base64, code, pairingCode }.
+export async function conectarWhatsapp({ number } = {}) {
+  const { apiUrl, apiKey, instancia, ok } = evolutionConfig();
+  if (!ok) return { ok: false, error: "Evolution no configurado (EVOLUTION_API_URL/KEY/INSTANCE)." };
+  try {
+    const qs = number ? `?number=${encodeURIComponent(number)}` : "";
+    const r = await fetch(`${apiUrl}/instance/connect/${encodeURIComponent(instancia)}${qs}`, {
+      headers: { apikey: apiKey },
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = data?.message || data?.error || "No se pudo generar el código de conexión.";
+      return { ok: false, status: r.status, error: typeof msg === "string" ? msg : JSON.stringify(msg) };
+    }
+    // Evolution v2 responde { base64 (QR en imagen), code (texto del QR),
+    // pairingCode }. Algunas versiones lo anidan bajo `qrcode`.
+    const base64 = data?.base64 || data?.qrcode?.base64 || null;
+    const code = data?.code || data?.qrcode?.code || null;
+    const pairingCode = data?.pairingCode || data?.qrcode?.pairingCode || null;
+    return { ok: true, base64, code, pairingCode };
+  } catch (e) {
+    return { ok: false, status: 502, error: "No se pudo conectar con Evolution API: " + e.message };
+  }
+}
+
 // Valida que la petición traiga una sesión válida de Supabase (usuario logueado).
 export async function validarSesionSupabase(req) {
   const token = (req.headers.authorization || "").replace("Bearer ", "").trim();

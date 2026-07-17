@@ -3,6 +3,7 @@ import { useState, useEffect, lazy, Suspense } from "react";
 import { useAuth } from "./hooks/useAuth";
 import Logo from "./components/Logo";
 import Icon from "./components/Icon";
+import WhatsappConnectModal from "./components/WhatsappConnectModal";
 import Login from "./pages/Login";
 import { aplicarTema, temaOscuroGuardado } from "./lib/theme";
 
@@ -49,13 +50,10 @@ const NAV = [
   { to: "/reportes", label: "Reportes", icon: "file" },
 ];
 
-const WHATSAPP_CONNECT_URL =
-  import.meta.env.VITE_WHATSAPP_CONNECT_URL ||
-  "https://dominguez-dashboard.itssilverio032008.workers.dev/?tenant=dominguez-auto-pintura";
-
 function PrivateLayout({ children }) {
   const { session, loading, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [waModalOpen, setWaModalOpen] = useState(false);
   const [oscuro, setOscuro] = useState(temaOscuroGuardado);
   const location = useLocation();
 
@@ -142,18 +140,19 @@ function PrivateLayout({ children }) {
                 )}
               </NavLink>
             ))}
-            <a
-              href={WHATSAPP_CONNECT_URL}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-3 px-3 py-3 rounded-xl font-semibold text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                setWaModalOpen(true);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl font-semibold text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
             >
               <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[var(--brand-red-50)] text-[var(--brand-red)]">
                 <Icon name="whatsapp" className="w-5 h-5" />
               </span>
               Conectar WhatsApp
-            </a>
+            </button>
             <div className="h-px bg-[var(--line)] my-1" />
             <button
               type="button"
@@ -211,6 +210,8 @@ function PrivateLayout({ children }) {
       <main className="flex-1">
         <Suspense fallback={Cargando}>{children}</Suspense>
       </main>
+
+      {waModalOpen && <WhatsappConnectModal onClose={() => setWaModalOpen(false)} />}
     </div>
   );
 }
