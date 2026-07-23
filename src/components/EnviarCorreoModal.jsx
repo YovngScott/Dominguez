@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { enviarCorreo } from "../lib/enviarCorreo";
+import { urlAJpegBlob, blobABase64 } from "../lib/toJpeg";
 import Icon from "./Icon";
 
 const SEGUNDOS_PARA_DESHACER = 8;
@@ -119,13 +120,24 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
     setCuentaAtras(null);
 
     const attachment = [{ url: pdfUrl, name: `Cotizacion-${cot.numero || ""}.pdf` }];
-    if (adjuntarFotos) {
-      evidencias.forEach((u, i) => attachment.push({ url: u, name: `dano-${i + 1}.jpg` }));
-    }
 
     setEnviando(true);
-    // UN solo correo con todos los destinatarios en el "Para" (no uno por uno).
     try {
+      if (adjuntarFotos && evidencias.length) {
+        // Las fotos se guardan en WebP en Storage; Brevo las adjuntaría tal
+        // cual si se les pasa la URL, así que se convierten a JPG aquí y se
+        // mandan como contenido base64 (más compatible en cualquier correo).
+        const fotos = await Promise.all(
+          evidencias.map(async (u, i) => {
+            const jpg = await urlAJpegBlob(u);
+            const content = await blobABase64(jpg);
+            return { content, name: `dano-${i + 1}.jpg` };
+          })
+        );
+        attachment.push(...fotos);
+      }
+
+      // UN solo correo con todos los destinatarios en el "Para" (no uno por uno).
       await enviarCorreo({ to, subject: asunto(), htmlContent: cuerpo(), attachment });
       setOk(`Correo enviado a ${to.length} destinatario(s).`);
       // Deja constancia en la cotización para mostrar "Enviada" en la lista.

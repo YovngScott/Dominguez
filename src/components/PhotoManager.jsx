@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
+import { blobAJpeg } from "../lib/toJpeg";
 import Icon from "./Icon";
 import Lightbox from "./Lightbox";
 
@@ -134,15 +135,13 @@ export default function PhotoManager({ casoId }) {
 
   // Descarga TODAS las fotos de la categoría activa de una sola vez. En
   // Chrome/Edge deja elegir la carpeta destino y las guarda ahí; en otros
-  // navegadores las baja una por una a la carpeta de descargas.
+  // navegadores las baja una por una a la carpeta de descargas. Se guardan en
+  // WebP en Storage, pero se convierten a JPG al descargar (compatibilidad).
   async function descargarTodas(lista, nombreCat) {
     if (!lista.length || descargando) return;
     setError("");
     const base = (nombreCat || "fotos").replace(/[^\wáéíóúñ\s-]/gi, "").trim() || "fotos";
-    const nombreArchivo = (i) => {
-      const ext = (lista[i].storage_path.split(".").pop() || "jpg").toLowerCase();
-      return `${base}-${String(i + 1).padStart(2, "0")}.${ext}`;
-    };
+    const nombreArchivo = (i) => `${base}-${String(i + 1).padStart(2, "0")}.jpg`;
 
     let dirHandle = null;
     if (window.showDirectoryPicker) {
@@ -157,7 +156,8 @@ export default function PhotoManager({ casoId }) {
     for (let i = 0; i < lista.length; i++) {
       try {
         const resp = await fetch(lista[i].signedUrl);
-        const blob = await resp.blob();
+        const blobOriginal = await resp.blob();
+        const blob = await blobAJpeg(blobOriginal);
 
         if (dirHandle) {
           const fileHandle = await dirHandle.getFileHandle(nombreArchivo(i), { create: true });

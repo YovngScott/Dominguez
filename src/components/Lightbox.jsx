@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import Icon from "./Icon";
+import { blobAJpeg } from "../lib/toJpeg";
 
 const MIN = 1;
 const MAX = 5;
@@ -19,16 +20,17 @@ export default function Lightbox({ src, alt = "", filename = "foto.jpg", onClose
     setPos({ x: 0, y: 0 });
   }
 
-  // Descarga la foto que se está viendo (fetch → blob, para forzar la descarga
-  // aunque la URL sea de otro origen).
+  // Descarga la foto que se está viendo. Se guarda en WebP en Storage, pero
+  // se convierte a JPG al descargar (máxima compatibilidad fuera del navegador).
   async function descargar() {
     try {
       const resp = await fetch(src);
-      const blob = await resp.blob();
+      const blobOriginal = await resp.blob();
+      const blob = await blobAJpeg(blobOriginal);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = filename;
+      a.download = filename.replace(/\.\w+$/, ".jpg");
       document.body.appendChild(a);
       a.click();
       a.remove();

@@ -459,10 +459,11 @@ export default function NewQuote() {
         setEstado("Subiendo evidencias…");
         for (const ev of evidencias) {
           const comp = await compressImage(ev.file);
-          const path = `${cot.id}/evidencias/${uuid()}.jpg`;
+          const ext = comp.type === "image/webp" ? "webp" : "jpg";
+          const path = `${cot.id}/evidencias/${uuid()}.${ext}`;
           const { error: upErr } = await supabase.storage
             .from("cotizaciones")
-            .upload(path, comp, { contentType: "image/jpeg" });
+            .upload(path, comp, { contentType: comp.type });
           if (!upErr) {
             await supabase.from("cotizacion_evidencias").insert({
               cotizacion_id: cot.id,
@@ -471,10 +472,10 @@ export default function NewQuote() {
           }
 
           if (cot.caso_id && categoriaDanosId) {
-            const fotoPath = `${cot.caso_id}/${categoriaDanosId}/${uuid()}.jpg`;
+            const fotoPath = `${cot.caso_id}/${categoriaDanosId}/${uuid()}.${ext}`;
             const { error: fotoErr } = await supabase.storage
               .from("fotos-casos")
-              .upload(fotoPath, comp, { contentType: "image/jpeg" });
+              .upload(fotoPath, comp, { contentType: comp.type });
             if (!fotoErr) {
               const { data: signed } = await supabase.storage
                 .from("fotos-casos")

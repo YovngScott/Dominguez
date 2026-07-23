@@ -27,7 +27,6 @@ const PiezasCaso = lazy(() => import("./pages/PiezasCaso"));
 const EtiquetasPiezas = lazy(() => import("./pages/EtiquetasPiezas"));
 const EtiquetasHistorial = lazy(() => import("./pages/EtiquetasHistorial"));
 const Tramos = lazy(() => import("./pages/Tramos"));
-const ConvertirFotos = lazy(() => import("./pages/ConvertirFotos"));
 const Entregados = lazy(() => import("./pages/Entregados"));
 const Landing = lazy(() => import("./pages/Landing"));
 const ClientList = lazy(() => import("./pages/ClientList"));
@@ -390,14 +389,6 @@ export default function App() {
         element={
           <PrivateLayout>
             <Tramos />
-          </PrivateLayout>
-        }
-      />
-      <Route
-        path="/herramientas/convertir-fotos"
-        element={
-          <PrivateLayout>
-            <ConvertirFotos />
           </PrivateLayout>
         }
       />
