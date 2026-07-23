@@ -218,31 +218,6 @@ export default function EtiquetasPiezas() {
     return casoId;
   }
 
-  // Marca como recibidas (en piezas_recibidas) todas las piezas de la etiqueta.
-  // Usa el índice único (caso_id, pieza_clave): si ya existía, no la duplica.
-  async function marcarRecibidas(casoId, cajasValidas) {
-    if (!casoId) return;
-    const { data: userData } = await supabase.auth.getUser();
-    const map = new Map();
-    cajasValidas.flat().forEach((p) => {
-      const nombre = (p.nombre || "").trim();
-      const k = nombre.toLowerCase();
-      if (k && !map.has(k)) {
-        map.set(k, {
-          caso_id: casoId,
-          pieza_clave: k,
-          pieza_nombre: nombre,
-          recibida_by: userData?.user?.id,
-        });
-      }
-    });
-    const filas = [...map.values()];
-    if (!filas.length) return;
-    await supabase
-      .from("piezas_recibidas")
-      .upsert(filas, { onConflict: "caso_id,pieza_clave", ignoreDuplicates: true });
-  }
-
   async function guardarEtiqueta(cajasValidas, casoId) {
     const payload = {
       cliente_nombre: form.cliente || null,
@@ -289,12 +264,6 @@ export default function EtiquetasPiezas() {
         await guardarEtiqueta(validas, casoId);
       } catch {
         /* si falla el guardado igual se imprime */
-      }
-      try {
-        // Crear la etiqueta significa que la pieza YA llegó: se marca recibida.
-        await marcarRecibidas(casoId, validas);
-      } catch {
-        /* si falla el marcado igual se imprime */
       }
 
       const payload = {
