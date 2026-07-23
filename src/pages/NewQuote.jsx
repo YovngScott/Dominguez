@@ -68,8 +68,45 @@ export default function NewQuote() {
   // cambio (debounce 400ms), así si se cierra el navegador no se pierde lo
   // escrito ni se reinicia. No aplica al editar ni al venir prellenada desde
   // un caso (para no mezclar con un borrador viejo).
-  const autosaveOn = !editando && !params.get("chasis") && !params.get("aseguradora");
+  const autosaveOn =
+    !editando && !params.get("chasis") && !params.get("aseguradora") && !params.get("caso");
   useFormDraft({ key: "newquote", form, setForm, enabled: autosaveOn });
+
+  // Si se viene desde un caso (?caso=id), se prellenan todos sus datos:
+  // cliente, teléfono, vehículo, placa/chasis, aseguradora, reclamo y póliza.
+  const casoParam = params.get("caso");
+  useEffect(() => {
+    const casoId = casoParam;
+    if (!casoId || editando) return;
+    async function prellenarDesdeCaso() {
+      const { data } = await supabase
+        .from("casos")
+        .select(
+          `placa, chasis, color, anio, numero_reclamo, numero_poliza, aseguradora_id,
+           cliente:clientes(nombre_completo, telefono, email),
+           marca:marcas(nombre), modelo:modelos(nombre)`
+        )
+        .eq("id", casoId)
+        .maybeSingle();
+      if (!data) return;
+      setForm((f) => ({
+        ...f,
+        cliente_nombre: data.cliente?.nombre_completo || f.cliente_nombre,
+        cliente_email: data.cliente?.email || f.cliente_email,
+        telefonos: data.cliente?.telefono ? [data.cliente.telefono] : f.telefonos,
+        marca: data.marca?.nombre || f.marca,
+        modelo: data.modelo?.nombre || f.modelo,
+        anio: data.anio ? String(data.anio) : f.anio,
+        color: data.color || f.color,
+        placa: data.placa || f.placa,
+        chasis: data.chasis || f.chasis,
+        aseguradora_id: data.aseguradora_id || f.aseguradora_id,
+        numero_reclamo: data.numero_reclamo || f.numero_reclamo,
+        numero_poliza: data.numero_poliza || f.numero_poliza,
+      }));
+    }
+    prellenarDesdeCaso();
+  }, [casoParam, editando]);
 
   useEffect(() => {
     async function load() {

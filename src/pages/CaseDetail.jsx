@@ -376,7 +376,7 @@ export default function CaseDetail() {
 
       {tab === "fotos" && <PhotoManager casoId={caso.id} />}
       {tab === "documentos" && <DocumentManager casoId={caso.id} />}
-      {tab === "cotizaciones" && <Cotizaciones lista={cotizaciones} chasis={caso.chasis} />}
+      {tab === "cotizaciones" && <Cotizaciones lista={cotizaciones} casoId={casoId} />}
       {tab === "piezas" && (
         <PiezasManager
           casoId={caso.id}
@@ -436,13 +436,13 @@ function Historial({ eventos }) {
   );
 }
 
-function Cotizaciones({ lista, chasis }) {
+function Cotizaciones({ lista, casoId }) {
   return (
     <div className="card p-6">
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-bold text-[var(--ink)]">Cotizaciones de este vehículo</h2>
         <Link
-          to={`/cotizaciones/nueva${chasis ? `?chasis=${encodeURIComponent(chasis)}` : ""}`}
+          to={`/cotizaciones/nueva?caso=${casoId}`}
           className="btn-primary text-sm py-2 px-3"
         >
           + Nueva

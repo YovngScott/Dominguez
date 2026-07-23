@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { rd } from "../lib/cotizacion";
+import Icon from "../components/Icon";
 
 export default function QuoteList() {
   const [cotizaciones, setCotizaciones] = useState([]);
@@ -12,7 +13,7 @@ export default function QuoteList() {
     async function load() {
       const { data } = await supabase
         .from("cotizaciones")
-        .select("id, numero, cliente_nombre, marca, modelo, placa, chasis, total, estado, created_at")
+        .select("id, numero, cliente_nombre, marca, modelo, placa, chasis, total, estado, enviada_at, created_at")
         .order("created_at", { ascending: false });
       setCotizaciones(data || []);
       setLoading(false);
@@ -59,18 +60,27 @@ export default function QuoteList() {
               to={`/cotizaciones/${c.id}`}
               className="flex items-center justify-between px-5 py-4 hover:bg-[var(--paper)]"
             >
-              <div>
-                <p className="font-bold text-[var(--ink)]">
+              <div className="min-w-0">
+                <p className="font-bold text-[var(--ink)] truncate">
                   {c.numero} · {c.cliente_nombre}
                 </p>
-                <p className="text-sm text-[var(--ink-soft)]">
+                <p className="text-sm text-[var(--ink-soft)] truncate">
                   {[c.marca, c.modelo].filter(Boolean).join(" ")}
                   {c.placa ? ` · ${c.placa}` : ""}
                 </p>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0 pl-3">
                 <p className="font-bold text-[var(--ink)]">{rd(c.total)}</p>
-                <p className="text-xs text-[var(--ink-soft)] capitalize">{c.estado}</p>
+                {c.enviada_at ? (
+                  <span
+                    title={`Enviada por correo el ${new Date(c.enviada_at).toLocaleString("es-DO")}`}
+                    className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap bg-emerald-50 text-emerald-600"
+                  >
+                    <Icon name="mail" className="w-3.5 h-3.5" /> Enviada
+                  </span>
+                ) : (
+                  <p className="text-xs text-[var(--ink-soft)] capitalize">{c.estado}</p>
+                )}
               </div>
             </Link>
           ))}

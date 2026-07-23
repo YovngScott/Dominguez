@@ -128,6 +128,11 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
     try {
       await enviarCorreo({ to, subject: asunto(), htmlContent: cuerpo(), attachment });
       setOk(`Correo enviado a ${to.length} destinatario(s).`);
+      // Deja constancia en la cotización para mostrar "Enviada" en la lista.
+      await supabase
+        .from("cotizaciones")
+        .update({ enviada_at: new Date().toISOString(), enviada_a: to.length })
+        .eq("id", cot.id);
     } catch (err) {
       setError(err.message || "No se pudo enviar el correo.");
     } finally {
