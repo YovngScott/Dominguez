@@ -51,6 +51,7 @@ export default function EtiquetasPiezas() {
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const [guardadoId, setGuardadoId] = useState(null);
   const [casoVinculado, setCasoVinculado] = useState(null); // caso del vehículo
   const [impresoras, setImpresoras] = useState([]); // [{name,...}] si hay print server
@@ -295,6 +296,24 @@ export default function EtiquetasPiezas() {
     if (data?.id) setGuardadoId(data.id);
   }
 
+  async function guardar() {
+    setError("");
+    setOk("");
+    const validas = cajasConPiezas();
+    if (!validas.length) return setError("Agrega al menos una pieza en alguna caja.");
+
+    setGuardando(true);
+    try {
+      const casoId = await vincularCaso();
+      await guardarEtiqueta(validas, casoId);
+      setOk("Etiqueta guardada. Puedes imprimirla cuando estés listo.");
+    } catch (err) {
+      setError(err.message || "No se pudo guardar la etiqueta.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
   async function imprimir() {
     setError("");
     setOk("");
@@ -379,11 +398,19 @@ export default function EtiquetasPiezas() {
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <button
           onClick={imprimir}
-          disabled={imprimiendo}
+          disabled={imprimiendo || guardando}
           className="btn-primary gap-1.5 disabled:opacity-50"
         >
           <Icon name="printer" className="w-4 h-4" />
-          {imprimiendo ? "Imprimiendo…" : editando ? "Guardar e imprimir" : "Imprimir etiquetas"}
+          {imprimiendo ? "Imprimiendo…" : "Imprimir etiquetas"}
+        </button>
+        <button
+          onClick={guardar}
+          disabled={guardando || imprimiendo}
+          className="btn-ghost gap-1.5 disabled:opacity-50"
+        >
+          <Icon name="check" className="w-4 h-4" />
+          {guardando ? "Guardando…" : "Guardar"}
         </button>
         <Link to={editando ? "/piezas/etiquetas/historial" : "/piezas"} className="btn-ghost">
           Cancelar
