@@ -33,8 +33,8 @@ export default function PiezasManager({ casoId, caso }) {
   const [seleccion, setSeleccion] = useState(new Set());
   const [imprimiendo, setImprimiendo] = useState(false);
   const [fotoActiva, setFotoActiva] = useState(null);
-  const [fotosEntrega, setFotosEntrega] = useState(new Map());
-  const [subiendoFotoEntrega, setSubiendoFotoEntrega] = useState(null);
+  const [fotosRecibidas, setFotosRecibidas] = useState(new Map());
+  const [subiendoFotoRecibida, setSubiendoFotoRecibida] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -136,7 +136,7 @@ export default function PiezasManager({ casoId, caso }) {
     // 38 sin correr), se reintenta sin ella para no romper la lista.
     let recRes = await supabase
       .from("piezas_recibidas")
-      .select("pieza_clave, tramo, entregada_at, foto_entrega_path")
+      .select("pieza_clave, tramo, entregada_at, foto_recibida_path")
       .in("caso_id", casoIds);
     if (recRes.error) {
       recRes = await supabase
@@ -145,14 +145,14 @@ export default function PiezasManager({ casoId, caso }) {
         .in("caso_id", casoIds);
     }
     const rec = recRes.data;
-    const fotosPath = (rec || []).filter((r) => r.foto_entrega_path).map((r) => r.foto_entrega_path);
+    const fotosPath = (rec || []).filter((r) => r.foto_recibida_path).map((r) => r.foto_recibida_path);
     const { data: fotosFirmadas } = fotosPath.length
       ? await supabase.storage.from("fotos-casos").createSignedUrls(fotosPath, 60 * 60)
       : { data: [] };
     const urlPorPath = new Map((fotosFirmadas || []).map((f) => [f.path, f.signedUrl]));
-    setFotosEntrega(new Map((rec || []).filter((r) => r.foto_entrega_path).map((r) => [
+    setFotosRecibidas(new Map((rec || []).filter((r) => r.foto_recibida_path).map((r) => [
       r.pieza_clave,
-      { path: r.foto_entrega_path, url: urlPorPath.get(r.foto_entrega_path) || "" },
+      { path: r.foto_recibida_path, url: urlPorPath.get(r.foto_recibida_path) || "" },
     ])));
     setRecibidas(new Set((rec || []).map((r) => r.pieza_clave)));
     setEntregadas(new Set((rec || []).filter((r) => r.entregada_at).map((r) => r.pieza_clave)));
@@ -223,19 +223,19 @@ export default function PiezasManager({ casoId, caso }) {
       .eq("pieza_clave", p.clave);
   }
 
-  async function subirFotoEntrega(p, file) {
+  async function subirFotoRecibida(p, file) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Selecciona una imagen válida.");
       return;
     }
-    setSubiendoFotoEntrega(p.clave);
+    setSubiendoFotoRecibida(p.clave);
     setError("");
     let path = "";
     try {
       const comprimida = await compressImage(file, { maxWidth: 1400, quality: 0.8 });
       const extension = comprimida.type === "image/webp" ? "webp" : "jpg";
-      path = `piezas-entregadas/${casoId}/${uuid()}.${extension}`;
+      path = `piezas-recibidas/${casoId}/${uuid()}.${extension}`;
       const { error: uploadError } = await supabase.storage
         .from("fotos-casos")
         .upload(path, comprimida, { contentType: comprimida.type, upsert: false });
@@ -243,7 +243,7 @@ export default function PiezasManager({ casoId, caso }) {
 
       const { error: updateError } = await supabase
         .from("piezas_recibidas")
-        .update({ foto_entrega_path: path })
+        .update({ foto_recibida_path: path })
         .in("caso_id", casosRel)
         .eq("pieza_clave", p.clave);
       if (updateError) throw updateError;
@@ -252,13 +252,48 @@ export default function PiezasManager({ casoId, caso }) {
         .from("fotos-casos")
         .createSignedUrl(path, 60 * 60);
       if (signedError) throw signedError;
-      setFotosEntrega((prev) => new Map(prev).set(p.clave, { path, url: firmado?.signedUrl || "" }));
+      setFotosRecibidas((prev) => new Map(prev).set(p.clave, { path, url: firmado?.signedUrl || "" }));
     } catch (err) {
       if (path) await supabase.storage.from("fotos-casos").remove([path]);
-      setError(err.message || "No se pudo guardar la foto de entrega.");
+      setError(err.message || "No se pudo guardar la foto de recepción.");
     } finally {
-      setSubiendoFotoEntrega(null);
+      setSubiendoFotoRecibida(null);
     }
+  }
+
+  function controlFotoRecibida(p) {
+    const foto = fotosRecibidas.get(p.clave);
+    const subiendo = subiendoFotoRecibida === p.clave;
+    return (
+      <div className="flex items-center gap-1 shrink-0">
+        {foto?.url && (
+          <button
+            type="button"
+            onClick={() => setFotoActiva({ src: foto.url, nombre: `Recepción de ${p.nombre}` })}
+            className="rounded-lg overflow-hidden border border-[var(--line)]"
+            title="Ver foto de recepción"
+          >
+            <img src={foto.url} alt="Foto de recepción" className="w-9 h-9 object-cover" />
+          </button>
+        )}
+        <label
+          className={`p-2 rounded-lg cursor-pointer text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--brand-red)] ${subiendo ? "opacity-50" : ""}`}
+          title={foto?.url ? "Cambiar foto de recepción" : "Subir foto de recepción"}
+        >
+          <Icon name="camera" className="w-4 h-4" />
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            disabled={subiendo}
+            onChange={(e) => {
+              subirFotoRecibida(p, e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+    );
   }
 
   async function setTramo(p, valor) {
@@ -413,32 +448,7 @@ export default function PiezasManager({ casoId, caso }) {
                 ) : entregada ? (
                   // Entregada a un reparador: fuera del anaquel. Click para deshacer.
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {fotosEntrega.get(p.clave)?.url && (
-                      <button
-                        type="button"
-                        onClick={() => setFotoActiva({ src: fotosEntrega.get(p.clave).url, nombre: `Entrega de ${p.nombre}` })}
-                        className="rounded-lg overflow-hidden border border-[var(--line)]"
-                        title="Ver foto de entrega"
-                      >
-                        <img src={fotosEntrega.get(p.clave).url} alt="Foto de entrega" className="w-9 h-9 object-cover" />
-                      </button>
-                    )}
-                    <label
-                      className={`p-2 rounded-lg cursor-pointer text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--brand-red)] ${subiendoFotoEntrega === p.clave ? "opacity-50" : ""}`}
-                      title={fotosEntrega.get(p.clave)?.url ? "Cambiar foto de entrega" : "Subir foto de entrega"}
-                    >
-                      <Icon name="camera" className="w-4 h-4" />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="sr-only"
-                        disabled={subiendoFotoEntrega === p.clave}
-                        onChange={(e) => {
-                          subirFotoEntrega(p, e.target.files?.[0]);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
+                    {controlFotoRecibida(p)}
                     <button
                       onClick={() => toggleEntregada(p)}
                       title="Entregada a un reparador (toca para deshacer)"
@@ -449,6 +459,7 @@ export default function PiezasManager({ casoId, caso }) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {controlFotoRecibida(p)}
                     {/* Espacio del anaquel (se elige en una grilla) */}
                     <button
                       onClick={() => setTramoPieza(p)}
