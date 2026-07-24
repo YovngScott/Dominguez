@@ -37,7 +37,7 @@ export default function PiezasList() {
       const porCaso = new Map();
       (cots || []).forEach((c) => {
         if (!porCaso.has(c.caso_id)) {
-          porCaso.set(c.caso_id, { caso_id: c.caso_id, info: c, claves: new Set() });
+          porCaso.set(c.caso_id, { caso_id: c.caso_id, info: c, claves: new Set(), fotos: [] });
         }
         const reg = porCaso.get(c.caso_id);
         (c.items_piezas || []).forEach((it) => {
@@ -47,12 +47,13 @@ export default function PiezasList() {
       });
       (etqs || []).forEach((e) => {
         if (!porCaso.has(e.caso_id)) {
-          porCaso.set(e.caso_id, { caso_id: e.caso_id, info: e, claves: new Set() });
+          porCaso.set(e.caso_id, { caso_id: e.caso_id, info: e, claves: new Set(), fotos: [] });
         }
         const reg = porCaso.get(e.caso_id);
         (e.piezas || []).forEach((it) => {
           const k = clave(it.nombre || nombrePieza(it));
           if (k) reg.claves.add(k);
+          if (it.foto_path && !reg.fotos.includes(it.foto_path)) reg.fotos.push(it.foto_path);
         });
       });
 
@@ -66,6 +67,12 @@ export default function PiezasList() {
         recPorCaso.get(r.caso_id).add(r.pieza_clave);
       });
 
+      const paths = conPiezas.flatMap((r) => r.fotos || []);
+      const { data: signed } = paths.length
+        ? await supabase.storage.from("fotos-casos").createSignedUrls(paths, 60 * 60)
+        : { data: [] };
+      const urls = new Map((signed || []).map((s) => [s.path, s.signedUrl]));
+
       const lista = conPiezas.map((r) => {
         const recSet = recPorCaso.get(r.caso_id) || new Set();
         // Cuenta solo las recibidas que aún existen en la cotización.
@@ -73,7 +80,7 @@ export default function PiezasList() {
         r.claves.forEach((k) => {
           if (recSet.has(k)) recibidas += 1;
         });
-        return { caso_id: r.caso_id, info: r.info, total: r.claves.size, recibidas };
+        return { caso_id: r.caso_id, info: r.info, total: r.claves.size, recibidas, fotos: (r.fotos || []).map((p) => urls.get(p)).filter(Boolean) };
       });
 
       // Pendientes primero.
@@ -136,6 +143,13 @@ export default function PiezasList() {
                 className="flex items-center justify-between px-5 py-4 hover:bg-[var(--paper)] gap-3"
               >
                 <div className="min-w-0">
+                  {c.fotos?.length > 0 && (
+                    <div className="flex gap-1.5 mb-2">
+                      {c.fotos.slice(0, 3).map((src, i) => (
+                        <img key={i} src={src} alt="Foto de pieza" className="w-12 h-12 rounded-lg object-cover border border-[var(--line)]" />
+                      ))}
+                    </div>
+                  )}
                   <p className="font-bold text-[var(--ink)] truncate">
                     {[c.info.marca, c.info.modelo].filter(Boolean).join(" ") || "Vehículo"}
                     {c.info.placa ? ` · ${c.info.placa}` : ""}

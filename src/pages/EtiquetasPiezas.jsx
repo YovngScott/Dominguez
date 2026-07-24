@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { compressImage } from "../lib/imageCompress";
+import { uuid } from "../lib/uuid";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import {
@@ -100,7 +102,16 @@ export default function EtiquetasPiezas() {
         setCasoVinculado(data.caso_id || null);
         const cs = (data.cajas || []).map((c) => c.piezas || []);
         // Compatibilidad con etiquetas viejas (una sola lista de piezas)
-        setCajas(cs.length ? cs : [data.piezas || []]);
+        const cajasCargadas = cs.length ? cs : [data.piezas || []];
+        const paths = cajasCargadas.flat().map((p) => p.foto_path).filter(Boolean);
+        const { data: signed } = paths.length
+          ? await supabase.storage.from("fotos-casos").createSignedUrls(paths, 60 * 60)
+          : { data: [] };
+        const urls = new Map((signed || []).map((s) => [s.path, s.signedUrl]));
+        setCajas(cajasCargadas.map((c) => c.map((p) => ({
+          ...p,
+          foto_url: p.foto_path ? urls.get(p.foto_path) || "" : "",
+        }))));
       }
     }
     load();
@@ -130,7 +141,7 @@ export default function EtiquetasPiezas() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  function agregarPiezaACaja(cajaIdx, nombre, cantidad) {
+  /* function agregarPiezaACaja(cajaIdx, nombre, cantidad) {
     const limpio = (nombre || "").trim();
     if (!limpio) return;
     setCajas((prev) => prev.map((c, i) => (i === cajaIdx ? [...c, { nombre: limpio, cantidad }] : c)));
@@ -140,10 +151,45 @@ export default function EtiquetasPiezas() {
       agregarPiezaCatalogo(limpio);
       setPiezasCatalogo((prev) => [...prev, { id: limpio, label: limpio }]);
     }
+  } */
+
+  async function subirFotoPieza(file) {
+    if (!file?.type?.startsWith("image/")) throw new Error("Selecciona una imagen válida.");
+    const comprimida = await compressImage(file, { maxWidth: 1200, quality: 0.78 });
+    const extension = comprimida.type === "image/webp" ? "webp" : "jpg";
+    const path = `piezas/${uuid()}.${extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from("fotos-casos")
+      .upload(path, comprimida, { contentType: comprimida.type, upsert: false });
+    if (uploadError) throw uploadError;
+    const { data: signed, error: signedError } = await supabase.storage
+      .from("fotos-casos")
+      .createSignedUrl(path, 60 * 60);
+    if (signedError) throw signedError;
+    return { foto_path: path, foto_url: signed?.signedUrl || "" };
   }
 
-  function quitarPiezaDeCaja(cajaIdx, piezaIdx) {
+  async function eliminarFotoPieza(path) {
+    if (path) await supabase.storage.from("fotos-casos").remove([path]);
+  }
+
+  async function agregarPiezaConFoto(cajaIdx, nombre, cantidad, file) {
+    const limpio = (nombre || "").trim();
+    if (!limpio) return;
+    let foto = {};
+    if (file) foto = await subirFotoPieza(file);
+    setCajas((prev) => prev.map((c, i) => (i === cajaIdx ? [...c, { nombre: limpio, cantidad, ...foto }] : c)));
+
+    if (!piezasCatalogo.some((p) => p.label.toLowerCase() === limpio.toLowerCase())) {
+      agregarPiezaCatalogo(limpio);
+      setPiezasCatalogo((prev) => [...prev, { id: limpio, label: limpio }]);
+    }
+  }
+
+  async function quitarPiezaDeCaja(cajaIdx, piezaIdx) {
+    const pieza = cajas[cajaIdx]?.[piezaIdx];
     setCajas((prev) => prev.map((c, i) => (i === cajaIdx ? c.filter((_, j) => j !== piezaIdx) : c)));
+    await eliminarFotoPieza(pieza?.foto_path);
   }
 
   function agregarCaja() {
@@ -151,7 +197,9 @@ export default function EtiquetasPiezas() {
   }
 
   function quitarCaja(cajaIdx) {
+    const eliminadas = cajas[cajaIdx] || [];
     setCajas((prev) => prev.filter((_, i) => i !== cajaIdx));
+    Promise.all(eliminadas.map((p) => eliminarFotoPieza(p.foto_path)));
   }
 
   // Cajas con al menos una pieza (las vacías no se imprimen ni se guardan).
@@ -219,6 +267,8 @@ export default function EtiquetasPiezas() {
   }
 
   async function guardarEtiqueta(cajasValidas, casoId) {
+    const limpiarPieza = ({ nombre, cantidad, foto_path }) => ({ nombre, cantidad, ...(foto_path ? { foto_path } : {}) });
+    const cajasLimpias = cajasValidas.map((piezas) => piezas.map(limpiarPieza));
     const payload = {
       cliente_nombre: form.cliente || null,
       telefono: form.telefono || null,
@@ -228,8 +278,8 @@ export default function EtiquetasPiezas() {
       aseguradora_nombre: form.aseguradora || null,
       numero_reclamo: form.reclamo || null,
       caso_id: casoId || null,
-      cajas: cajasValidas.map((piezas) => ({ piezas })),
-      piezas: cajasValidas.flat(), // lista plana (compatibilidad / búsqueda)
+      cajas: cajasLimpias.map((piezas) => ({ piezas })),
+      piezas: cajasLimpias.flat(), // lista plana (compatibilidad / búsqueda)
     };
     const id = etiquetaId || guardadoId;
     if (id) {
@@ -274,7 +324,7 @@ export default function EtiquetasPiezas() {
           aseguradora_nombre: form.aseguradora,
           numero_reclamo: form.reclamo,
         },
-        cajas: validas.map((piezas) => ({ piezas })),
+        cajas: validas.map((piezas) => ({ piezas: piezas.map(({ nombre, cantidad }) => ({ nombre, cantidad })) })),
         qrUrl: casoId ? `${PUBLIC_URL}/piezas/${casoId}` : null,
       };
 
@@ -421,7 +471,7 @@ export default function EtiquetasPiezas() {
             total={cajas.length}
             piezas={piezas}
             piezasCatalogo={piezasCatalogo}
-            onAgregar={(nombre, cant) => agregarPiezaACaja(i, nombre, cant)}
+            onAgregar={(nombre, cant, file) => agregarPiezaConFoto(i, nombre, cant, file)}
             onQuitar={(j) => quitarPiezaDeCaja(i, j)}
             onEliminarCaja={() => quitarCaja(i)}
           />
@@ -443,12 +493,31 @@ export default function EtiquetasPiezas() {
 function CajaCard({ indice, total, piezas, piezasCatalogo, onAgregar, onQuitar, onEliminarCaja }) {
   const [nuevaPieza, setNuevaPieza] = useState("");
   const [nuevaCant, setNuevaCant] = useState("1");
+  const [foto, setFoto] = useState(null);
+  const [fotoPreview, setFotoPreview] = useState("");
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
 
-  function agregar() {
+  async function agregar() {
     if (!nuevaPieza.trim()) return;
-    onAgregar(nuevaPieza, Math.max(1, parseInt(nuevaCant, 10) || 1));
-    setNuevaPieza("");
-    setNuevaCant("1");
+    setSubiendoFoto(true);
+    try {
+      await onAgregar(nuevaPieza, Math.max(1, parseInt(nuevaCant, 10) || 1), foto);
+      setNuevaPieza("");
+      setNuevaCant("1");
+      setFoto(null);
+      setFotoPreview("");
+    } catch (err) {
+      alert(err.message || "No se pudo subir la foto de la pieza.");
+    } finally {
+      setSubiendoFoto(false);
+    }
+  }
+
+  function elegirFoto(file) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return alert("Selecciona una imagen válida.");
+    setFoto(file);
+    setFotoPreview(URL.createObjectURL(file));
   }
 
   return (
@@ -488,9 +557,38 @@ function CajaCard({ indice, total, piezas, piezasCatalogo, onAgregar, onQuitar, 
           placeholder="Cant."
           aria-label="Cantidad"
         />
-        <button onClick={agregar} className="btn-primary whitespace-nowrap gap-1.5">
+        <button onClick={agregar} disabled={subiendoFoto} className="btn-primary whitespace-nowrap gap-1.5 disabled:opacity-50">
           <Icon name="plus" className="w-4 h-4" /> Agregar
         </button>
+      </div>
+
+      <div
+        className={`mt-3 rounded-xl border border-dashed p-3 transition-colors ${fotoPreview ? "border-[var(--brand-red)] bg-[var(--brand-red-50)]" : "border-[var(--line)] hover:border-[var(--brand-red)]"}`}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          elegirFoto(e.dataTransfer.files?.[0]);
+        }}
+      >
+        <label className="flex items-center gap-3 cursor-pointer">
+          {fotoPreview ? (
+            <img src={fotoPreview} alt="Vista previa de la pieza" className="w-14 h-14 object-cover rounded-lg border border-[var(--line)]" />
+          ) : (
+            <span className="w-14 h-14 rounded-lg bg-[var(--paper)] flex items-center justify-center text-[var(--ink-soft)]">
+              <Icon name="camera" className="w-6 h-6" />
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-[var(--ink)]">Foto de la pieza <span className="font-normal text-[var(--ink-soft)]">(opcional)</span></span>
+            <span className="block text-xs text-[var(--ink-soft)]">Toca para elegir o arrastra una imagen aquí</span>
+          </span>
+          <input type="file" accept="image/*" className="sr-only" onChange={(e) => elegirFoto(e.target.files?.[0])} />
+        </label>
+        {fotoPreview && (
+          <button type="button" onClick={() => { setFoto(null); setFotoPreview(""); }} className="text-xs text-[var(--brand-red)] mt-2 ml-[4.25rem]">
+            Quitar foto
+          </button>
+        )}
       </div>
 
       {/* Lista */}
@@ -503,6 +601,7 @@ function CajaCard({ indice, total, piezas, piezasCatalogo, onAgregar, onQuitar, 
           {piezas.map((p, j) => (
             <li key={j} className="flex items-center gap-3 py-2.5">
               <span className="w-6 h-6 rounded-md border-2 border-[var(--ink-soft)] shrink-0" />
+              {p.foto_url ? <img src={p.foto_url} alt="" className="w-9 h-9 object-cover rounded-md border border-[var(--line)]" /> : null}
               <span className="flex-1 font-medium text-[var(--ink)]">{p.nombre}</span>
               {p.cantidad > 1 && (
                 <span className="text-xs text-[var(--ink-soft)] whitespace-nowrap">x{p.cantidad}</span>

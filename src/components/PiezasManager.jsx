@@ -5,6 +5,7 @@ import { nombrePieza } from "../lib/cotizacion";
 import { formatoTramo } from "../lib/tramos";
 import TramoPicker from "./TramoPicker";
 import Icon from "./Icon";
+import Lightbox from "./Lightbox";
 
 // Clave estable para identificar una pieza entre cotizaciones del mismo caso.
 const clave = (s) => (s || "").trim().toLowerCase();
@@ -29,6 +30,7 @@ export default function PiezasManager({ casoId, caso }) {
   const [mostrarEtiquetas, setMostrarEtiquetas] = useState(false);
   const [seleccion, setSeleccion] = useState(new Set());
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [fotoActiva, setFotoActiva] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -84,13 +86,14 @@ export default function PiezasManager({ casoId, caso }) {
     // etiquetas de piezas (las etiquetas vinculan las piezas al caso sin crear
     // una cotización).
     const map = new Map();
+    const fotoPorPieza = new Map();
     (cots || []).forEach((c) => {
       (c.items_piezas || []).forEach((it) => {
         const nombre = nombrePieza(it);
         const k = clave(nombre);
         if (!k) return;
         if (!map.has(k)) {
-          map.set(k, { clave: k, nombre, cantidad: Number(it.cantidad) || 1, cotizacion: c.numero });
+          map.set(k, { clave: k, nombre, cantidad: Number(it.cantidad) || 1, cotizacion: c.numero, foto_path: null });
         }
       });
     });
@@ -99,12 +102,21 @@ export default function PiezasManager({ casoId, caso }) {
         const nombre = it.nombre || nombrePieza(it);
         const k = clave(nombre);
         if (!k) return;
+        if (it.foto_path && !fotoPorPieza.has(k)) fotoPorPieza.set(k, it.foto_path);
         if (!map.has(k)) {
-          map.set(k, { clave: k, nombre, cantidad: Number(it.cantidad) || 1, cotizacion: null });
+          map.set(k, { clave: k, nombre, cantidad: Number(it.cantidad) || 1, cotizacion: null, foto_path: it.foto_path || null });
         }
       });
     });
-    setPiezas([...map.values()]);
+    const paths = [...fotoPorPieza.values()].filter(Boolean);
+    const { data: signed } = paths.length
+      ? await supabase.storage.from("fotos-casos").createSignedUrls(paths, 60 * 60)
+      : { data: [] };
+    const urls = new Map((signed || []).map((s) => [s.path, s.signedUrl]));
+    setPiezas([...map.values()].map((p) => {
+      const foto_path = fotoPorPieza.get(p.clave) || p.foto_path;
+      return { ...p, foto_path, foto_url: foto_path ? urls.get(foto_path) || "" : "" };
+    }));
     if (!caso) {
       if (cots?.length) setInfoCaso(cots[cots.length - 1]);
       else if (etqs?.length) setInfoCaso(etqs[etqs.length - 1]);
@@ -325,6 +337,17 @@ export default function PiezasManager({ casoId, caso }) {
                       recibida ? "text-[var(--ink-soft)] line-through" : "text-[var(--ink)]"
                     }`}
                   >
+                    {p.foto_url && (
+                      <img
+                        src={p.foto_url}
+                        alt={`Foto de ${p.nombre}`}
+                        className="w-12 h-12 rounded-lg object-cover border border-[var(--line)] shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFotoActiva({ src: p.foto_url, nombre: p.nombre });
+                        }}
+                      />
+                    )}
                     {p.nombre}
                   </span>
                   {p.cantidad > 1 && (
@@ -401,6 +424,13 @@ export default function PiezasManager({ casoId, caso }) {
           onImprimir={imprimirEtiquetas}
           onCancelar={() => setMostrarEtiquetas(false)}
           imprimiendo={imprimiendo}
+        />
+      )}
+      {fotoActiva && (
+        <Lightbox
+          src={fotoActiva.src}
+          alt={`Foto de ${fotoActiva.nombre}`}
+          onClose={() => setFotoActiva(null)}
         />
       )}
     </div>

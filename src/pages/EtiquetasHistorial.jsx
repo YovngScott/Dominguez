@@ -28,7 +28,21 @@ export default function EtiquetasHistorial() {
       .from("etiquetas_piezas")
       .select("*")
       .order("created_at", { ascending: false });
-    setEtiquetas(data || []);
+    const filas = data || [];
+    const paths = filas.flatMap((e) => piezasPlanas(e).map((p) => p.foto_path).filter(Boolean));
+    const { data: signed } = paths.length
+      ? await supabase.storage.from("fotos-casos").createSignedUrls(paths, 60 * 60)
+      : { data: [] };
+    const urls = new Map((signed || []).map((s) => [s.path, s.signedUrl]));
+    const conFotos = filas.map((e) => {
+      const pintar = (p) => ({ ...p, foto_url: p.foto_path ? urls.get(p.foto_path) || "" : "" });
+      return {
+        ...e,
+        piezas: (e.piezas || []).map(pintar),
+        cajas: (e.cajas || []).map((c) => ({ ...c, piezas: (c.piezas || []).map(pintar) })),
+      };
+    });
+    setEtiquetas(conFotos);
     setLoading(false);
   }
 
@@ -129,8 +143,8 @@ export default function EtiquetasHistorial() {
                       onClick={() => reimprimir(et)}
                       disabled={imprimiendoId === et.id}
                       title="Reimprimir"
-                      className="p-2 rounded-lg text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--brand-red)] disabled:opacity-50"
-                    >
+                       className="p-2 rounded-lg text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--brand-red)] disabled:opacity-50"
+                     >
                       <Icon name="printer" className="w-4 h-4" />
                     </button>
                     <Link
@@ -155,10 +169,13 @@ export default function EtiquetasHistorial() {
                     {piezas.map((p, i) => (
                       <span
                         key={i}
-                        className="text-xs bg-[var(--paper)] text-[var(--ink)] px-2 py-1 rounded-md"
+                        className="text-xs bg-[var(--paper)] text-[var(--ink)] px-2 py-1 rounded-md inline-flex items-center gap-1.5"
                       >
+                        {p.foto_url && <img src={p.foto_url} alt="" className="w-7 h-7 object-cover rounded" />}
+                         <span>
                         {p.nombre}
                         {p.cantidad > 1 ? ` ×${p.cantidad}` : ""}
+                      </span>
                       </span>
                     ))}
                   </div>
