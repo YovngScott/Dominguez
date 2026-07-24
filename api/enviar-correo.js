@@ -26,6 +26,13 @@ export default async function handler(req, res) {
   if (!Array.isArray(to) || !to.length) return res.status(400).json({ error: "Falta el destinatario." });
   if (!subject) return res.status(400).json({ error: "Falta el asunto." });
 
+  let adjuntos = [];
+  try {
+    adjuntos = await prepararAdjuntos(attachment || []);
+  } catch (error) {
+    return res.status(422).json({ error: error.message || "No se pudo preparar un adjunto." });
+  }
+
   const body = {
     sender: { email: "segurosycotizaciones@dominguezapintura.com", name: "Dominguez Auto Pintura" },
     to,
@@ -33,7 +40,7 @@ export default async function handler(req, res) {
     htmlContent: htmlContent || "<p></p>",
   };
   if (replyTo?.email) body.replyTo = replyTo;
-  if (Array.isArray(attachment) && attachment.length) body.attachment = attachment;
+  if (adjuntos.length) body.attachment = adjuntos;
 
   // Copia oculta a la bandeja del negocio para que el envío quede visible en Gmail
   // (Brevo entrega directo por API, sin pasar por Gmail, así que sin bcc no queda rastro ahí).
@@ -52,4 +59,33 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(502).json({ error: "No se pudo conectar con Brevo: " + e.message });
   }
+}
+
+// El navegador manda URLs firmadas, no Base64, para no superar el límite de
+// Vercel (413). Aquí se descargan y se pasan a Brevo como adjuntos binarios.
+// Esto evita además que Brevo intente identificar un WebP desde una URL aunque
+// el archivo ya haya sido convertido a JPG en el cliente.
+async function prepararAdjuntos(adjuntos) {
+  const lista = Array.isArray(adjuntos) ? adjuntos : [];
+  const resultado = [];
+  let totalBytes = 0;
+  const MAX_TOTAL = 18 * 1024 * 1024; // Brevo admite hasta 20 MB por correo.
+
+  for (const adjunto of lista) {
+    if (adjunto?.content && adjunto?.name) {
+      resultado.push({ content: adjunto.content, name: adjunto.name });
+      continue;
+    }
+    if (!adjunto?.url || !adjunto?.name) continue;
+
+    const respuesta = await fetch(adjunto.url);
+    if (!respuesta.ok) throw new Error(`No se pudo descargar el adjunto "${adjunto.name}".`);
+    const bytes = new Uint8Array(await respuesta.arrayBuffer());
+    totalBytes += bytes.byteLength;
+    if (totalBytes > MAX_TOTAL) {
+      throw new Error("Las fotos superan 18 MB. Desmarca algunas fotos e intenta nuevamente.");
+    }
+    resultado.push({ content: Buffer.from(bytes).toString("base64"), name: adjunto.name });
+  }
+  return resultado;
 }
