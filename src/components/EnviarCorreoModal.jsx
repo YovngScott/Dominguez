@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { enviarCorreo } from "../lib/enviarCorreo";
+import { urlAJpegBlob } from "../lib/toJpeg";
+import { uuid } from "../lib/uuid";
 import Icon from "./Icon";
 
 const SEGUNDOS_PARA_DESHACER = 8;
@@ -128,7 +130,22 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
         // mandan como contenido base64 (más compatible en cualquier correo).
         // Enviar URLs firmadas evita superar el límite de tamaño del JSON
         // cuando la cotización tiene muchas fotos.
-        attachment.push(...evidencias.map((url, i) => ({ url, name: `dano-${i + 1}.webp` })));
+        const fotos = await Promise.all(
+          evidencias.map(async (url, i) => {
+            const jpg = await urlAJpegBlob(url, 0.88);
+            const path = `${cot.id}/correo/${uuid()}.jpg`;
+            const { error: uploadError } = await supabase.storage
+              .from("cotizaciones")
+              .upload(path, jpg, { contentType: "image/jpeg", upsert: false });
+            if (uploadError) throw uploadError;
+            const { data: firmado, error: signedError } = await supabase.storage
+              .from("cotizaciones")
+              .createSignedUrl(path, 60 * 60);
+            if (signedError || !firmado?.signedUrl) throw signedError || new Error("No se pudo preparar una foto.");
+            return { url: firmado.signedUrl, name: `dano-${i + 1}.jpg` };
+          })
+        );
+        attachment.push(...fotos);
       }
 
       // UN solo correo con todos los destinatarios en el "Para" (no uno por uno).
