@@ -8,7 +8,7 @@ const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
 // Visor de foto a pantalla completa con zoom (rueda del mouse, doble clic,
 // pellizco en móvil) y arrastre para desplazar cuando está ampliada.
-export default function Lightbox({ src, alt = "", filename = "foto.jpg", onClose }) {
+export default function Lightbox({ src, alt = "", filename = "foto.jpg", onClose, onDelete, deleting = false }) {
   const [scale, setScale] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [arrastrando, setArrastrando] = useState(false);
@@ -122,6 +122,11 @@ export default function Lightbox({ src, alt = "", filename = "foto.jpg", onClose
         <BotonZoom onClick={onClose} label="Cerrar">
           <Icon name="close" className="w-5 h-5" strokeWidth={2} />
         </BotonZoom>
+        {onDelete && (
+          <BotonZoom onClick={onDelete} label={deleting ? "Eliminando" : "Eliminar foto"}>
+            <Icon name="trash" className={`w-5 h-5 ${deleting ? "animate-pulse" : ""}`} />
+          </BotonZoom>
+        )}
       </div>
 
       <img

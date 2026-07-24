@@ -35,6 +35,7 @@ export default function PiezasManager({ casoId, caso }) {
   const [fotoActiva, setFotoActiva] = useState(null);
   const [fotosRecibidas, setFotosRecibidas] = useState(new Map());
   const [subiendoFotoRecibida, setSubiendoFotoRecibida] = useState(null);
+  const [eliminandoFoto, setEliminandoFoto] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -269,7 +270,7 @@ export default function PiezasManager({ casoId, caso }) {
         {foto?.url && (
           <button
             type="button"
-            onClick={() => setFotoActiva({ src: foto.url, nombre: `Recepción de ${p.nombre}` })}
+            onClick={() => setFotoActiva({ src: foto.url, nombre: `Recepción de ${p.nombre}`, clave: p.clave })}
             className="rounded-lg overflow-hidden border border-[var(--line)]"
             title="Ver foto de recepción"
           >
@@ -294,6 +295,32 @@ export default function PiezasManager({ casoId, caso }) {
         </label>
       </div>
     );
+  }
+
+  async function eliminarFotoRecibida() {
+    if (!fotoActiva?.clave) return;
+    if (!confirm("¿Eliminar la foto de recepción de esta pieza?")) return;
+    const foto = fotosRecibidas.get(fotoActiva.clave);
+    setEliminandoFoto(true);
+    try {
+      if (foto?.path) await supabase.storage.from("fotos-casos").remove([foto.path]);
+      const { error: updateError } = await supabase
+        .from("piezas_recibidas")
+        .update({ foto_recibida_path: null })
+        .in("caso_id", casosRel)
+        .eq("pieza_clave", fotoActiva.clave);
+      if (updateError) throw updateError;
+      setFotosRecibidas((prev) => {
+        const next = new Map(prev);
+        next.delete(fotoActiva.clave);
+        return next;
+      });
+      setFotoActiva(null);
+    } catch (err) {
+      setError(err.message || "No se pudo eliminar la foto.");
+    } finally {
+      setEliminandoFoto(false);
+    }
   }
 
   async function setTramo(p, valor) {
@@ -521,6 +548,8 @@ export default function PiezasManager({ casoId, caso }) {
           src={fotoActiva.src}
           alt={`Foto de ${fotoActiva.nombre}`}
           onClose={() => setFotoActiva(null)}
+          onDelete={eliminarFotoRecibida}
+          deleting={eliminandoFoto}
         />
       )}
     </div>
