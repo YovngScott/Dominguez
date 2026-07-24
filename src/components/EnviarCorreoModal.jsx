@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { enviarCorreo } from "../lib/enviarCorreo";
-import { urlAJpegBlob, blobABase64 } from "../lib/toJpeg";
 import Icon from "./Icon";
 
 const SEGUNDOS_PARA_DESHACER = 8;
@@ -127,14 +126,9 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
         // Las fotos se guardan en WebP en Storage; Brevo las adjuntaría tal
         // cual si se les pasa la URL, así que se convierten a JPG aquí y se
         // mandan como contenido base64 (más compatible en cualquier correo).
-        const fotos = await Promise.all(
-          evidencias.map(async (u, i) => {
-            const jpg = await urlAJpegBlob(u);
-            const content = await blobABase64(jpg);
-            return { content, name: `dano-${i + 1}.jpg` };
-          })
-        );
-        attachment.push(...fotos);
+        // Enviar URLs firmadas evita superar el límite de tamaño del JSON
+        // cuando la cotización tiene muchas fotos.
+        attachment.push(...evidencias.map((url, i) => ({ url, name: `dano-${i + 1}.webp` })));
       }
 
       // UN solo correo con todos los destinatarios en el "Para" (no uno por uno).
