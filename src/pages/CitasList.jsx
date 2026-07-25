@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
 import { avisarCitaConfirmada } from "../lib/confirmarCita";
 
@@ -31,7 +32,7 @@ function fechaLarga(iso) {
 export default function CitasList() {
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [nuevo, setNuevo] = useState(false);
+  const [citaModal, setCitaModal] = useState(null);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState(null); // { tipo: "ok"|"fail"|"info", texto }
 
@@ -123,7 +124,7 @@ export default function CitasList() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Citas</h1>
-        <button onClick={() => setNuevo(true)} className="btn-primary">
+        <button onClick={() => setCitaModal({})} className="btn-primary">
           <span className="text-lg leading-none">+</span> Nueva cita
         </button>
       </div>
@@ -217,26 +218,44 @@ export default function CitasList() {
                     </option>
                   ))}
                 </select>
-                <button
-                  onClick={() => eliminar(c)}
-                  className="btn-ghost text-sm py-1.5 px-2.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
-                  title="Eliminar"
-                >
-                  <Icon name="trash" className="w-4 h-4" />
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setCitaModal(c)}
+                    className="btn-ghost text-sm py-1.5 px-2.5"
+                    title="Editar cita"
+                    aria-label={`Editar cita de ${c.nombre}`}
+                  >
+                    <Icon name="pencil" className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => eliminar(c)}
+                    className="btn-ghost text-sm py-1.5 px-2.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
+                    title="Eliminar"
+                    aria-label={`Eliminar cita de ${c.nombre}`}
+                  >
+                    <Icon name="trash" className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {nuevo && (
-        <NuevaCitaModal
-          onCancel={() => setNuevo(false)}
+      {citaModal && (
+        <CitaModal
+          cita={citaModal.id ? citaModal : null}
+          onCancel={() => setCitaModal(null)}
           onSaved={(info) => {
-            setNuevo(false);
+            setCitaModal(null);
             load();
-            if (info?.wa === true) setAviso({ tipo: "ok", texto: `WhatsApp de confirmación enviado a ${info.nombre}.` });
+            if (info?.editando && info?.telefonoCambio && info?.wa === true)
+              setAviso({ tipo: "ok", texto: `Cita actualizada y WhatsApp enviado al nuevo número de ${info.nombre}.` });
+            else if (info?.editando && info?.telefonoCambio && info?.wa === false)
+              setAviso({ tipo: "fail", texto: "La cita se actualizó, pero no se pudo enviar el WhatsApp al nuevo número." });
+            else if (info?.editando)
+              setAviso({ tipo: "info", texto: "Cita actualizada correctamente." });
+            else if (info?.wa === true) setAviso({ tipo: "ok", texto: `WhatsApp de confirmación enviado a ${info.nombre}.` });
             else if (info?.wa === false)
               setAviso({ tipo: "fail", texto: "La cita se guardó, pero no se pudo enviar el WhatsApp. Revisa la conexión de WhatsApp." });
           }}
@@ -246,22 +265,40 @@ export default function CitasList() {
   );
 }
 
-function NuevaCitaModal({ onCancel, onSaved }) {
+function CitaModal({ cita, onCancel, onSaved }) {
+  const editando = Boolean(cita?.id);
   const [clientes, setClientes] = useState([]);
   const [casos, setCasos] = useState([]);
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
-  const [form, setForm] = useState({
-    fecha: hoy(),
-    hora: "",
-    cliente_id: "",
-    caso_id: "",
-    nombre: "",
-    telefono: "",
-    motivo: "",
-    nota: "",
-  });
+  const [confirmarSalida, setConfirmarSalida] = useState(false);
+  const [form, setForm] = useState(() => ({
+    fecha: cita?.fecha || hoy(),
+    hora: cita?.hora || "",
+    cliente_id: cita?.cliente_id || "",
+    caso_id: cita?.caso_id || "",
+    nombre: cita?.nombre || "",
+    telefono: cita?.telefono || "",
+    motivo: cita?.motivo || "",
+    nota: cita?.nota || "",
+  }));
   const up = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const telefonoOriginal = String(cita?.telefono || "").replace(/\D/g, "");
+  const telefonoActual = String(form.telefono || "").replace(/\D/g, "");
+  const telefonoCambio = editando && telefonoActual !== telefonoOriginal;
+
+  async function cargarCasos(clienteId) {
+    if (!clienteId) {
+      setCasos([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("casos")
+      .select("id, placa, marca:marcas(nombre), modelo:modelos(nombre)")
+      .eq("cliente_id", clienteId)
+      .order("created_at", { ascending: false });
+    setCasos(data || []);
+  }
 
   useEffect(() => {
     async function load() {
@@ -270,9 +307,10 @@ function NuevaCitaModal({ onCancel, onSaved }) {
         .select("id, nombre_completo, telefono")
         .order("nombre_completo");
       setClientes(data || []);
+      if (cita?.cliente_id) await cargarCasos(cita.cliente_id);
     }
     load();
-  }, []);
+  }, [cita?.cliente_id]);
 
   // Al elegir cliente: prefijar nombre/teléfono y cargar sus casos.
   async function elegirCliente(id) {
@@ -284,16 +322,7 @@ function NuevaCitaModal({ onCancel, onSaved }) {
       nombre: cli?.nombre_completo || f.nombre,
       telefono: cli?.telefono || f.telefono,
     }));
-    if (!id) {
-      setCasos([]);
-      return;
-    }
-    const { data } = await supabase
-      .from("casos")
-      .select("id, placa, marca:marcas(nombre), modelo:modelos(nombre)")
-      .eq("cliente_id", id)
-      .order("created_at", { ascending: false });
-    setCasos(data || []);
+    await cargarCasos(id);
   }
 
   async function guardar() {
@@ -301,18 +330,26 @@ function NuevaCitaModal({ onCancel, onSaved }) {
     if (!form.nombre.trim()) return setError("El nombre es obligatorio.");
     if (!form.fecha) return setError("La fecha es obligatoria.");
     setGuardando(true);
-    const { data: userData } = await supabase.auth.getUser();
-    const { error: e } = await supabase.from("citas").insert({
+    const payload = {
       fecha: form.fecha,
       hora: form.hora || null,
-      nombre: form.nombre,
+      nombre: form.nombre.trim(),
       telefono: form.telefono || null,
       motivo: form.motivo || null,
       nota: form.nota || null,
       cliente_id: form.cliente_id || null,
       caso_id: form.caso_id || null,
-      created_by: userData?.user?.id,
-    });
+    };
+    let e;
+    if (editando) {
+      ({ error: e } = await supabase.from("citas").update(payload).eq("id", cita.id));
+    } else {
+      const { data: userData } = await supabase.auth.getUser();
+      ({ error: e } = await supabase.from("citas").insert({
+        ...payload,
+        created_by: userData?.user?.id,
+      }));
+    }
     if (e) {
       setGuardando(false);
       setError(e.message || "No se pudo guardar la cita. ¿Ejecutaste la migración sql/16_citas.sql?");
@@ -323,7 +360,7 @@ function NuevaCitaModal({ onCancel, onSaved }) {
     // el cierre: si falla, la cita ya quedó guardada. wa: null = sin teléfono,
     // true = enviado, false = falló.
     let wa = null;
-    if (form.telefono?.trim()) {
+    if (form.telefono?.trim() && (!editando || telefonoCambio)) {
       const casoSel = casos.find((c) => c.id === form.caso_id);
       const vehiculo = casoSel
         ? [casoSel.marca?.nombre, casoSel.modelo?.nombre, casoSel.placa].filter(Boolean).join(" ")
@@ -337,6 +374,7 @@ function NuevaCitaModal({ onCancel, onSaved }) {
           vehiculo,
           servicio: form.motivo || "Cita",
           esHoy: form.fecha === hoy(),
+          esActualizacion: editando,
         });
         wa = true;
       } catch (err) {
@@ -346,16 +384,23 @@ function NuevaCitaModal({ onCancel, onSaved }) {
     }
 
     setGuardando(false);
-    onSaved({ wa, nombre: form.nombre });
+    onSaved({ wa, nombre: form.nombre, editando, telefonoCambio });
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setConfirmarSalida(true);
+      }}
+    >
       <div
         className="bg-white rounded-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold text-[var(--ink)] mb-4">Nueva cita</h2>
+        <h2 className="text-lg font-bold text-[var(--ink)] mb-4">
+          {editando ? "Editar cita" : "Nueva cita"}
+        </h2>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
@@ -420,13 +465,24 @@ function NuevaCitaModal({ onCancel, onSaved }) {
 
         <div className="flex gap-3 mt-6">
           <button onClick={guardar} disabled={guardando} className="btn-primary disabled:opacity-50">
-            {guardando ? "Guardando…" : "Guardar cita"}
+            {guardando ? "Guardando…" : editando ? "Guardar cambios" : "Guardar cita"}
           </button>
-          <button onClick={onCancel} className="btn-ghost">
+          <button onClick={() => setConfirmarSalida(true)} className="btn-ghost">
             Cancelar
           </button>
         </div>
       </div>
+      {confirmarSalida && (
+        <ConfirmDialog
+          titulo="¿Salir sin guardar?"
+          mensaje="Los datos y cambios de esta cita no se guardarán."
+          confirmLabel="Sí, salir"
+          cancelLabel="Continuar editando"
+          icon="close"
+          onCancel={() => setConfirmarSalida(false)}
+          onConfirm={onCancel}
+        />
+      )}
     </div>
   );
 }

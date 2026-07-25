@@ -103,7 +103,7 @@ export async function validarSesionSupabase(req) {
 }
 
 // Texto de confirmación / recordatorio de cita (trato formal). WhatsApp usa
-// *asteriscos* para negrita. tipo: "confirmacion" | "recordatorio".
+// *asteriscos* para negrita. tipo: "confirmacion" | "recordatorio" | "actualizacion".
 export function textoCita({ nombre, fecha, hora, vehiculo, servicio, esHoy = false }, tipo = "confirmacion") {
   const v = (x, alt = "—") => {
     const s = String(x ?? "").trim();
@@ -111,7 +111,11 @@ export function textoCita({ nombre, fecha, hora, vehiculo, servicio, esHoy = fal
   };
   const horaV = v(hora, "");
   let encabezado;
-  if (tipo === "recordatorio") {
+  if (tipo === "actualizacion") {
+    encabezado = esHoy
+      ? `Los datos de su cita en *Dominguez Auto Pintura* fueron actualizados. Su cita es *para HOY*${horaV ? ` a las ${horaV}` : ""}:`
+      : "Los datos de su cita en *Dominguez Auto Pintura* fueron actualizados:";
+  } else if (tipo === "recordatorio") {
     encabezado = "Le recordamos su cita de mañana en *Dominguez Auto Pintura*:";
   } else if (esHoy) {
     encabezado = horaV
