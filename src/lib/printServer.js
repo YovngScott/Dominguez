@@ -1,4 +1,4 @@
-// Cliente del KT Print Server (app local que imprime ZPL directo en la
+// Cliente del STAGE AI LABS Print Server (app local propia que imprime ZPL directo en la
 // impresora térmica de etiquetas, sin pasar por el diálogo de impresión de la
 // PC). Corre en http://127.0.0.1:9100.
 //

@@ -1,0 +1,63 @@
+{
+  "name": "stage-ai-labs-print-server",
+  "version": "1.0.0",
+  "description": "Servidor local de impresión térmica ZPL para STAGE AI LABS",
+  "main": "src/main.cjs",
+  "author": "STAGE AI LABS",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder --win nsis",
+    "pack": "electron-builder --dir"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "electron": "^37.2.3",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.3"
+  },
+  "build": {
+    "appId": "com.stageailabs.printserver",
+    "productName": "STAGE AI LABS Print Server",
+    "asar": true,
+    "asarUnpack": [
+      "src/raw-print.ps1"
+    ],
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "STAGE AI LABS Print Server",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

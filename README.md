@@ -123,11 +123,11 @@ cualquier lugar. La forma más simple (gratis):
    del `.env`).
 4. Deploy. Obtendrás una URL `https://…` para usar en la tablet y el iPhone.
 
-## 2.c. Impresión directa de etiquetas (KT Print Server)
+## 2.c. Impresión directa de etiquetas (STAGE AI LABS Print Server)
 
 Las etiquetas de piezas (4x2") pueden imprimirse **directo** en la impresora
 térmica, sin abrir el diálogo de impresión de la PC. Para eso se usa la app
-**KT Print Server** (corre en `http://127.0.0.1:9100` en la PC conectada a la
+**STAGE AI LABS Print Server** (corre en `http://127.0.0.1:9100` en la PC conectada a la
 impresora) y la app le envía la etiqueta en **ZPL** (`src/lib/piezasLabelZpl.js`,
 cliente en `src/lib/printServer.js`).
 

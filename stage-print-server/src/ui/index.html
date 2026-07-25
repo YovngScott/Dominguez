@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STAGE AI LABS Print Server</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div class="mark"><span>S</span></div>
+        <div>
+          <p class="eyebrow">STAGE AI LABS</p>
+          <h1>Print Server</h1>
+          <p class="subtitle">Impresión térmica directa, segura y sin diálogos.</p>
+        </div>
+        <div id="serverBadge" class="badge pending">Iniciando…</div>
+      </header>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Impresora de etiquetas</h2>
+            <p>Selecciona la impresora ZPL conectada a esta computadora.</p>
+          </div>
+          <button id="refreshBtn" class="icon-btn" title="Actualizar impresoras">↻</button>
+        </div>
+        <select id="printerSelect">
+          <option value="">Cargando impresoras…</option>
+        </select>
+        <div class="actions">
+          <button id="saveBtn" class="btn primary">Guardar impresora</button>
+          <button id="testBtn" class="btn secondary">Imprimir prueba</button>
+        </div>
+        <p id="message" class="message"></p>
+      </section>
+
+      <section class="status-grid">
+        <div class="metric">
+          <span class="metric-label">Servidor local</span>
+          <strong id="serverAddress">localhost:9100</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Inicio automático</span>
+          <strong>Activado</strong>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Última impresión</span>
+          <strong id="lastPrint">—</strong>
+        </div>
+      </section>
+
+      <footer>
+        <span class="dot"></span>
+        Compatible con Dominguez Auto Pintura · STAGE AI LABS © 2026
+      </footer>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
