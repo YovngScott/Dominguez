@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, Link, NavLink, useLocation } from "react-router-dom";
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useAuth } from "./hooks/useAuth";
+import { useRol } from "./hooks/useRol";
 import Logo from "./components/Logo";
 import Icon from "./components/Icon";
 import WhatsappConnectModal from "./components/WhatsappConnectModal";
@@ -33,6 +34,8 @@ const ClientList = lazy(() => import("./pages/ClientList"));
 const ContactosList = lazy(() => import("./pages/ContactosList"));
 const CitasList = lazy(() => import("./pages/CitasList"));
 const Reportes = lazy(() => import("./pages/Reportes"));
+const Suministros = lazy(() => import("./pages/Suministros"));
+const KioskSuministros = lazy(() => import("./pages/KioskSuministros"));
 
 // Orden lógico por flujo de trabajo (de lo más usado a lo menos):
 // operación diaria → almacén de piezas → agenda/cierre → directorio → análisis.
@@ -42,6 +45,7 @@ const NAV = [
   { to: "/piezas", label: "Piezas", icon: "layers" },
   { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
   { to: "/tramos", label: "Tramos", icon: "grid" },
+  { to: "/suministros", label: "Almacén", icon: "package" },
   { to: "/citas", label: "Citas", icon: "clock" },
   { to: "/entregados", label: "Vehículos entregados", icon: "check" },
   { to: "/clientes", label: "Clientes", icon: "user" },
@@ -51,6 +55,7 @@ const NAV = [
 
 function PrivateLayout({ children }) {
   const { session, loading, signOut } = useAuth();
+  const { cargandoRol, esKiosk } = useRol();
   const [menuOpen, setMenuOpen] = useState(false);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [oscuro, setOscuro] = useState(temaOscuroGuardado);
@@ -72,11 +77,16 @@ function PrivateLayout({ children }) {
     setMenuOpen(false);
   }, [location.pathname]);
 
-  if (loading) {
+  if (loading || cargandoRol) {
     return <div className="p-10 text-center text-gray-500">Cargando…</div>;
   }
   if (!session) {
     return <Navigate to="/login" replace />;
+  }
+  // La tablet del almacén solo puede estar en su pantalla de pedidos: nunca ve
+  // el panel administrativo (la base de datos también se lo bloquea vía RLS).
+  if (esKiosk) {
+    return <Navigate to="/kiosk/suministros" replace />;
   }
 
   return (
@@ -231,6 +241,16 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       {/* Página pública para clientes (sin login) */}
       <Route path="/agendar" element={<Suspense fallback={Cargando}>{<Landing />}</Suspense>} />
+      {/* Tablet del taller: pantalla aislada para pedir suministros al almacén.
+          Sin menú ni acceso a casos, clientes, finanzas ni métricas. */}
+      <Route
+        path="/kiosk/suministros"
+        element={
+          <PrivateBare>
+            <KioskSuministros />
+          </PrivateBare>
+        }
+      />
       <Route
         path="/"
         element={
@@ -397,6 +417,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <Entregados />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/suministros"
+        element={
+          <PrivateLayout>
+            <Suministros />
           </PrivateLayout>
         }
       />
