@@ -54,6 +54,7 @@ export default function EtiquetasPiezas() {
   const [guardando, setGuardando] = useState(false);
   const [guardadoId, setGuardadoId] = useState(null);
   const [casoVinculado, setCasoVinculado] = useState(null); // caso del vehículo
+  const [casoNecesitaReclamo, setCasoNecesitaReclamo] = useState(false); // se creó sin reclamo aún
   const [impresoras, setImpresoras] = useState([]); // [{name,...}] si hay print server
   const [impresoraSel, setImpresoraSel] = useState("");
 
@@ -174,23 +175,51 @@ export default function EtiquetasPiezas() {
     if (path) await supabase.storage.from("fotos-casos").remove([path]);
   }
 
+  // Guarda de una vez la etiqueta (vinculando/creando el caso por reclamo).
+  // Se llama automáticamente cada vez que se agrega/quita una pieza, así la
+  // pieza y su foto quedan en el sistema (y visibles en "Piezas" del caso) sin
+  // depender de que el usuario recuerde pulsar "Guardar" o "Imprimir" al final.
+  async function persistirCajas(cajasActuales) {
+    const validas = (cajasActuales || []).filter((c) => c.length > 0);
+    if (!validas.length) return null;
+    try {
+      const casoId = await vincularCaso();
+      await guardarEtiqueta(validas, casoId);
+      return casoId;
+    } catch (err) {
+      setError("No se pudo guardar automáticamente: " + (err.message || "intenta de nuevo."));
+      return null;
+    }
+  }
+
   async function agregarPiezaConFoto(cajaIdx, nombre, cantidad, file) {
     const limpio = (nombre || "").trim();
     if (!limpio) return;
     let foto = {};
     if (file) foto = await subirFotoPieza(file);
-    setCajas((prev) => prev.map((c, i) => (i === cajaIdx ? [...c, { nombre: limpio, cantidad, ...foto }] : c)));
+    let nuevasCajas;
+    setCajas((prev) => {
+      nuevasCajas = prev.map((c, i) => (i === cajaIdx ? [...c, { nombre: limpio, cantidad, ...foto }] : c));
+      return nuevasCajas;
+    });
 
     if (!piezasCatalogo.some((p) => p.label.toLowerCase() === limpio.toLowerCase())) {
       agregarPiezaCatalogo(limpio);
       setPiezasCatalogo((prev) => [...prev, { id: limpio, label: limpio }]);
     }
+
+    await persistirCajas(nuevasCajas);
   }
 
   async function quitarPiezaDeCaja(cajaIdx, piezaIdx) {
     const pieza = cajas[cajaIdx]?.[piezaIdx];
-    setCajas((prev) => prev.map((c, i) => (i === cajaIdx ? c.filter((_, j) => j !== piezaIdx) : c)));
+    let nuevasCajas;
+    setCajas((prev) => {
+      nuevasCajas = prev.map((c, i) => (i === cajaIdx ? c.filter((_, j) => j !== piezaIdx) : c));
+      return nuevasCajas;
+    });
     await eliminarFotoPieza(pieza?.foto_path);
+    await persistirCajas(nuevasCajas);
   }
 
   function agregarCaja() {
@@ -199,8 +228,13 @@ export default function EtiquetasPiezas() {
 
   function quitarCaja(cajaIdx) {
     const eliminadas = cajas[cajaIdx] || [];
-    setCajas((prev) => prev.filter((_, i) => i !== cajaIdx));
+    let nuevasCajas;
+    setCajas((prev) => {
+      nuevasCajas = prev.filter((_, i) => i !== cajaIdx);
+      return nuevasCajas;
+    });
     Promise.all(eliminadas.map((p) => eliminarFotoPieza(p.foto_path)));
+    persistirCajas(nuevasCajas);
   }
 
   // Cajas con al menos una pieza (las vacías no se imprimen ni se guardan).
@@ -212,7 +246,19 @@ export default function EtiquetasPiezas() {
   // través de la propia etiqueta (etiquetas_piezas.caso_id + piezas), sin crear
   // una cotización. Devuelve el caso_id.
   async function vincularCaso() {
-    if (casoVinculado) return casoVinculado; // ya vinculado (edición / 2º clic)
+    if (casoVinculado) {
+      // Como ahora se auto-guarda con cada pieza, es posible que el caso se
+      // haya creado ANTES de que el usuario terminara de escribir el reclamo.
+      // Si fue así, se sincroniza en cuanto el reclamo tenga texto (solo para
+      // el caso que creamos nosotros mismos sin reclamo; nunca se toca un
+      // caso ya existente que se haya reusado).
+      const reclamoActual = form.reclamo.trim();
+      if (casoNecesitaReclamo && reclamoActual) {
+        await supabase.from("casos").update({ numero_reclamo: reclamoActual }).eq("id", casoVinculado);
+        setCasoNecesitaReclamo(false);
+      }
+      return casoVinculado; // ya vinculado (edición / 2º clic)
+    }
 
     const { data: userData } = await supabase.auth.getUser();
     const anioNum = /^\d+$/.test((form.anio || "").trim()) ? Number(form.anio) : null;
@@ -261,6 +307,9 @@ export default function EtiquetasPiezas() {
         .select("id")
         .single();
       casoId = nuevo?.id || null;
+      // Si se creó el caso sin reclamo (aún no lo habían escrito), se marca
+      // para sincronizarlo en cuanto el usuario lo complete.
+      if (casoId && !form.reclamo.trim()) setCasoNecesitaReclamo(true);
     }
 
     setCasoVinculado(casoId);
@@ -303,15 +352,9 @@ export default function EtiquetasPiezas() {
     if (!validas.length) return setError("Agrega al menos una pieza en alguna caja.");
 
     setGuardando(true);
-    try {
-      const casoId = await vincularCaso();
-      await guardarEtiqueta(validas, casoId);
-      setOk("Etiqueta guardada. Puedes imprimirla cuando estés listo.");
-    } catch (err) {
-      setError(err.message || "No se pudo guardar la etiqueta.");
-    } finally {
-      setGuardando(false);
-    }
+    const casoId = await persistirCajas(cajas);
+    setGuardando(false);
+    if (casoId) setOk("Etiqueta guardada. Puedes imprimirla cuando estés listo.");
   }
 
   async function imprimir() {
@@ -322,18 +365,10 @@ export default function EtiquetasPiezas() {
 
     setImprimiendo(true);
     try {
-      // Crea/encuentra el caso del vehículo y mete las piezas como cotización.
-      let casoId = null;
-      try {
-        casoId = await vincularCaso();
-      } catch {
-        /* si falla el vínculo, igual se imprime (sin QR al caso) */
-      }
-      try {
-        await guardarEtiqueta(validas, casoId);
-      } catch {
-        /* si falla el guardado igual se imprime */
-      }
+      // Crea/encuentra el caso del vehículo y guarda la etiqueta. Si falla,
+      // persistirCajas ya deja el aviso en pantalla, pero igual se imprime
+      // (no se bloquea la impresión física por un error de guardado).
+      const casoId = await persistirCajas(cajas);
 
       const payload = {
         caso: {
