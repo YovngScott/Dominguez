@@ -12,15 +12,17 @@ const CLAVE_SOLICITANTE = "suministros_solicitante";
 
 // Pantalla de la TABLET del taller para pedir insumos al almacén.
 // Está aislada a propósito: sin menú, sin acceso a casos, clientes ni finanzas.
-// Solo lista los suministros y permite enviar una requisición.
+// Se arma un pedido con varios artículos y se envía todo junto.
 export default function KioskSuministros() {
   const [suministros, setSuministros] = useState([]);
   const [q, setQ] = useState("");
   const [categoria, setCategoria] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [enviando, setEnviando] = useState(null); // id del suministro que se está pidiendo
-  const [confirmacion, setConfirmacion] = useState(null); // { nombre, cantidad }
+  const [carrito, setCarrito] = useState([]); // [{ suministro, cantidad }]
+  const [revisando, setRevisando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [confirmacion, setConfirmacion] = useState(null); // { articulos, unidades }
   const [solicitante, setSolicitante] = useState(
     () => localStorage.getItem(CLAVE_SOLICITANTE) || ""
   );
@@ -47,7 +49,7 @@ export default function KioskSuministros() {
   // El mensaje de "solicitud enviada" se cierra solo.
   useEffect(() => {
     if (!confirmacion) return;
-    const t = setTimeout(() => setConfirmacion(null), 3500);
+    const t = setTimeout(() => setConfirmacion(null), 4000);
     return () => clearTimeout(t);
   }, [confirmacion]);
 
@@ -70,39 +72,70 @@ export default function KioskSuministros() {
     return [s.nombre, s.categoria].filter(Boolean).some((x) => x.toLowerCase().includes(term));
   });
 
-  async function pedir(suministro, cantidad) {
+  const enCarrito = useMemo(() => {
+    const m = new Map();
+    carrito.forEach((it) => m.set(it.suministro.id, it.cantidad));
+    return m;
+  }, [carrito]);
+
+  const totalUnidades = carrito.reduce((acc, it) => acc + it.cantidad, 0);
+
+  // Agrega al pedido (o suma si ya estaba).
+  function agregar(suministro, cantidad) {
+    setCarrito((prev) => {
+      const i = prev.findIndex((it) => it.suministro.id === suministro.id);
+      if (i === -1) return [...prev, { suministro, cantidad }];
+      const copia = [...prev];
+      copia[i] = { ...copia[i], cantidad: copia[i].cantidad + cantidad };
+      return copia;
+    });
+  }
+
+  function cambiarCantidad(suministroId, cantidad) {
+    setCarrito((prev) =>
+      cantidad <= 0
+        ? prev.filter((it) => it.suministro.id !== suministroId)
+        : prev.map((it) => (it.suministro.id === suministroId ? { ...it, cantidad } : it))
+    );
+  }
+
+  async function enviarPedido(nota) {
     if (!solicitante) {
+      setRevisando(false);
       setPidiendoNombre(true);
       return;
     }
-    setEnviando(suministro.id);
+    setEnviando(true);
     setError("");
     try {
-      await crearPedido({ suministro, cantidad, solicitante });
-      setConfirmacion({ nombre: suministro.nombre, cantidad });
+      await crearPedido({ items: carrito, solicitante, nota });
+      setConfirmacion({ articulos: carrito.length, unidades: totalUnidades });
+      setCarrito([]);
+      setRevisando(false);
     } catch (err) {
       setError(err.message || "No se pudo enviar la solicitud. Intenta de nuevo.");
     } finally {
-      setEnviando(null);
+      setEnviando(false);
     }
   }
 
   return (
     <div className="min-h-screen bg-[var(--paper)] flex flex-col">
-      {/* Encabezado propio de la tablet (sin menú ni accesos administrativos) */}
-      <header className="bg-[var(--ink)] text-white sticky top-0 z-20">
+      {/* Encabezado propio de la tablet. NO es fijo: se desliza con la página
+          para dejar toda la pantalla libre al ver los insumos. */}
+      <header className="bg-[var(--ink)] text-white">
         <div className="h-1 bg-[var(--brand-red)]" />
-        <div className="px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
+        <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <Logo size={44} />
+            <Logo size={38} />
             <div className="min-w-0">
-              <p className="font-extrabold text-lg leading-tight">Pedir suministros</p>
-              <p className="text-white/50 text-sm truncate">Almacén del taller</p>
+              <p className="font-extrabold leading-tight">Pedir suministros</p>
+              <p className="text-white/50 text-xs truncate">Almacén del taller</p>
             </div>
           </div>
           <button
             onClick={() => setPidiendoNombre(true)}
-            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-xl px-4 py-3 text-sm font-semibold shrink-0"
+            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-xl px-3 py-2.5 text-sm font-semibold shrink-0"
           >
             <Icon name="user" className="w-5 h-5" />
             <span className="max-w-[9rem] truncate">{solicitante || "¿Quién pide?"}</span>
@@ -113,13 +146,13 @@ export default function KioskSuministros() {
         <div className="px-4 sm:px-6 pb-4">
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--ink-soft)]">
-              <Icon name="search" className="w-6 h-6" />
+              <Icon name="search" className="w-5 h-5" />
             </span>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar insumo… (lija, redutol, cinta)"
-              className="w-full text-lg rounded-2xl border-0 bg-white text-[var(--ink)] pl-14 pr-12 py-4 shadow-lg focus:outline-none focus:ring-4 focus:ring-[var(--brand-red)]/30"
+              className="w-full rounded-2xl border-0 bg-white text-[var(--ink)] pl-12 pr-11 py-3 shadow-lg focus:outline-none focus:ring-4 focus:ring-[var(--brand-red)]/30"
             />
             {q && (
               <button
@@ -147,7 +180,7 @@ export default function KioskSuministros() {
         </div>
       </header>
 
-      <main className="flex-1 px-4 sm:px-6 py-6">
+      <main className="flex-1 px-4 sm:px-6 py-5 pb-28">
         {error && (
           <div className="mb-4 rounded-xl bg-[var(--brand-red-50)] text-[var(--brand-red)] px-4 py-3 font-semibold">
             {error}
@@ -164,18 +197,41 @@ export default function KioskSuministros() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
             {lista.map((s) => (
               <TarjetaSuministro
                 key={s.id}
                 suministro={s}
-                enviando={enviando === s.id}
-                onPedir={(cant) => pedir(s, cant)}
+                yaEnPedido={enCarrito.get(s.id) || 0}
+                onAgregar={(cant) => agregar(s, cant)}
               />
             ))}
           </div>
         )}
       </main>
+
+      {/* Barra del pedido en curso */}
+      {carrito.length > 0 && !revisando && (
+        <div className="fixed inset-x-0 bottom-0 z-30 p-3 bg-gradient-to-t from-black/25 to-transparent">
+          <button
+            onClick={() => setRevisando(true)}
+            className="w-full max-w-2xl mx-auto flex items-center justify-between gap-3 bg-[var(--brand-red)] text-white rounded-2xl shadow-2xl px-5 py-4 active:scale-[0.99] transition"
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <span className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-extrabold shrink-0">
+                {carrito.length}
+              </span>
+              <span className="text-left min-w-0">
+                <span className="block font-bold leading-tight">
+                  {carrito.length} artículo{carrito.length === 1 ? "" : "s"} en el pedido
+                </span>
+                <span className="block text-white/80 text-sm">{totalUnidades} unidad(es) en total</span>
+              </span>
+            </span>
+            <span className="font-bold whitespace-nowrap">Revisar →</span>
+          </button>
+        </div>
+      )}
 
       {/* Confirmación flotante */}
       {confirmacion && (
@@ -186,16 +242,30 @@ export default function KioskSuministros() {
             </span>
             <div className="min-w-0">
               <p className="font-bold">Solicitud enviada al almacén exitosamente</p>
-              <p className="text-white/80 text-sm truncate">
-                {cantidadTexto(confirmacion.cantidad)} × {confirmacion.nombre}
+              <p className="text-white/80 text-sm">
+                {confirmacion.articulos} artículo(s) · {confirmacion.unidades} unidad(es)
               </p>
             </div>
           </div>
         </div>
       )}
 
+      {revisando && (
+        <ModalPedido
+          carrito={carrito}
+          enviando={enviando}
+          onCambiarCantidad={cambiarCantidad}
+          onEnviar={enviarPedido}
+          onCerrar={() => setRevisando(false)}
+        />
+      )}
+
       {pidiendoNombre && (
-        <ModalNombre inicial={solicitante} onGuardar={guardarSolicitante} onCerrar={() => setPidiendoNombre(false)} />
+        <ModalNombre
+          inicial={solicitante}
+          onGuardar={guardarSolicitante}
+          onCerrar={() => setPidiendoNombre(false)}
+        />
       )}
     </div>
   );
@@ -214,15 +284,26 @@ function ChipCategoria({ activa, onClick, children }) {
   );
 }
 
-function TarjetaSuministro({ suministro, enviando, onPedir }) {
+function TarjetaSuministro({ suministro, yaEnPedido, onAgregar }) {
   const [cantidad, setCantidad] = useState(1);
   const stock = num(suministro.stock);
   const sinStock = stock <= 0;
   const bajo = !sinStock && stock <= num(suministro.stock_minimo);
 
+  function agregar() {
+    onAgregar(cantidad);
+    setCantidad(1);
+  }
+
   return (
-    <div className="card overflow-hidden flex flex-col">
-      <div className="aspect-square bg-[var(--surface-2)] relative">
+    <div className="card overflow-hidden flex flex-col relative">
+      {yaEnPedido > 0 && (
+        <span className="absolute top-2 left-2 z-10 text-xs font-bold px-2 py-1 rounded-full bg-[var(--brand-red)] text-white shadow">
+          {cantidadTexto(yaEnPedido)} en el pedido
+        </span>
+      )}
+
+      <div className="aspect-[4/3] bg-[var(--surface-2)] relative">
         {suministro.imagen_url ? (
           <img
             src={suministro.imagen_url}
@@ -232,11 +313,11 @@ function TarjetaSuministro({ suministro, enviando, onPedir }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-[var(--ink-soft)]">
-            <Icon name="package" className="w-14 h-14 opacity-40" />
+            <Icon name="package" className="w-10 h-10 opacity-40" />
           </div>
         )}
         <span
-          className={`absolute top-2 right-2 text-xs font-bold px-2.5 py-1 rounded-full ${
+          className={`absolute bottom-2 right-2 text-[11px] font-bold px-2 py-0.5 rounded-full ${
             sinStock
               ? "bg-[var(--brand-red)] text-white"
               : bajo
@@ -248,18 +329,20 @@ function TarjetaSuministro({ suministro, enviando, onPedir }) {
         </span>
       </div>
 
-      <div className="p-3 flex flex-col flex-1">
-        <p className="font-bold text-[var(--ink)] leading-tight line-clamp-2">{suministro.nombre}</p>
+      <div className="p-2.5 flex flex-col flex-1">
+        <p className="font-bold text-sm text-[var(--ink)] leading-tight line-clamp-2">
+          {suministro.nombre}
+        </p>
         {suministro.categoria && (
-          <p className="text-xs text-[var(--ink-soft)] mt-0.5">{suministro.categoria}</p>
+          <p className="text-[11px] text-[var(--ink-soft)] mt-0.5 truncate">{suministro.categoria}</p>
         )}
 
-        <div className="mt-auto pt-3">
-          <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="mt-auto pt-2">
+          <div className="flex items-center justify-between gap-1 mb-1.5">
             <button
               onClick={() => setCantidad((c) => Math.max(1, c - 1))}
               disabled={cantidad <= 1}
-              className="w-12 h-12 rounded-xl bg-[var(--surface-2)] text-[var(--ink)] text-2xl font-bold disabled:opacity-40 active:scale-95 transition"
+              className="w-9 h-9 rounded-lg bg-[var(--surface-2)] text-[var(--ink)] text-xl font-bold disabled:opacity-40 active:scale-95 transition shrink-0"
               aria-label="Menos"
             >
               −
@@ -269,23 +352,117 @@ function TarjetaSuministro({ suministro, enviando, onPedir }) {
               min="1"
               value={cantidad}
               onChange={(e) => setCantidad(Math.max(1, parseInt(e.target.value, 10) || 1))}
-              className="w-full text-center text-2xl font-extrabold bg-transparent text-[var(--ink)] focus:outline-none"
+              className="w-full text-center text-lg font-extrabold bg-transparent text-[var(--ink)] focus:outline-none min-w-0"
               aria-label="Cantidad"
             />
             <button
               onClick={() => setCantidad((c) => c + 1)}
-              className="w-12 h-12 rounded-xl bg-[var(--surface-2)] text-[var(--ink)] text-2xl font-bold active:scale-95 transition"
+              className="w-9 h-9 rounded-lg bg-[var(--surface-2)] text-[var(--ink)] text-xl font-bold active:scale-95 transition shrink-0"
               aria-label="Más"
             >
               +
             </button>
           </div>
           <button
-            onClick={() => onPedir(cantidad)}
-            disabled={enviando || sinStock}
-            className="btn-primary w-full py-3 text-base disabled:opacity-50"
+            onClick={agregar}
+            disabled={sinStock}
+            className="btn-primary w-full py-2 text-sm disabled:opacity-50"
           >
-            {enviando ? "Enviando…" : sinStock ? "Agotado" : "Pedir"}
+            {sinStock ? "Agotado" : "Agregar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Revisión del pedido antes de enviarlo: se pueden ajustar cantidades,
+// quitar artículos y dejar una nota para el almacén.
+function ModalPedido({ carrito, enviando, onCambiarCantidad, onEnviar, onCerrar }) {
+  const [nota, setNota] = useState("");
+  const totalUnidades = carrito.reduce((acc, it) => acc + it.cantidad, 0);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-[var(--surface)] w-full max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[92vh] flex flex-col">
+        <div className="p-5 border-b border-[var(--line)] flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-extrabold text-[var(--ink)]">Tu pedido</h2>
+            <p className="text-sm text-[var(--ink-soft)]">
+              {carrito.length} artículo(s) · {totalUnidades} unidad(es)
+            </p>
+          </div>
+          <button onClick={onCerrar} className="text-[var(--ink-soft)] text-2xl px-2 leading-none">
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {carrito.map(({ suministro, cantidad }) => (
+            <div key={suministro.id} className="flex items-center gap-3">
+              {suministro.imagen_url ? (
+                <img
+                  src={suministro.imagen_url}
+                  alt=""
+                  className="w-14 h-14 rounded-xl object-cover border border-[var(--line)] shrink-0"
+                />
+              ) : (
+                <span className="w-14 h-14 rounded-xl bg-[var(--surface-2)] flex items-center justify-center text-[var(--ink-soft)] shrink-0">
+                  <Icon name="package" className="w-6 h-6" />
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-[var(--ink)] leading-tight line-clamp-2">
+                  {suministro.nombre}
+                </p>
+                <p className="text-xs text-[var(--ink-soft)]">
+                  En almacén: {cantidadTexto(suministro.stock)} {suministro.unidad}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => onCambiarCantidad(suministro.id, cantidad - 1)}
+                  className="w-9 h-9 rounded-lg bg-[var(--surface-2)] text-[var(--ink)] text-xl font-bold active:scale-95"
+                  aria-label="Menos"
+                >
+                  −
+                </button>
+                <span className="w-10 text-center text-lg font-extrabold text-[var(--ink)]">
+                  {cantidadTexto(cantidad)}
+                </span>
+                <button
+                  onClick={() => onCambiarCantidad(suministro.id, cantidad + 1)}
+                  className="w-9 h-9 rounded-lg bg-[var(--surface-2)] text-[var(--ink)] text-xl font-bold active:scale-95"
+                  aria-label="Más"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <label className="block pt-2">
+            <span className="field-label">Nota para el almacén (opcional)</span>
+            <textarea
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+              rows={2}
+              className="input"
+              placeholder="Ej. Es para el Toyota de la bahía 3"
+            />
+          </label>
+        </div>
+
+        <div className="p-5 border-t border-[var(--line)] flex gap-3">
+          <button onClick={onCerrar} className="btn-ghost flex-1 py-3">
+            Seguir pidiendo
+          </button>
+          <button
+            onClick={() => onEnviar(nota)}
+            disabled={enviando || !carrito.length}
+            className="btn-primary flex-1 py-3 disabled:opacity-50"
+          >
+            {enviando ? "Enviando…" : "Enviar pedido"}
           </button>
         </div>
       </div>

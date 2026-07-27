@@ -7,8 +7,8 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import {
   ESTADOS_PEDIDO,
   listarSuministros,
-  despacharPedido,
-  cancelarPedido,
+  despacharGrupo,
+  cancelarGrupo,
   cantidadTexto,
   num,
 } from "../lib/suministros";
@@ -110,7 +110,6 @@ export default function Suministros() {
     return () => clearTimeout(t);
   }, [ok]);
 
-  const pendientes = useMemo(() => pedidos.filter((p) => p.estado === "pendiente"), [pedidos]);
   const historial = useMemo(() => pedidos.filter((p) => p.estado !== "pendiente"), [pedidos]);
   const stockPorId = useMemo(() => {
     const m = {};
@@ -118,26 +117,47 @@ export default function Suministros() {
     return m;
   }, [suministros]);
 
-  async function entregar(pedido) {
-    setProcesando(pedido.id);
+  // Los renglones que se enviaron juntos comparten grupo_id: se muestran como
+  // un solo pedido con todos sus artículos.
+  const pendientes = useMemo(() => {
+    const grupos = new Map();
+    pedidos
+      .filter((p) => p.estado === "pendiente")
+      .forEach((p) => {
+        const g = grupos.get(p.grupo_id) || {
+          grupo_id: p.grupo_id,
+          solicitante: p.solicitante,
+          nota: p.nota,
+          created_at: p.created_at,
+          items: [],
+        };
+        g.items.push(p);
+        grupos.set(p.grupo_id, g);
+      });
+    return [...grupos.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }, [pedidos]);
+
+  // Resumen de existencias, siempre a la vista (sin tener que abrir la tablet).
+  const resumen = useMemo(() => {
+    const activos = suministros.filter((s) => s.activo);
+    return {
+      insumos: activos.length,
+      unidades: activos.reduce((acc, s) => acc + num(s.stock), 0),
+      agotados: activos.filter((s) => num(s.stock) <= 0).length,
+      bajos: activos.filter((s) => num(s.stock) > 0 && num(s.stock) <= num(s.stock_minimo)).length,
+    };
+  }, [suministros]);
+
+  // Despacha el pedido completo: el servidor descuenta el stock de todos sus
+  // artículos en una sola transacción (todo o nada).
+  async function entregar(grupo) {
+    setProcesando(grupo.grupo_id);
     setError("");
     try {
-      const stockRestante = await despacharPedido(pedido.id);
-      // El servidor ya descontó el stock de forma atómica: se refleja aquí.
-      setPedidos((prev) =>
-        prev.map((p) =>
-          p.id === pedido.id
-            ? { ...p, estado: "entregado", entregado_at: new Date().toISOString() }
-            : p
-        )
-      );
-      setSuministros((prev) =>
-        prev.map((s) => (s.id === pedido.suministro_id ? { ...s, stock: stockRestante } : s))
-      );
-      setOk(
-        `Entregado: ${cantidadTexto(pedido.cantidad)} × ${pedido.suministro_nombre}. ` +
-          `Quedan ${cantidadTexto(stockRestante)}.`
-      );
+      await despacharGrupo(grupo.grupo_id);
+      await cargar(); // trae el stock ya descontado
+      const n = grupo.items.length;
+      setOk(`Pedido entregado: ${n} artículo${n === 1 ? "" : "s"} descontado${n === 1 ? "" : "s"} del almacén.`);
     } catch (err) {
       setError(err.message || "No se pudo despachar el pedido.");
       cargar(); // resincroniza por si otro usuario lo despachó primero
@@ -146,12 +166,12 @@ export default function Suministros() {
     }
   }
 
-  async function cancelar(pedido) {
-    setProcesando(pedido.id);
+  async function cancelar(grupo) {
+    setProcesando(grupo.grupo_id);
     try {
-      await cancelarPedido(pedido.id);
+      await cancelarGrupo(grupo.grupo_id);
       setPedidos((prev) =>
-        prev.map((p) => (p.id === pedido.id ? { ...p, estado: "cancelado" } : p))
+        prev.map((p) => (p.grupo_id === grupo.grupo_id ? { ...p, estado: "cancelado" } : p))
       );
     } catch (err) {
       setError(err.message || "No se pudo cancelar el pedido.");
@@ -174,6 +194,30 @@ export default function Suministros() {
           </button>
         )}
       </div>
+
+      {/* Existencias de un vistazo, sin tener que abrir la tablet */}
+      {!loading && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <Metrica valor={resumen.insumos} etiqueta="Insumos distintos" color="var(--ink)" />
+          <Metrica
+            valor={cantidadTexto(resumen.unidades)}
+            etiqueta="Unidades en almacén"
+            color="#0284c7"
+          />
+          <Metrica
+            valor={resumen.bajos}
+            etiqueta="Quedan pocos"
+            color="#d97706"
+            onClick={() => setTab("inventario")}
+          />
+          <Metrica
+            valor={resumen.agotados}
+            etiqueta="Agotados"
+            color="var(--brand-red)"
+            onClick={() => setTab("inventario")}
+          />
+        </div>
+      )}
 
       {/* Aviso de pedidos pendientes */}
       {pendientes.length > 0 && (
@@ -201,7 +245,7 @@ export default function Suministros() {
               )}
             </p>
             <p className="text-sm text-[var(--ink-soft)] truncate">
-              Último: {cantidadTexto(pendientes[0].cantidad)} × {pendientes[0].suministro_nombre}
+              Último: {pendientes[0].items.length} artículo(s)
               {pendientes[0].solicitante ? ` · ${pendientes[0].solicitante}` : ""}
             </p>
           </div>
@@ -253,14 +297,14 @@ export default function Suministros() {
           stockPorId={stockPorId}
           procesando={procesando}
           onEntregar={entregar}
-          onCancelar={(p) =>
+          onCancelar={(grupo) =>
             setConfirmar({
               titulo: "¿Cancelar este pedido?",
-              mensaje: `Se descartará la solicitud de ${cantidadTexto(p.cantidad)} × ${
-                p.suministro_nombre
+              mensaje: `Se descartará la solicitud de ${grupo.items.length} artículo(s)${
+                grupo.solicitante ? ` de ${grupo.solicitante}` : ""
               }. No se descuenta stock.`,
               confirmLabel: "Sí, cancelar",
-              onConfirm: () => cancelar(p),
+              onConfirm: () => cancelar(grupo),
             })
           }
         />
@@ -294,6 +338,21 @@ export default function Suministros() {
   );
 }
 
+function Metrica({ valor, etiqueta, color, onClick }) {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag
+      onClick={onClick}
+      className={`card p-4 text-left ${onClick ? "hover:border-[var(--brand-red)] transition-colors" : ""}`}
+    >
+      <p className="text-2xl font-extrabold" style={{ color }}>
+        {valor}
+      </p>
+      <p className="text-xs text-[var(--ink-soft)] mt-0.5">{etiqueta}</p>
+    </Tag>
+  );
+}
+
 function ListaPendientes({ pedidos, stockPorId, procesando, onEntregar, onCancelar }) {
   if (!pedidos.length) {
     return (
@@ -307,68 +366,89 @@ function ListaPendientes({ pedidos, stockPorId, procesando, onEntregar, onCancel
 
   return (
     <div className="space-y-3">
-      {pedidos.map((p) => {
-        const s = stockPorId[p.suministro_id];
-        const stock = num(s?.stock);
-        const insuficiente = s && stock < num(p.cantidad);
+      {pedidos.map((grupo) => {
+        // Un pedido puede traer varios artículos: se revisa el stock de todos.
+        const faltantes = grupo.items.filter((it) => {
+          const s = stockPorId[it.suministro_id];
+          return s && num(s.stock) < num(it.cantidad);
+        });
+        const enCurso = procesando === grupo.grupo_id;
+
         return (
-          <div key={p.id} className="card p-4 flex items-start justify-between gap-3 flex-wrap">
-            <div className="flex items-start gap-3 min-w-0 flex-1">
-              {s?.imagen_url ? (
-                <img
-                  src={s.imagen_url}
-                  alt=""
-                  className="w-14 h-14 rounded-xl object-cover border border-[var(--line)] shrink-0"
-                />
-              ) : (
-                <span className="w-14 h-14 rounded-xl bg-[var(--surface-2)] flex items-center justify-center text-[var(--ink-soft)] shrink-0">
-                  <Icon name="package" className="w-6 h-6" />
-                </span>
-              )}
+          <div key={grupo.grupo_id} className="card p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
               <div className="min-w-0">
                 <p className="font-bold text-[var(--ink)]">
-                  <span className="text-[var(--brand-red)]">{cantidadTexto(p.cantidad)}</span>{" "}
-                  {s?.unidad ? `${s.unidad} · ` : "× "}
-                  {p.suministro_nombre}
+                  {grupo.items.length} artículo{grupo.items.length === 1 ? "" : "s"}
+                  {grupo.solicitante ? ` · ${grupo.solicitante}` : ""}
                 </p>
-                <p className="text-sm text-[var(--ink-soft)]">
-                  {p.solicitante ? `Pidió: ${p.solicitante} · ` : ""}
-                  {fechaHora(p.created_at)}
-                </p>
-                {p.nota && <p className="text-sm text-[var(--ink)] mt-1">{p.nota}</p>}
-                <p className="text-xs mt-1">
-                  {insuficiente ? (
-                    <span className="text-[var(--brand-red)] font-semibold">
-                      Stock insuficiente: quedan {cantidadTexto(stock)}
-                    </span>
-                  ) : (
-                    <span className="text-[var(--ink-soft)]">
-                      En almacén: {cantidadTexto(stock)}
-                      {s?.unidad ? ` ${s.unidad}` : ""}
-                    </span>
-                  )}
-                </p>
+                <p className="text-sm text-[var(--ink-soft)]">{fechaHora(grupo.created_at)}</p>
+                {grupo.nota && <p className="text-sm text-[var(--ink)] mt-1">{grupo.nota}</p>}
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => onCancelar(grupo)}
+                  disabled={enCurso}
+                  className="btn-ghost text-sm py-2 px-3 !text-[var(--brand-red)] hover:!border-[var(--brand-red)] disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => onEntregar(grupo)}
+                  disabled={enCurso || faltantes.length > 0}
+                  className="btn-primary text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
+                  title={
+                    faltantes.length
+                      ? "No hay stock suficiente de algún artículo"
+                      : "Descuenta el stock y marca entregado"
+                  }
+                >
+                  <Icon name="truck" className="w-4 h-4" />
+                  {enCurso ? "Entregando…" : "Marcar como entregado"}
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => onCancelar(p)}
-                disabled={procesando === p.id}
-                className="btn-ghost text-sm py-2 px-3 !text-[var(--brand-red)] hover:!border-[var(--brand-red)] disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => onEntregar(p)}
-                disabled={procesando === p.id || insuficiente}
-                className="btn-primary text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
-                title={insuficiente ? "No hay stock suficiente" : "Descuenta el stock y marca entregado"}
-              >
-                <Icon name="truck" className="w-4 h-4" />
-                {procesando === p.id ? "Entregando…" : "Marcar como entregado"}
-              </button>
-            </div>
+            {faltantes.length > 0 && (
+              <p className="text-xs text-[var(--brand-red)] font-semibold mb-2">
+                Sin stock suficiente de: {faltantes.map((f) => f.suministro_nombre).join(", ")}
+              </p>
+            )}
+
+            <ul className="divide-y divide-[var(--line)] border-t border-[var(--line)] pt-1">
+              {grupo.items.map((it) => {
+                const s = stockPorId[it.suministro_id];
+                const stock = num(s?.stock);
+                const insuficiente = s && stock < num(it.cantidad);
+                return (
+                  <li key={it.id} className="flex items-center gap-3 py-2">
+                    {s?.imagen_url ? (
+                      <img
+                        src={s.imagen_url}
+                        alt=""
+                        className="w-11 h-11 rounded-lg object-cover border border-[var(--line)] shrink-0"
+                      />
+                    ) : (
+                      <span className="w-11 h-11 rounded-lg bg-[var(--surface-2)] flex items-center justify-center text-[var(--ink-soft)] shrink-0">
+                        <Icon name="package" className="w-5 h-5" />
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-[var(--ink)] truncate">
+                        <span className="text-[var(--brand-red)]">{cantidadTexto(it.cantidad)}</span>{" "}
+                        {s?.unidad ? `${s.unidad} · ` : "× "}
+                        {it.suministro_nombre}
+                      </p>
+                      <p className={`text-xs ${insuficiente ? "text-[var(--brand-red)] font-semibold" : "text-[var(--ink-soft)]"}`}>
+                        En almacén: {cantidadTexto(stock)}
+                        {s?.unidad ? ` ${s.unidad}` : ""}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         );
       })}

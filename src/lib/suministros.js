@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { uuid } from "./uuid";
 
 // Helpers compartidos por la tablet (kiosk) y el panel de almacén.
 
@@ -25,16 +26,24 @@ export async function listarSuministros({ soloActivos = true } = {}) {
   return data || [];
 }
 
-// Crea la requisición desde la tablet. Queda en estado "pendiente" y NO toca
-// el stock: el descuento ocurre solo cuando el almacén la despacha.
-export async function crearPedido({ suministro, cantidad, solicitante, nota }) {
-  const { error } = await supabase.from("suministros_pedidos").insert({
-    suministro_id: suministro.id,
-    suministro_nombre: suministro.nombre,
-    cantidad,
+// Crea la requisición desde la tablet con TODOS los artículos del carrito.
+// Comparten un mismo grupo_id, así el almacén los ve como un solo pedido.
+// Queda en estado "pendiente" y NO toca el stock: el descuento ocurre solo
+// cuando el almacén lo despacha.
+export async function crearPedido({ items, solicitante, nota }) {
+  if (!items?.length) throw new Error("El pedido está vacío.");
+  // uuid() y no crypto.randomUUID(): la tablet puede entrar por IP de red
+  // local (http://10.x.x.x), donde randomUUID no existe.
+  const grupoId = uuid();
+  const filas = items.map((it) => ({
+    grupo_id: grupoId,
+    suministro_id: it.suministro.id,
+    suministro_nombre: it.suministro.nombre,
+    cantidad: it.cantidad,
     solicitante: solicitante?.trim() || null,
     nota: nota?.trim() || null,
-  });
+  }));
+  const { error } = await supabase.from("suministros_pedidos").insert(filas);
   if (error) throw error;
 }
 
@@ -50,11 +59,31 @@ export async function despacharPedido(pedidoId) {
   return num(data);
 }
 
+// Despacha un pedido COMPLETO (todos sus artículos). Todo o nada: si a un
+// artículo le falta stock no se descuenta ninguno. Devuelve cuántos salieron.
+export async function despacharGrupo(grupoId) {
+  const { data, error } = await supabase.rpc("despachar_grupo_suministros", {
+    p_grupo_id: grupoId,
+  });
+  if (error) throw new Error(error.message || "No se pudo despachar el pedido.");
+  return Number(data) || 0;
+}
+
 export async function cancelarPedido(pedidoId) {
   const { error } = await supabase
     .from("suministros_pedidos")
     .update({ estado: "cancelado" })
     .eq("id", pedidoId)
     .eq("estado", "pendiente"); // nunca cancela algo ya entregado
+  if (error) throw error;
+}
+
+// Cancela todos los renglones pendientes de un pedido.
+export async function cancelarGrupo(grupoId) {
+  const { error } = await supabase
+    .from("suministros_pedidos")
+    .update({ estado: "cancelado" })
+    .eq("grupo_id", grupoId)
+    .eq("estado", "pendiente");
   if (error) throw error;
 }
