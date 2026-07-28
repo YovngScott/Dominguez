@@ -4,7 +4,6 @@ import { supabase } from "../lib/supabaseClient";
 import SearchBar from "../components/SearchBar";
 import Icon from "../components/Icon";
 
-const rolLabel = (rol) => ({ administrativo_general: "Administrativo General", administracion_taller: "Administración de Taller" }[rol] || "Trabajador");
 
 export default function TallerDashboard() {
   const [trabajadores, setTrabajadores] = useState([]);
@@ -74,15 +73,15 @@ export default function TallerDashboard() {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {trabajadores.map((t) => {
-              const n = conteos[t.user_id] || 0;
+              const n = conteos[t.id] || 0;
               return (
-                <Link key={t.user_id} to={`/taller/trabajadores/${t.user_id}`} className="group card p-6 hover:-translate-y-0.5 hover:shadow-lg hover:border-[var(--brand-red)] transition-all">
+                <Link key={t.id} to={`/taller/trabajadores/${t.id}`} className="group card p-6 hover:-translate-y-0.5 hover:shadow-lg hover:border-[var(--brand-red)] transition-all">
                   <div className="flex items-start justify-between gap-3">
                     <span className="w-12 h-12 rounded-2xl bg-[var(--brand-red-50)] text-[var(--brand-red)] flex items-center justify-center"><Icon name="user" className="w-6 h-6" /></span>
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${n ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"}`}>{n} activo{n === 1 ? "" : "s"}</span>
                   </div>
                   <p className="mt-5 font-extrabold text-lg text-[var(--ink)] group-hover:text-[var(--brand-red)]">{t.nombre_completo}</p>
-                  <p className="text-sm text-[var(--ink-soft)] mt-1">{rolLabel(t.rol)}</p>
+                  <p className="text-sm text-[var(--ink-soft)] mt-1">Trabajador del taller</p>
                   <div className="mt-5 pt-4 border-t border-[var(--line)] flex items-center justify-between text-sm font-semibold text-[var(--ink-soft)]"><span>Ver trabajos</span><span className="text-[var(--brand-red)] text-lg">›</span></div>
                 </Link>
               );
