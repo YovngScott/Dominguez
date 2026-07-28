@@ -87,3 +87,6 @@ revoke all on function validar_pin_usuario(text) from public, anon, authenticate
 revoke all on function guardar_perfil_usuario(uuid, text, text, boolean, text, text) from public, anon, authenticated;
 grant execute on function validar_pin_usuario(text) to service_role;
 grant execute on function guardar_perfil_usuario(uuid, text, text, boolean, text, text) to service_role;
+
+-- Obliga a PostgREST/Supabase a reconocer inmediatamente la nueva firma.
+notify pgrst, 'reload schema';
