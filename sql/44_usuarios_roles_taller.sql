@@ -145,7 +145,7 @@ as $$
    where p.activo = true
      and p.login_email is not null
      and p.pin_hash is not null
-     and p.pin_hash = crypt(p_pin, p.pin_hash)
+     and p.pin_hash = extensions.crypt(p_pin, p.pin_hash)
    limit 1;
 $$;
 
@@ -184,8 +184,8 @@ begin
     nullif(trim(coalesce(p_especialidad, '')), ''),
     coalesce(p_activo, true),
     p_login_email,
-    case when p_pin is null then null else crypt(p_pin, gen_salt('bf')) end,
-    case when p_pin is null then null else encode(digest(p_pin, 'sha256'), 'hex') end
+    case when p_pin is null then null else extensions.crypt(p_pin, extensions.gen_salt('bf')) end,
+    case when p_pin is null then null else encode(extensions.digest(p_pin, 'sha256'), 'hex') end
   )
   on conflict (user_id) do update set
     nombre_completo = excluded.nombre_completo,
@@ -194,8 +194,8 @@ begin
     especialidad = excluded.especialidad,
     activo = excluded.activo,
     login_email = excluded.login_email,
-    pin_hash = case when p_pin is null then perfiles.pin_hash else crypt(p_pin, gen_salt('bf')) end,
-    pin_fingerprint = case when p_pin is null then perfiles.pin_fingerprint else encode(digest(p_pin, 'sha256'), 'hex') end
+    pin_hash = case when p_pin is null then perfiles.pin_hash else extensions.crypt(p_pin, extensions.gen_salt('bf')) end,
+    pin_fingerprint = case when p_pin is null then perfiles.pin_fingerprint else encode(extensions.digest(p_pin, 'sha256'), 'hex') end
   returning * into resultado;
   return resultado;
 end;
