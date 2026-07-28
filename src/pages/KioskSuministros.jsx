@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Logo from "../components/Logo";
 import Icon from "../components/Icon";
+import ConfirmDialog from "../components/ConfirmDialog";
+import { supabase } from "../lib/supabaseClient";
 import {
   listarSuministros,
   listarCasosKiosk,
@@ -29,6 +31,7 @@ export default function KioskSuministros() {
     () => localStorage.getItem(CLAVE_SOLICITANTE) || ""
   );
   const [pidiendoNombre, setPidiendoNombre] = useState(false);
+  const [confirmarSalir, setConfirmarSalir] = useState(false);
 
   async function cargar() {
     try {
@@ -139,13 +142,23 @@ export default function KioskSuministros() {
               <p className="text-white/50 text-xs truncate">Almacén del taller</p>
             </div>
           </div>
-          <button
-            onClick={() => setPidiendoNombre(true)}
-            className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-xl px-3 py-2.5 text-sm font-semibold shrink-0"
-          >
-            <Icon name="user" className="w-5 h-5" />
-            <span className="max-w-[9rem] truncate">{solicitante || "¿Quién pide?"}</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setPidiendoNombre(true)}
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-xl px-3 py-2.5 text-sm font-semibold"
+            >
+              <Icon name="user" className="w-5 h-5" />
+              <span className="max-w-[9rem] truncate">{solicitante || "¿Quién pide?"}</span>
+            </button>
+            <button
+              onClick={() => setConfirmarSalir(true)}
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+              className="w-11 h-11 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center"
+            >
+              <Icon name="logout" className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Buscador grande, cómodo para el dedo */}
@@ -272,6 +285,21 @@ export default function KioskSuministros() {
           inicial={solicitante}
           onGuardar={guardarSolicitante}
           onCerrar={() => setPidiendoNombre(false)}
+        />
+      )}
+
+      {confirmarSalir && (
+        <ConfirmDialog
+          titulo="¿Cerrar sesión?"
+          mensaje={
+            carrito.length
+              ? `Tienes ${carrito.length} artículo(s) sin enviar y se perderán. Habrá que iniciar sesión de nuevo para volver a pedir.`
+              : "Habrá que iniciar sesión de nuevo para volver a pedir suministros."
+          }
+          confirmLabel="Sí, cerrar sesión"
+          icon="logout"
+          onCancel={() => setConfirmarSalir(false)}
+          onConfirm={() => supabase.auth.signOut()}
         />
       )}
     </div>
