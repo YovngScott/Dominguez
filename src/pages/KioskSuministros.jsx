@@ -3,6 +3,7 @@ import Logo from "../components/Logo";
 import Icon from "../components/Icon";
 import {
   listarSuministros,
+  listarCasosKiosk,
   crearPedido,
   cantidadTexto,
   num,
@@ -20,6 +21,7 @@ export default function KioskSuministros() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [carrito, setCarrito] = useState([]); // [{ suministro, cantidad }]
+  const [casos, setCasos] = useState([]); // vehículos en proceso (para saber a qué trabajo va)
   const [revisando, setRevisando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [confirmacion, setConfirmacion] = useState(null); // { articulos, unidades }
@@ -37,6 +39,10 @@ export default function KioskSuministros() {
     } finally {
       setLoading(false);
     }
+    // Los vehículos en proceso son opcionales: si falla, se pide sin vehículo.
+    listarCasosKiosk()
+      .then(setCasos)
+      .catch(() => setCasos([]));
   }
 
   useEffect(() => {
@@ -99,7 +105,7 @@ export default function KioskSuministros() {
     );
   }
 
-  async function enviarPedido(nota) {
+  async function enviarPedido(nota, casoId) {
     if (!solicitante) {
       setRevisando(false);
       setPidiendoNombre(true);
@@ -108,7 +114,7 @@ export default function KioskSuministros() {
     setEnviando(true);
     setError("");
     try {
-      await crearPedido({ items: carrito, solicitante, nota });
+      await crearPedido({ items: carrito, solicitante, nota, casoId });
       setConfirmacion({ articulos: carrito.length, unidades: totalUnidades });
       setCarrito([]);
       setRevisando(false);
@@ -253,6 +259,7 @@ export default function KioskSuministros() {
       {revisando && (
         <ModalPedido
           carrito={carrito}
+          casos={casos}
           enviando={enviando}
           onCambiarCantidad={cambiarCantidad}
           onEnviar={enviarPedido}
@@ -378,8 +385,9 @@ function TarjetaSuministro({ suministro, yaEnPedido, onAgregar }) {
 
 // Revisión del pedido antes de enviarlo: se pueden ajustar cantidades,
 // quitar artículos y dejar una nota para el almacén.
-function ModalPedido({ carrito, enviando, onCambiarCantidad, onEnviar, onCerrar }) {
+function ModalPedido({ carrito, casos, enviando, onCambiarCantidad, onEnviar, onCerrar }) {
   const [nota, setNota] = useState("");
+  const [casoId, setCasoId] = useState("");
   const totalUnidades = carrito.reduce((acc, it) => acc + it.cantidad, 0);
 
   return (
@@ -441,14 +449,33 @@ function ModalPedido({ carrito, enviando, onCambiarCantidad, onEnviar, onCerrar 
             </div>
           ))}
 
-          <label className="block pt-2">
+          {casos.length > 0 && (
+            <label className="block pt-2">
+              <span className="field-label">¿Para qué vehículo? (opcional)</span>
+              <select
+                value={casoId}
+                onChange={(e) => setCasoId(e.target.value)}
+                className="input text-base py-3"
+              >
+                <option value="">Sin vehículo específico</option>
+                {casos.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {[c.marca, c.modelo, c.anio].filter(Boolean).join(" ")}
+                    {c.placa ? ` · ${c.placa}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <label className="block">
             <span className="field-label">Nota para el almacén (opcional)</span>
             <textarea
               value={nota}
               onChange={(e) => setNota(e.target.value)}
               rows={2}
               className="input"
-              placeholder="Ej. Es para el Toyota de la bahía 3"
+              placeholder="Ej. Es para la bahía 3"
             />
           </label>
         </div>
@@ -458,7 +485,7 @@ function ModalPedido({ carrito, enviando, onCambiarCantidad, onEnviar, onCerrar 
             Seguir pidiendo
           </button>
           <button
-            onClick={() => onEnviar(nota)}
+            onClick={() => onEnviar(nota, casoId)}
             disabled={enviando || !carrito.length}
             className="btn-primary flex-1 py-3 disabled:opacity-50"
           >

@@ -4,31 +4,31 @@ import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
 import Icon from "../components/Icon";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ModalMovimiento from "../components/suministros/ModalMovimiento";
+import MovimientosPanel from "../components/suministros/MovimientosPanel";
+import ConteoPanel from "../components/suministros/ConteoPanel";
+import ReportesPanel from "../components/suministros/ReportesPanel";
 import {
   ESTADOS_PEDIDO,
   listarSuministros,
+  listarCasosKiosk,
   despacharGrupo,
   cancelarGrupo,
   cantidadTexto,
+  fechaHora,
+  insumosBajoMinimo,
   num,
+  rd,
 } from "../lib/suministros";
 
 const TABS = [
-  { id: "pendientes", label: "Pedidos pendientes", icon: "clock" },
-  { id: "historial", label: "Historial", icon: "file" },
+  { id: "pendientes", label: "Pedidos", icon: "clock" },
   { id: "inventario", label: "Inventario", icon: "package" },
+  { id: "movimientos", label: "Movimientos", icon: "layers" },
+  { id: "conteo", label: "Conteo físico", icon: "clipboard" },
+  { id: "reportes", label: "Reportes", icon: "file" },
+  { id: "historial", label: "Historial", icon: "receipt" },
 ];
-
-function fechaHora(iso) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString("es-DO", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 // Panel del personal de almacén: recibe las requisiciones que llegan de la
 // tablet, las despacha (descontando el stock) y administra el inventario.
@@ -41,8 +41,12 @@ export default function Suministros() {
   const [ok, setOk] = useState("");
   const [procesando, setProcesando] = useState(null); // id del pedido en curso
   const [modalProducto, setModalProducto] = useState(null); // null | "nuevo" | producto
+  const [modalMovimiento, setModalMovimiento] = useState(null); // null | "entrada" | "devolucion"
   const [confirmar, setConfirmar] = useState(null);
   const [hayNuevos, setHayNuevos] = useState(false);
+  const [refrescarKardex, setRefrescarKardex] = useState(0);
+  const [kardexInicial, setKardexInicial] = useState(null); // insumo a mostrar en el kardex
+  const [casos, setCasos] = useState({}); // { casoId: vehículo } para mostrar el destino
 
   const cargar = useCallback(async () => {
     try {
@@ -58,6 +62,10 @@ export default function Suministros() {
       setPedidos(peds || []);
       setSuministros(sums);
       setError("");
+      // Vehículos, para mostrar a qué trabajo va cada pedido.
+      listarCasosKiosk()
+        .then((cs) => setCasos(Object.fromEntries(cs.map((c) => [c.id, c]))))
+        .catch(() => {});
     } catch (err) {
       setError(
         err.message?.includes("suministros")
@@ -128,6 +136,7 @@ export default function Suministros() {
           grupo_id: p.grupo_id,
           solicitante: p.solicitante,
           nota: p.nota,
+          caso_id: p.caso_id,
           created_at: p.created_at,
           items: [],
         };
@@ -136,6 +145,9 @@ export default function Suministros() {
       });
     return [...grupos.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
   }, [pedidos]);
+
+  // Insumos agotados o por debajo del mínimo: hay que comprarlos.
+  const porReponer = useMemo(() => insumosBajoMinimo(suministros), [suministros]);
 
   // Resumen de existencias, siempre a la vista (sin tener que abrir la tablet).
   const resumen = useMemo(() => {
@@ -188,11 +200,25 @@ export default function Suministros() {
           <Icon name="package" className="w-6 h-6 text-[var(--brand-red)]" />
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Almacén</h1>
         </div>
-        {tab === "inventario" && (
-          <button onClick={() => setModalProducto("nuevo")} className="btn-primary gap-1.5">
-            <Icon name="plus" className="w-4 h-4" /> Nuevo insumo
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setModalMovimiento("entrada")}
+            className="btn-primary text-sm py-2 px-3 gap-1.5"
+          >
+            <Icon name="download" className="w-4 h-4" /> Entrada de mercancía
           </button>
-        )}
+          <button
+            onClick={() => setModalMovimiento("devolucion")}
+            className="btn-ghost text-sm py-2 px-3 gap-1.5"
+          >
+            <Icon name="package" className="w-4 h-4" /> Devolución
+          </button>
+          {tab === "inventario" && (
+            <button onClick={() => setModalProducto("nuevo")} className="btn-ghost text-sm py-2 px-3 gap-1.5">
+              <Icon name="plus" className="w-4 h-4" /> Nuevo insumo
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Existencias de un vistazo, sin tener que abrir la tablet */}
@@ -216,6 +242,43 @@ export default function Suministros() {
             color="var(--brand-red)"
             onClick={() => setTab("inventario")}
           />
+        </div>
+      )}
+
+      {/* Alerta de reposición: insumos agotados o por debajo del mínimo */}
+      {!loading && porReponer.length > 0 && (
+        <div className="card p-4 mb-5 border-l-4" style={{ borderLeftColor: "#d97706" }}>
+          <div className="flex items-start gap-3">
+            <span className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <Icon name="package" className="w-5 h-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold text-[var(--ink)]">
+                Hay que reponer {porReponer.length} insumo{porReponer.length === 1 ? "" : "s"}
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {porReponer.slice(0, 8).map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setModalMovimiento({ tipo: "entrada", suministro: s })}
+                    title="Registrar entrada de este insumo"
+                    className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                      num(s.stock) <= 0
+                        ? "bg-[var(--brand-red-50)] text-[var(--brand-red)]"
+                        : "bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    {s.nombre} · {num(s.stock) <= 0 ? "agotado" : `quedan ${cantidadTexto(s.stock)}`}
+                  </button>
+                ))}
+                {porReponer.length > 8 && (
+                  <span className="text-xs text-[var(--ink-soft)] self-center">
+                    y {porReponer.length - 8} más…
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -295,6 +358,7 @@ export default function Suministros() {
         <ListaPendientes
           pedidos={pendientes}
           stockPorId={stockPorId}
+          casos={casos}
           procesando={procesando}
           onEntregar={entregar}
           onCancelar={(grupo) =>
@@ -310,8 +374,33 @@ export default function Suministros() {
         />
       ) : tab === "historial" ? (
         <Historial pedidos={historial} />
+      ) : tab === "movimientos" ? (
+        <MovimientosPanel
+          key={`${refrescarKardex}-${kardexInicial || ""}`}
+          suministros={suministros}
+          filtroInicial={kardexInicial}
+        />
+      ) : tab === "conteo" ? (
+        <ConteoPanel
+          suministros={suministros}
+          onAplicado={(msg) => {
+            setOk(msg);
+            cargar();
+            setRefrescarKardex((n) => n + 1);
+          }}
+        />
+      ) : tab === "reportes" ? (
+        <ReportesPanel key={refrescarKardex} />
       ) : (
-        <Inventario suministros={suministros} onEditar={(s) => setModalProducto(s)} />
+        <Inventario
+          suministros={suministros}
+          onEditar={(s) => setModalProducto(s)}
+          onEntrada={(s) => setModalMovimiento({ tipo: "entrada", suministro: s })}
+          onVerKardex={(s) => {
+            setTab("movimientos");
+            setKardexInicial(s.id);
+          }}
+        />
       )}
 
       {modalProducto && (
@@ -321,6 +410,21 @@ export default function Suministros() {
           onGuardado={() => {
             setModalProducto(null);
             cargar();
+          }}
+        />
+      )}
+
+      {modalMovimiento && (
+        <ModalMovimiento
+          tipo={modalMovimiento.tipo || modalMovimiento}
+          suministros={suministros.filter((s) => s.activo)}
+          preseleccionado={modalMovimiento.suministro}
+          onCerrar={() => setModalMovimiento(null)}
+          onListo={(msg) => {
+            setModalMovimiento(null);
+            setOk(msg);
+            cargar();
+            setRefrescarKardex((n) => n + 1);
           }}
         />
       )}
@@ -353,7 +457,7 @@ function Metrica({ valor, etiqueta, color, onClick }) {
   );
 }
 
-function ListaPendientes({ pedidos, stockPorId, procesando, onEntregar, onCancelar }) {
+function ListaPendientes({ pedidos, stockPorId, casos, procesando, onEntregar, onCancelar }) {
   if (!pedidos.length) {
     return (
       <div className="card p-12 text-center text-[var(--ink-soft)]">
@@ -383,6 +487,15 @@ function ListaPendientes({ pedidos, stockPorId, procesando, onEntregar, onCancel
                   {grupo.solicitante ? ` · ${grupo.solicitante}` : ""}
                 </p>
                 <p className="text-sm text-[var(--ink-soft)]">{fechaHora(grupo.created_at)}</p>
+                {casos?.[grupo.caso_id] && (
+                  <p className="text-sm mt-1 inline-flex items-center gap-1.5 font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">
+                    <Icon name="car" className="w-3.5 h-3.5" />
+                    {[casos[grupo.caso_id].marca, casos[grupo.caso_id].modelo]
+                      .filter(Boolean)
+                      .join(" ")}
+                    {casos[grupo.caso_id].placa ? ` · ${casos[grupo.caso_id].placa}` : ""}
+                  </p>
+                )}
                 {grupo.nota && <p className="text-sm text-[var(--ink)] mt-1">{grupo.nota}</p>}
               </div>
 
@@ -507,7 +620,7 @@ function Historial({ pedidos }) {
   );
 }
 
-function Inventario({ suministros, onEditar }) {
+function Inventario({ suministros, onEditar, onEntrada, onVerKardex }) {
   const [q, setQ] = useState("");
   const term = q.trim().toLowerCase();
   const lista = term
@@ -540,12 +653,9 @@ function Inventario({ suministros, onEditar }) {
           const sinStock = stock <= 0;
           const bajo = !sinStock && stock <= num(s.stock_minimo);
           return (
-            <button
+            <div
               key={s.id}
-              onClick={() => onEditar(s)}
-              className={`card p-4 flex items-center gap-3 text-left hover:border-[var(--brand-red)] hover:shadow-md transition-all ${
-                s.activo ? "" : "opacity-60"
-              }`}
+              className={`card p-4 flex items-center gap-3 ${s.activo ? "" : "opacity-60"}`}
             >
               {s.imagen_url ? (
                 <img
@@ -558,10 +668,11 @@ function Inventario({ suministros, onEditar }) {
                   <Icon name="package" className="w-7 h-7" />
                 </span>
               )}
-              <div className="min-w-0 flex-1">
+              <button onClick={() => onEditar(s)} className="min-w-0 flex-1 text-left">
                 <p className="font-bold text-[var(--ink)] truncate">{s.nombre}</p>
                 <p className="text-xs text-[var(--ink-soft)] truncate">
                   {s.categoria || "Sin categoría"}
+                  {s.costo_ultimo != null ? ` · ${rd(s.costo_ultimo)}` : ""}
                   {s.activo ? "" : " · Oculto en la tablet"}
                 </p>
                 <span
@@ -576,9 +687,25 @@ function Inventario({ suministros, onEditar }) {
                   {cantidadTexto(stock)} {s.unidad}
                   {bajo && !sinStock ? " · queda poco" : ""}
                 </span>
+              </button>
+
+              <div className="flex flex-col gap-1 shrink-0">
+                <button
+                  onClick={() => onEntrada(s)}
+                  title="Registrar entrada de mercancía"
+                  className="p-2 rounded-lg text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-emerald-600"
+                >
+                  <Icon name="download" className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => onVerKardex(s)}
+                  title="Ver movimientos de este insumo"
+                  className="p-2 rounded-lg text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--brand-red)]"
+                >
+                  <Icon name="layers" className="w-4 h-4" />
+                </button>
               </div>
-              <Icon name="pencil" className="w-4 h-4 text-[var(--ink-soft)] shrink-0" />
-            </button>
+            </div>
           );
         })}
       </div>

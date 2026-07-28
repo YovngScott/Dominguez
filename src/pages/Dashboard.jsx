@@ -38,6 +38,17 @@ export default function Dashboard() {
   const [estancados, setEstancados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [waEstado, setWaEstado] = useState(null); // "open" | "connecting" | "close" | ...
+  const [porReponer, setPorReponer] = useState([]); // insumos agotados o bajo el mínimo
+
+  // Insumos que hay que comprar (el módulo de almacén puede no estar aún
+  // migrado: si falla, simplemente no se muestra la alerta).
+  useEffect(() => {
+    import("../lib/suministros")
+      .then(({ listarSuministros, insumosBajoMinimo }) =>
+        listarSuministros().then((s) => setPorReponer(insumosBajoMinimo(s)))
+      )
+      .catch(() => setPorReponer([]));
+  }, []);
 
   // Estado de la conexión de WhatsApp (para avisar si se desvinculó).
   useEffect(() => {
@@ -162,6 +173,31 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
+        )}
+
+        {/* Alerta de reposición del almacén */}
+        {porReponer.length > 0 && (
+          <Link
+            to="/suministros"
+            className="card p-4 mb-6 border-l-4 flex items-start gap-3 hover:shadow-md transition-shadow"
+            style={{ borderLeftColor: "#d97706" }}
+          >
+            <span className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <Icon name="package" className="w-5 h-5" />
+            </span>
+            <div className="min-w-0 text-sm">
+              <p className="font-bold text-[var(--ink)]">
+                Hay que reponer {porReponer.length} insumo{porReponer.length === 1 ? "" : "s"} del almacén
+              </p>
+              <p className="text-[var(--ink-soft)] truncate">
+                {porReponer
+                  .slice(0, 4)
+                  .map((s) => `${s.nombre} (${Number(s.stock) <= 0 ? "agotado" : Number(s.stock)})`)
+                  .join(" · ")}
+                {porReponer.length > 4 ? ` y ${porReponer.length - 4} más…` : ""}
+              </p>
+            </div>
+          </Link>
         )}
 
         {/* Métricas (botones): al pulsar se despliega la lista de casos */}
