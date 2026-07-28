@@ -8,6 +8,7 @@ import SignaturePad from "../components/SignaturePad";
 import Icon from "../components/Icon";
 import { ESTADOS } from "../lib/estados";
 import { rd, nombrePieza } from "../lib/cotizacion";
+import { marcarCitasAtendidas } from "../lib/citaCaso";
 
 const ESTADO_ORDEN = ["en_espera_piezas", "listo_para_trabajar", "entregado"];
 
@@ -111,6 +112,11 @@ export default function CaseDetail() {
     setCaso((c) => ({ ...c, estado, fecha_entrega: null, firma_entrega_url: null }));
     setFirmaUrl(null);
     loadHistorial();
+
+    // Al recibir el vehículo, la cita que lo esperaba queda atendida sola.
+    if (estado === "vehiculo_en_taller") {
+      marcarCitasAtendidas(casoId).catch(() => {});
+    }
   }
 
   async function confirmarEntrega(blob) {

@@ -6,6 +6,7 @@ import Icon from "../components/Icon";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
 import { avisarCitaConfirmada } from "../lib/confirmarCita";
+import { vincularCasoDeCita } from "../lib/citaCaso";
 
 const ESTADOS = ["pendiente", "confirmada", "atendida", "cancelada"];
 const ESTADO_COLOR = {
@@ -330,6 +331,17 @@ function CitaModal({ cita, onCancel, onSaved }) {
     if (!form.nombre.trim()) return setError("El nombre es obligatorio.");
     if (!form.fecha) return setError("La fecha es obligatoria.");
     setGuardando(true);
+
+    // Toda cita queda vinculada a un vehículo: se busca el caso activo del
+    // cliente por nombre y, si no tiene, se crea uno "listo para trabajar"
+    // (queda a la espera de que traigan el vehículo).
+    const casoVinculado = await vincularCasoDeCita({
+      nombre: form.nombre,
+      telefono: form.telefono,
+      clienteId: form.cliente_id,
+      casoId: form.caso_id,
+    });
+
     const payload = {
       fecha: form.fecha,
       hora: form.hora || null,
@@ -338,7 +350,7 @@ function CitaModal({ cita, onCancel, onSaved }) {
       motivo: form.motivo || null,
       nota: form.nota || null,
       cliente_id: form.cliente_id || null,
-      caso_id: form.caso_id || null,
+      caso_id: casoVinculado,
     };
     let e;
     if (editando) {

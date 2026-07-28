@@ -2,12 +2,24 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { ESTADOS, ESTADOS_LISTA } from "../lib/estados";
+import { citasPendientesDeCasos } from "../lib/citaCaso";
 import Icon from "../components/Icon";
+
+function fechaCorta(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString("es-DO", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+}
 
 export default function CaseList() {
   const { aseguradoraId } = useParams();
   const [aseguradora, setAseguradora] = useState(null);
   const [casos, setCasos] = useState([]);
+  const [citas, setCitas] = useState({}); // { casoId: cita pendiente }
   const [activo, setActivo] = useState("en_espera_piezas");
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(true);
@@ -34,6 +46,12 @@ export default function CaseList() {
       setAseguradora(aseg);
       setCasos(casosData || []);
       setLoading(false);
+
+      // Citas aún sin atender, para avisar en la lista qué vehículos están
+      // agendados para venir.
+      citasPendientesDeCasos((casosData || []).map((c) => c.id))
+        .then(setCitas)
+        .catch(() => {});
     }
     load();
   }, [aseguradoraId]);
@@ -190,6 +208,13 @@ export default function CaseList() {
                   {c.cliente?.nombre_completo} · Placa {c.placa || "—"}
                   {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
                 </p>
+                {citas[c.id] && (
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700">
+                    <Icon name="clock" className="w-3.5 h-3.5" />
+                    Cita {fechaCorta(citas[c.id].fecha)}
+                    {citas[c.id].hora ? ` · ${citas[c.id].hora}` : ""}
+                  </p>
+                )}
               </div>
               {buscando ? (
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${est.chip}`}>
