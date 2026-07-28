@@ -5,6 +5,7 @@ import PhotoManager from "../components/PhotoManager";
 import PiezasManager from "../components/PiezasManager";
 import DocumentManager from "../components/DocumentManager";
 import SignaturePad from "../components/SignaturePad";
+import SelectorLlave from "../components/SelectorLlave";
 import Icon from "../components/Icon";
 import { ESTADOS } from "../lib/estados";
 import { rd, nombrePieza } from "../lib/cotizacion";
@@ -35,7 +36,8 @@ export default function CaseDetail() {
   const [firmaUrl, setFirmaUrl] = useState(null);
   const [showFirma, setShowFirma] = useState(false);
   const [guardandoFirma, setGuardandoFirma] = useState(false);
-  const [generandoTrabajo, setGenerandoTrabajo] = useState(false);
+  const [imprimiendoFicha, setImprimiendoFicha] = useState(false);
+  const [imprimiendoMateriales, setImprimiendoMateriales] = useState(false);
 
   async function loadCaso() {
     const { data } = await supabase
@@ -151,8 +153,8 @@ export default function CaseDetail() {
 
   // Genera la hoja "Trabajo a realizar" con las piezas y la mano de obra
   // tomadas de las cotizaciones del vehículo. Se imprime y se pone en el carro.
-  async function imprimirTrabajo() {
-    setGenerandoTrabajo(true);
+  async function imprimirFichaTaller() {
+    setImprimiendoFicha(true);
     try {
       const filtros = [`caso_id.eq.${casoId}`];
       if (caso.chasis?.trim()) filtros.push(`chasis.ilike.${caso.chasis.trim()}`);
@@ -161,6 +163,12 @@ export default function CaseDetail() {
         .select("items_piezas, items_mano_obra, created_at")
         .or(filtros.join(","))
         .order("created_at", { ascending: false });
+      const { data: ordenes } = await supabase
+        .from("ordenes_reparacion")
+        .select("trabajos")
+        .eq("caso_id", casoId)
+        .order("created_at", { ascending: false })
+        .limit(1);
 
       // Junta piezas (sin repetir) y mano de obra de todas las cotizaciones.
       const piezasMap = new Map();
@@ -182,8 +190,14 @@ export default function CaseDetail() {
         });
       });
 
-      const { generarPdfTrabajo } = await import("../lib/trabajoPdf");
-      const blob = await generarPdfTrabajo({
+      // Incluye los trabajos escritos directamente en el recibo/orden.
+      (ordenes?.[0]?.trabajos || "").split(/\r?\n|,|;/).map((t) => t.trim()).filter(Boolean).forEach((desc) => {
+        const k = desc.toLowerCase();
+        if (!manoVistas.has(k)) { manoVistas.add(k); mano.push({ descripcion: desc, cantidad: 1 }); }
+      });
+
+      const { generarFichaTaller } = await import("../lib/fichaTallerPdf");
+      const blob = generarFichaTaller({
         caso: {
           aseguradora_nombre: caso.aseguradora?.nombre,
           cliente_nombre: caso.cliente?.nombre_completo,
@@ -192,6 +206,11 @@ export default function CaseDetail() {
           modelo: caso.modelo?.nombre,
           anio: caso.anio,
           placa: caso.placa,
+          chasis: caso.chasis,
+          color: caso.color,
+          fecha_ingreso: caso.fecha_ingreso,
+          fecha_entrega: caso.fecha_entrega,
+          numero_llave: caso.numero_llave,
           numero_reclamo: caso.numero_reclamo,
         },
         piezas: [...piezasMap.values()],
@@ -199,7 +218,49 @@ export default function CaseDetail() {
       });
       window.open(URL.createObjectURL(blob), "_blank");
     } finally {
-      setGenerandoTrabajo(false);
+      setImprimiendoFicha(false);
+    }
+  }
+
+  async function imprimirMateriales() {
+    setImprimiendoMateriales(true);
+    try {
+      const { data: ordenes } = await supabase
+        .from("ordenes_reparacion")
+        .select("*")
+        .eq("caso_id", casoId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const { generarReporteMateriales } = await import("../lib/materialesPdf");
+      const blob = generarReporteMateriales({
+        caso: {
+          aseguradora_nombre: caso.aseguradora?.nombre,
+          cliente_nombre: caso.cliente?.nombre_completo,
+          cliente_telefono: caso.cliente?.telefono,
+          marca: caso.marca?.nombre,
+          modelo: caso.modelo?.nombre,
+          anio: caso.anio,
+          placa: caso.placa,
+          chasis: caso.chasis,
+          color: caso.color,
+          numero_reclamo: caso.numero_reclamo,
+          fecha_ingreso: caso.fecha_ingreso,
+          fecha_entrega: caso.fecha_entrega,
+          numero_llave: caso.numero_llave,
+        },
+        orden: ordenes?.[0] || {},
+      });
+      /*
+      // Si el recibo/orden trae trabajos escritos a mano, también se incluyen
+      // en la ficha, además de la mano de obra de las cotizaciones.
+      (ordenes?.[0]?.trabajos || "").split(/\r?\n|,|;/).map((t) => t.trim()).filter(Boolean).forEach((desc) => {
+        const k = desc.toLowerCase();
+        if (!manoVistas.has(k)) { manoVistas.add(k); mano.push({ descripcion: desc, cantidad: 1 }); }
+      });
+      */
+      window.open(URL.createObjectURL(blob), "_blank");
+    } finally {
+      setImprimiendoMateriales(false);
     }
   }
 
@@ -243,16 +304,28 @@ export default function CaseDetail() {
           ← {caso.aseguradora?.nombre}
         </Link>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          {enTaller && (
+          {(
             <button
-              onClick={imprimirTrabajo}
-              disabled={generandoTrabajo}
+              onClick={imprimirFichaTaller}
+              disabled={imprimiendoFicha}
               className="btn-primary text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
             >
+              <span aria-hidden="true">🔑</span>
+              <span>{imprimiendoFicha ? "Generando..." : "Imprimir ficha de taller"}</span>
+              {/*
               <Icon name="clipboard" className="w-4 h-4" />
               {generandoTrabajo ? "Generando…" : "Trabajo a realizar"}
+              */}
             </button>
           )}
+          <button
+            onClick={imprimirMateriales}
+            disabled={imprimiendoMateriales}
+            className="btn-ghost text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
+          >
+            <Icon name="clipboard" className="w-4 h-4" />
+            {imprimiendoMateriales ? "Generando..." : "Materiales / suministros"}
+          </button>
           <Link to={`/ordenes/nueva?caso=${casoId}`} className="btn-ghost text-sm py-2 px-3 gap-1.5">
             <Icon name="clipboard" className="w-4 h-4" /> Recibo
           </Link>
@@ -276,6 +349,15 @@ export default function CaseDetail() {
           {caso.marca?.nombre} {caso.modelo?.nombre} {caso.anio ? `(${caso.anio})` : ""}
         </h1>
         <p className="text-[var(--ink-soft)] mt-0.5">{caso.cliente?.nombre_completo}</p>
+
+        <div className="mt-4">
+          <SelectorLlave
+            casoId={caso.id}
+            numeroLlave={caso.numero_llave}
+            estado={caso.estado}
+            onChange={(numero_llave) => setCaso((c) => ({ ...c, numero_llave }))}
+          />
+        </div>
 
         {/* Estado */}
         <div className="mt-5">
