@@ -174,6 +174,13 @@ const PATHS = {
       <circle cx="7.5" cy="7.5" r="1.5" />
     </>
   ),
+  key: (
+    <>
+      <circle cx="8" cy="15" r="4" />
+      <path d="m11 12 9-9" />
+      <path d="m16 5 3 3M14 7l3 3" />
+    </>
+  ),
   grid: (
     <>
       <rect x="3" y="3" width="7" height="7" rx="1" />

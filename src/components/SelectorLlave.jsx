@@ -48,14 +48,19 @@ export default function SelectorLlave({ casoId, numeroLlave, estado, onChange })
     <>
       <button
         onClick={() => setAbierto(true)}
-        className={`rounded-xl border px-3 py-2 text-left transition-colors ${
-          numeroLlave ? "border-amber-300 bg-amber-50 text-amber-800" : "border-dashed border-[var(--line)] hover:border-amber-400"
+        title={numeroLlave ? `Cambiar llave #${numeroLlave}` : "Asignar llave"}
+        className={`btn-ghost text-sm py-2 px-3 gap-1.5 ${
+          numeroLlave ? "!border-amber-400 !text-amber-700" : "border-dashed"
         }`}
       >
+        <Icon name="key" className="w-4 h-4" />
+        <span className="font-bold">{numeroLlave ? `Llave #${numeroLlave}` : "Asignar llave"}</span>
+        {/*
         <span className="text-[10px] uppercase tracking-wide opacity-70">Llave asignada</span>
         <span className="flex items-center gap-1.5 font-extrabold text-lg leading-5">
           <span aria-hidden="true">🔑</span> {numeroLlave ? `#${numeroLlave}` : "Asignar"}
         </span>
+        */}
       </button>
 
       {abierto && (

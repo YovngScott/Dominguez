@@ -296,28 +296,30 @@ export default function CaseDetail() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="space-y-3">
         <Link
           to={`/aseguradoras/${caso.aseguradora_id}`}
           className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)] truncate max-w-full"
         >
           ← {caso.aseguradora?.nombre}
         </Link>
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          {(
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap gap-2">
+          {
             <button
               onClick={imprimirFichaTaller}
               disabled={imprimiendoFicha}
-              className="btn-primary text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
+              className="ficha-print-button btn-primary text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
             >
               <span aria-hidden="true">🔑</span>
+              <Icon name="key" className="w-4 h-4" />
               <span>{imprimiendoFicha ? "Generando..." : "Imprimir ficha de taller"}</span>
               {/*
               <Icon name="clipboard" className="w-4 h-4" />
               {generandoTrabajo ? "Generando…" : "Trabajo a realizar"}
               */}
             </button>
-          )}
+          }
           <button
             onClick={imprimirMateriales}
             disabled={imprimiendoMateriales}
@@ -326,6 +328,8 @@ export default function CaseDetail() {
             <Icon name="clipboard" className="w-4 h-4" />
             {imprimiendoMateriales ? "Generando..." : "Materiales / suministros"}
           </button>
+          </div>
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
           <Link to={`/ordenes/nueva?caso=${casoId}`} className="btn-ghost text-sm py-2 px-3 gap-1.5">
             <Icon name="clipboard" className="w-4 h-4" /> Recibo
           </Link>
@@ -341,16 +345,18 @@ export default function CaseDetail() {
           >
             <Icon name="trash" className="w-4 h-4" /> Eliminar
           </button>
+          </div>
         </div>
       </div>
 
       <div className="card p-6 mt-3 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">
-          {caso.marca?.nombre} {caso.modelo?.nombre} {caso.anio ? `(${caso.anio})` : ""}
-        </h1>
-        <p className="text-[var(--ink-soft)] mt-0.5">{caso.cliente?.nombre_completo}</p>
-
-        <div className="mt-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">
+              {caso.marca?.nombre} {caso.modelo?.nombre} {caso.anio ? `(${caso.anio})` : ""}
+            </h1>
+            <p className="text-[var(--ink-soft)] mt-0.5">{caso.cliente?.nombre_completo}</p>
+          </div>
           <SelectorLlave
             casoId={caso.id}
             numeroLlave={caso.numero_llave}

@@ -223,3 +223,8 @@ html.dark .from-slate-50 { background-color: rgba(148, 163, 184, 0.1); }
     print-color-adjust: exact;
   }
 }
+
+/* El icono antiguo de emoji se oculta; la ficha usa el Icon SVG del sistema. */
+.ficha-print-button > span[aria-hidden="true"] {
+  display: none;
+}
