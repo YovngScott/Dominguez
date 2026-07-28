@@ -24,7 +24,7 @@ export function useRol() {
       }
       const { data } = await supabase
         .from("perfiles")
-        .select("rol, nombre_completo, especialidad, activo")
+        .select("rol, nombre_completo, activo")
         .eq("user_id", session.user.id)
         .maybeSingle();
       if (vivo) {

@@ -40,12 +40,11 @@ async function validarAdmin(req, url, key) {
 function validarPayload(body, { creando = false } = {}) {
   const nombre = clean(body?.nombre_completo, 120);
   const rol = clean(body?.rol, 40);
-  const especialidad = clean(body?.especialidad, 80);
   const pin = clean(body?.pin, 8);
   if (!nombre) throw new Error("El nombre completo es obligatorio.");
   if (!ROLES.includes(rol)) throw new Error("Selecciona un rol válido.");
   if ((creando || pin) && !/^\d{4}$/.test(pin)) throw new Error("El PIN debe tener 4 dígitos.");
-  return { nombre, rol, especialidad, pin: pin || null, activo: body?.activo !== false };
+  return { nombre, rol, pin: pin || null, activo: body?.activo !== false };
 }
 
 async function validarPinDisponible(url, key, pin, userId = null) {
@@ -64,7 +63,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
-      const data = await supa(url, key, "/rest/v1/perfiles?select=user_id,nombre_completo,rol,especialidad,activo,created_at&order=nombre_completo.asc");
+      const data = await supa(url, key, "/rest/v1/perfiles?select=user_id,nombre_completo,rol,activo,created_at&order=nombre_completo.asc");
       return res.status(200).json({ usuarios: data || [] });
     }
 
@@ -83,7 +82,7 @@ export default async function handler(req, res) {
         await supa(url, key, "/rest/v1/rpc/guardar_perfil_usuario", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ p_user_id: userId, p_nombre_completo: p.nombre, p_rol: p.rol, p_especialidad: p.especialidad, p_activo: p.activo, p_login_email: loginEmail, p_pin: p.pin }),
+          body: JSON.stringify({ p_user_id: userId, p_nombre_completo: p.nombre, p_rol: p.rol, p_activo: p.activo, p_login_email: loginEmail, p_pin: p.pin }),
         });
       } catch (e) {
         await supa(url, key, `/auth/v1/admin/users/${userId}`, { method: "DELETE" }).catch(() => {});
@@ -109,7 +108,7 @@ export default async function handler(req, res) {
       await supa(url, key, "/rest/v1/rpc/guardar_perfil_usuario", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ p_user_id: userId, p_nombre_completo: p.nombre, p_rol: p.rol, p_especialidad: p.especialidad, p_activo: p.activo, p_login_email: existente[0].login_email, p_pin: p.pin }),
+        body: JSON.stringify({ p_user_id: userId, p_nombre_completo: p.nombre, p_rol: p.rol, p_activo: p.activo, p_login_email: existente[0].login_email, p_pin: p.pin }),
       });
       return res.status(200).json({ ok: true });
     }

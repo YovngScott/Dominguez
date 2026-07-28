@@ -5,6 +5,7 @@ import Icon from "../components/Icon";
 import { ESTADOS } from "../lib/estados";
 
 function vehiculo(c) { return [c?.marca?.nombre, c?.modelo?.nombre, c?.anio].filter(Boolean).join(" ") || "Vehículo"; }
+const rolLabel = (rol) => ({ administrativo_general: "Administrativo General", administracion_taller: "Administración de Taller" }[rol] || "Trabajador");
 function coincide(c, q) {
   return [c.numero_llave && `llave ${c.numero_llave}`, c.placa, c.chasis, c.numero_reclamo, c.cliente?.nombre_completo, vehiculo(c)]
     .filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
@@ -57,7 +58,7 @@ export default function TrabajadorDetail() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       <Link to="/" className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]">← Personal del taller</Link>
       <div className="card p-6 sm:p-7 mt-4 flex flex-wrap items-center justify-between gap-5">
-        <div className="flex items-center gap-4"><span className="w-14 h-14 rounded-2xl bg-[var(--brand-red-50)] text-[var(--brand-red)] flex items-center justify-center"><Icon name="user" className="w-7 h-7" /></span><div><h1 className="text-2xl font-extrabold text-[var(--ink)]">{trabajador.nombre_completo}</h1><p className="text-[var(--ink-soft)]">{trabajador.especialidad}</p></div></div>
+        <div className="flex items-center gap-4"><span className="w-14 h-14 rounded-2xl bg-[var(--brand-red-50)] text-[var(--brand-red)] flex items-center justify-center"><Icon name="user" className="w-7 h-7" /></span><div><h1 className="text-2xl font-extrabold text-[var(--ink)]">{trabajador.nombre_completo}</h1><p className="text-[var(--ink-soft)]">{rolLabel(trabajador.rol)}</p></div></div>
         <button onClick={() => setModal(true)} className="btn-primary"><Icon name="plus" className="w-5 h-5" /> Asignar caso</button>
       </div>
 

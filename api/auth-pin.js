@@ -29,7 +29,6 @@ export default async function handler(req, res) {
         id: usuario.user_id,
         nombre: usuario.nombre_completo,
         rol: usuario.rol,
-        especialidad: usuario.especialidad,
       },
     });
   } catch (e) {

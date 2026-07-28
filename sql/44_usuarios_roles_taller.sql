@@ -9,7 +9,6 @@ create extension if not exists pgcrypto;
 -- Se conservan los perfiles que ya existen. "admin" y "almacen_kiosk"
 -- se convierten a los nombres de roles nuevos.
 alter table perfiles add column if not exists nombre_completo text;
-alter table perfiles add column if not exists especialidad text;
 alter table perfiles add column if not exists activo boolean not null default true;
 alter table perfiles add column if not exists pin_hash text;
 alter table perfiles add column if not exists pin_fingerprint text;
@@ -117,11 +116,10 @@ create policy "perfiles_admin_total" on perfiles
 
 -- Vista sin hashes ni correo interno para las tarjetas del personal.
 create or replace view trabajadores_taller as
-select user_id, nombre_completo, especialidad, rol, activo, created_at
+select user_id, nombre_completo, rol, activo, created_at
 from perfiles
 where activo = true
-  and rol <> 'suministros'
-  and nullif(trim(coalesce(especialidad, '')), '') is not null;
+  and rol <> 'suministros';
 
 grant select on trabajadores_taller to authenticated;
 
@@ -132,15 +130,14 @@ returns table (
   user_id uuid,
   login_email text,
   nombre_completo text,
-  rol text,
-  especialidad text
+  rol text
 )
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select p.user_id, p.login_email, p.nombre_completo, p.rol, p.especialidad
+  select p.user_id, p.login_email, p.nombre_completo, p.rol
     from perfiles p
    where p.activo = true
      and p.login_email is not null
@@ -156,7 +153,6 @@ create or replace function guardar_perfil_usuario(
   p_user_id uuid,
   p_nombre_completo text,
   p_rol text,
-  p_especialidad text,
   p_activo boolean,
   p_login_email text,
   p_pin text default null
@@ -175,13 +171,12 @@ begin
     raise exception 'El PIN debe tener 4 dígitos';
   end if;
 
-  insert into perfiles (user_id, nombre_completo, nombre, rol, especialidad, activo, login_email, pin_hash, pin_fingerprint)
+  insert into perfiles (user_id, nombre_completo, nombre, rol, activo, login_email, pin_hash, pin_fingerprint)
   values (
     p_user_id,
     nullif(trim(p_nombre_completo), ''),
     nullif(trim(p_nombre_completo), ''),
     p_rol,
-    nullif(trim(coalesce(p_especialidad, '')), ''),
     coalesce(p_activo, true),
     p_login_email,
     case when p_pin is null then null else extensions.crypt(p_pin, extensions.gen_salt('bf')) end,
@@ -191,7 +186,6 @@ begin
     nombre_completo = excluded.nombre_completo,
     nombre = excluded.nombre,
     rol = excluded.rol,
-    especialidad = excluded.especialidad,
     activo = excluded.activo,
     login_email = excluded.login_email,
     pin_hash = case when p_pin is null then perfiles.pin_hash else extensions.crypt(p_pin, extensions.gen_salt('bf')) end,
@@ -202,9 +196,9 @@ end;
 $$;
 
 revoke all on function validar_pin_usuario(text) from public, anon, authenticated;
-revoke all on function guardar_perfil_usuario(uuid, text, text, text, boolean, text, text) from public, anon, authenticated;
+revoke all on function guardar_perfil_usuario(uuid, text, text, boolean, text, text) from public, anon, authenticated;
 grant execute on function validar_pin_usuario(text) to service_role;
-grant execute on function guardar_perfil_usuario(uuid, text, text, text, boolean, text, text) to service_role;
+grant execute on function guardar_perfil_usuario(uuid, text, text, boolean, text, text) to service_role;
 
 -- Trabajos asignados: un mismo vehículo puede estar asignado a varios
 -- operarios. Al entregarse el vehículo, todos sus trabajos se completan.

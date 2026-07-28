@@ -4,6 +4,8 @@ import { supabase } from "../lib/supabaseClient";
 import SearchBar from "../components/SearchBar";
 import Icon from "../components/Icon";
 
+const rolLabel = (rol) => ({ administrativo_general: "Administrativo General", administracion_taller: "Administración de Taller" }[rol] || "Trabajador");
+
 export default function TallerDashboard() {
   const [trabajadores, setTrabajadores] = useState([]);
   const [conteos, setConteos] = useState({});
@@ -80,7 +82,7 @@ export default function TallerDashboard() {
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${n ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"}`}>{n} activo{n === 1 ? "" : "s"}</span>
                   </div>
                   <p className="mt-5 font-extrabold text-lg text-[var(--ink)] group-hover:text-[var(--brand-red)]">{t.nombre_completo}</p>
-                  <p className="text-sm text-[var(--ink-soft)] mt-1">{t.especialidad}</p>
+                  <p className="text-sm text-[var(--ink-soft)] mt-1">{rolLabel(t.rol)}</p>
                   <div className="mt-5 pt-4 border-t border-[var(--line)] flex items-center justify-between text-sm font-semibold text-[var(--ink-soft)]"><span>Ver trabajos</span><span className="text-[var(--brand-red)] text-lg">›</span></div>
                 </Link>
               );
