@@ -105,6 +105,12 @@ export function generarFichaTaller({ caso, piezas = [], manoObra = [] }) {
   // El pie se coloca justo despues de la lista mas larga para que se pueda
   // cortar y reutilizar el resto de la hoja cuando la ficha es corta.
   const footerY = y + 12 + alturaCuerpo + 7;
+  // Separador central: mantiene las dos listas claramente diferenciadas sin
+  // gastar tinta en fondos o recuadros pesados.
+  const separadorX = M + colW + 4;
+  doc.setDrawColor(...LINE);
+  doc.setLineWidth(0.4);
+  doc.line(separadorX, y + 1, separadorX, footerY - 6);
   doc.setDrawColor(...RED);
   doc.setLineWidth(0.55);
   doc.line(M, footerY, W - M, footerY);

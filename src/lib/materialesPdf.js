@@ -23,17 +23,17 @@ export function generarReporteMateriales({ caso = {}, orden = {} }) {
   doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.text("LLAVE", W - M, 9, { align: "right" }); doc.setFontSize(21); doc.setTextColor(...RED); doc.text(caso.numero_llave ? `#${caso.numero_llave}` : "-", W - M, 18, { align: "right" });
 
   let y = 27;
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.roundedRect(M, y, CW, 32, 1.2, 1.2, "S");
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.3); doc.roundedRect(M, y, CW, 38, 1.2, 1.2, "S");
   const cols = [M + 3, M + 51, M + 99, M + 147]; const w = 43;
-  dato(doc, cols[0], y + 5, "SEGURO", caso.aseguradora_nombre, w); dato(doc, cols[1], y + 5, "CLIENTE", caso.cliente_nombre, w); dato(doc, cols[2], y + 5, "TELEFONO", caso.cliente_telefono, w); dato(doc, cols[3], y + 5, "VEHICULO", vehiculo, w);
-  dato(doc, cols[0], y + 14, "PLACA", caso.placa, w); dato(doc, cols[1], y + 14, "CHASIS", caso.chasis, w); dato(doc, cols[2], y + 14, "COLOR", caso.color, w); dato(doc, cols[3], y + 14, "DEDUCTIBLE", caso.deductible || orden.costo, w);
-  dato(doc, cols[0], y + 23, "RECLAMO", caso.numero_reclamo, w); dato(doc, cols[1], y + 23, "ENTRADA", caso.fecha_ingreso, w); dato(doc, cols[2], y + 23, "SALIDA", caso.fecha_entrega ? new Date(caso.fecha_entrega).toLocaleDateString("es-DO") : "-", w); dato(doc, cols[3], y + 23, "NUMERO DE LLAVE", caso.numero_llave ? `#${caso.numero_llave}` : "Sin asignar", w);
+  dato(doc, cols[0], y + 6, "SEGURO", caso.aseguradora_nombre, w); dato(doc, cols[1], y + 6, "CLIENTE", caso.cliente_nombre, w); dato(doc, cols[2], y + 6, "TELEFONO", caso.cliente_telefono, w); dato(doc, cols[3], y + 6, "VEHICULO", vehiculo, w);
+  dato(doc, cols[0], y + 17, "PLACA", caso.placa, w); dato(doc, cols[1], y + 17, "CHASIS", caso.chasis, w); dato(doc, cols[2], y + 17, "COLOR", caso.color, w); dato(doc, cols[3], y + 17, "DEDUCTIBLE", caso.deductible || orden.costo, w);
+  dato(doc, cols[0], y + 28, "RECLAMO", caso.numero_reclamo, w); dato(doc, cols[1], y + 28, "ENTRADA", caso.fecha_ingreso, w); dato(doc, cols[2], y + 28, "SALIDA", caso.fecha_entrega ? new Date(caso.fecha_entrega).toLocaleDateString("es-DO") : "-", w); dato(doc, cols[3], y + 28, "NUMERO DE LLAVE", caso.numero_llave ? `#${caso.numero_llave}` : "Sin asignar", w);
 
-  y += 36;
+  y += 42;
   const xs = [M, M + 36, M + 118, M + 146, M + 170, W - M];
   const headers = ["EMPLEADO", "MATERIALES", "MARCA", "CANTIDAD", "COSTO"];
   doc.setFillColor(...INK); doc.rect(M, y, CW, 7.5, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(7.1); doc.setTextColor(255, 255, 255); headers.forEach((h, i) => doc.text(h, xs[i] + 2, y + 5)); y += 7.5;
-  const rowH = 4.8;
+  const rowH = 4.65;
   doc.setDrawColor(...LINE); doc.setLineWidth(0.25); doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(...INK);
   MATERIALES.forEach((material) => {
     doc.rect(M, y, CW, rowH, "S");
