@@ -1,7 +1,21 @@
 -- Separa los trabajadores del taller de los usuarios que inician sesión.
 -- Ejecutar UNA vez después de las migraciones 44 y 45.
 
-drop view if exists trabajadores_taller;
+-- Puede haber quedado una vista del modelo anterior o una tabla creada en un
+-- intento previo. Solo se elimina si realmente es una vista.
+do $$
+begin
+  if exists (
+    select 1 from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'trabajadores_taller'
+      and c.relkind = 'v'
+  ) then
+    execute 'drop view public.trabajadores_taller';
+  end if;
+end;
+$$;
 
 create table if not exists trabajadores_taller (
   id uuid primary key default gen_random_uuid(),
