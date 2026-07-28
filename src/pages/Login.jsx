@@ -1,88 +1,100 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import Logo from "../components/Logo";
+import Icon from "../components/Icon";
+
+const DIGITOS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 export default function Login() {
-  const { session, loading, signIn } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const { session, loading, signIn, signInWithPin } = useAuth();
+  const navigate = useNavigate();
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [mostrarLegacy, setMostrarLegacy] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   if (!loading && session) return <Navigate to="/" replace />;
 
-  async function handleSubmit(e) {
+  async function ingresarConPin(valor = pin) {
+    if (valor.length !== 4 || submitting) return;
+    setSubmitting(true);
+    setError("");
+    const { error: e, perfil } = await signInWithPin(valor);
+    if (e) {
+      setError(e.message || "PIN incorrecto.");
+      setPin("");
+      setSubmitting(false);
+      return;
+    }
+    navigate(perfil?.rol === "suministros" ? "/suministros/pedir" : "/", { replace: true });
+    setSubmitting(false);
+  }
+
+  function presionar(n) {
+    if (submitting || pin.length >= 4) return;
+    const siguiente = `${pin}${n}`;
+    setPin(siguiente);
+    if (siguiente.length === 4) ingresarConPin(siguiente);
+  }
+
+  async function legacySubmit(e) {
     e.preventDefault();
     setSubmitting(true);
     setError("");
-    const { error } = await signIn(email, password);
-    if (error) setError("Correo o contraseña incorrectos.");
+    const { error: eAuth } = await signIn(email, password);
+    if (eAuth) setError("Correo o contraseña incorrectos.");
     setSubmitting(false);
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Panel de marca */}
-      <div className="hidden lg:flex flex-col justify-between bg-[var(--ink)] text-white p-12 relative overflow-hidden">
-        <div className="absolute -right-20 -top-20 w-96 h-96 rounded-full bg-[var(--brand-red)] opacity-20 blur-3xl" />
-        <div className="absolute right-10 bottom-10 w-72 h-72 rounded-full bg-[var(--brand-red)] opacity-10 blur-3xl" />
-        <Logo size={56} light />
-        <div className="relative z-10">
-          <h2 className="text-4xl font-extrabold leading-tight">
-            Gestión digital del taller
-          </h2>
-          <p className="mt-4 text-white/70 max-w-md">
-            Adiós a las carpetas y libretas. Vehículos, seguros, fotos de evidencia
-            y cotizaciones — todo centralizado y a un clic.
-          </p>
-        </div>
-        <p className="relative z-10 text-sm text-white/40">
-          Dominguez Auto Pintura · Sistema interno
-        </p>
-      </div>
-
-      {/* Formulario */}
-      <div className="flex items-center justify-center bg-[var(--paper)] px-4 py-12">
-        <form onSubmit={handleSubmit} className="card w-full max-w-sm p-8 space-y-5">
-          <div className="lg:hidden flex justify-center mb-2">
-            <Logo size={52} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-[var(--ink)]">Iniciar sesión</h1>
-            <p className="text-sm text-[var(--ink-soft)] mt-1">
-              Acceso exclusivo para administradores
-            </p>
+    <div className="min-h-screen bg-[var(--paper)] flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-md">
+        <div className="card p-6 sm:p-8 shadow-xl">
+          <div className="flex justify-center mb-5"><Logo size={58} /></div>
+          <div className="text-center">
+            <h1 className="text-2xl font-extrabold text-[var(--ink)]">Bienvenido</h1>
+            <p className="mt-1 text-sm text-[var(--ink-soft)]">Introduce tu PIN de acceso</p>
           </div>
 
-          <div>
-            <label className="field-label">Correo</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input"
-            />
+          <div className="flex justify-center gap-4 my-7" aria-label={`${pin.length} de 4 dígitos ingresados`}>
+            {[0, 1, 2, 3].map((i) => (
+              <span
+                key={i}
+                className={`w-4 h-4 rounded-full border-2 transition-all ${
+                  i < pin.length ? "bg-[var(--brand-red)] border-[var(--brand-red)] scale-110" : "border-[var(--line)] bg-[var(--surface-2)]"
+                }`}
+              />
+            ))}
           </div>
 
-          <div>
-            <label className="field-label">Contraseña</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input"
-            />
+          <div className="grid grid-cols-3 gap-3 max-w-[18rem] mx-auto">
+            {DIGITOS.map((n) => (
+              <button key={n} type="button" onClick={() => presionar(n)} className="h-16 rounded-2xl bg-[var(--surface-2)] text-2xl font-bold text-[var(--ink)] hover:bg-[var(--brand-red-50)] hover:text-[var(--brand-red)] active:scale-95 transition" disabled={submitting}>{n}</button>
+            ))}
+            <button type="button" onClick={() => setPin("")} className="h-16 rounded-2xl text-sm font-bold text-[var(--ink-soft)] hover:bg-[var(--surface-2)]" disabled={submitting}>Limpiar</button>
+            <button type="button" onClick={() => presionar(0)} className="h-16 rounded-2xl bg-[var(--surface-2)] text-2xl font-bold text-[var(--ink)] hover:bg-[var(--brand-red-50)] hover:text-[var(--brand-red)] active:scale-95 transition" disabled={submitting}>0</button>
+            <button type="button" onClick={() => setPin((v) => v.slice(0, -1))} className="h-16 rounded-2xl flex items-center justify-center text-[var(--ink-soft)] hover:bg-[var(--surface-2)]" aria-label="Borrar último dígito" disabled={submitting}><Icon name="backspace" className="w-6 h-6" /></button>
           </div>
 
-          {error && <p className="text-sm text-[var(--brand-red)]">{error}</p>}
+          {submitting && <p className="text-center text-sm text-[var(--ink-soft)] mt-5">Verificando acceso…</p>}
+          {error && <p className="text-center text-sm font-medium text-[var(--brand-red)] mt-5">{error}</p>}
 
-          <button type="submit" disabled={submitting} className="btn-primary w-full">
-            {submitting ? "Ingresando…" : "Ingresar"}
+          <button type="button" onClick={() => { setMostrarLegacy((v) => !v); setError(""); }} className="w-full mt-7 text-xs font-semibold text-[var(--ink-soft)] hover:text-[var(--brand-red)]">
+            {mostrarLegacy ? "Ocultar acceso de administrador" : "¿Administrador existente? Ingresar con correo"}
           </button>
-        </form>
+
+          {mostrarLegacy && (
+            <form onSubmit={legacySubmit} className="mt-4 pt-4 border-t border-[var(--line)] space-y-3">
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input" placeholder="Correo" />
+              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="input" placeholder="Contraseña" />
+              <button type="submit" className="btn-ghost w-full" disabled={submitting}>Ingresar con correo</button>
+            </form>
+          )}
+        </div>
+        <p className="text-center text-xs text-[var(--ink-soft)] mt-5">Domínguez Auto Pintura · Sistema interno</p>
       </div>
     </div>
   );

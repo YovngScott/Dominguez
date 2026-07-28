@@ -36,6 +36,9 @@ const CitasList = lazy(() => import("./pages/CitasList"));
 const Reportes = lazy(() => import("./pages/Reportes"));
 const Suministros = lazy(() => import("./pages/Suministros"));
 const KioskSuministros = lazy(() => import("./pages/KioskSuministros"));
+const TallerDashboard = lazy(() => import("./pages/TallerDashboard"));
+const TrabajadorDetail = lazy(() => import("./pages/TrabajadorDetail"));
+const Usuarios = lazy(() => import("./pages/Usuarios"));
 
 // Orden lógico por flujo de trabajo (de lo más usado a lo menos):
 // operación diaria → almacén de piezas → agenda/cierre → directorio → análisis.
@@ -51,11 +54,12 @@ const NAV = [
   { to: "/clientes", label: "Clientes", icon: "user" },
   { to: "/contactos", label: "Contactos", icon: "mail" },
   { to: "/reportes", label: "Reportes", icon: "file" },
+  { to: "/usuarios", label: "Usuarios", icon: "user", soloAdmin: true },
 ];
 
 function PrivateLayout({ children }) {
   const { session, loading, signOut } = useAuth();
-  const { cargandoRol, esKiosk } = useRol();
+  const { cargandoRol, esSuministros, esTaller, esAdministrativo, inactivo } = useRol();
   const [menuOpen, setMenuOpen] = useState(false);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [oscuro, setOscuro] = useState(temaOscuroGuardado);
@@ -77,6 +81,10 @@ function PrivateLayout({ children }) {
     setMenuOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (inactivo) signOut();
+  }, [inactivo, signOut]);
+
   if (loading || cargandoRol) {
     return <div className="p-10 text-center text-gray-500">Cargando…</div>;
   }
@@ -85,9 +93,13 @@ function PrivateLayout({ children }) {
   }
   // La tablet del almacén solo puede estar en su pantalla de pedidos: nunca ve
   // el panel administrativo (la base de datos también se lo bloquea vía RLS).
-  if (esKiosk) {
-    return <Navigate to="/kiosk/suministros" replace />;
+  if (inactivo) return <Navigate to="/login" replace />;
+  if (esSuministros) {
+    return <Navigate to="/suministros/pedir" replace />;
   }
+  const rutaTallerPermitida = location.pathname === "/" || location.pathname.startsWith("/taller/") || /^\/casos\/[^/]+$/.test(location.pathname);
+  if (esTaller && !rutaTallerPermitida) return <Navigate to="/" replace />;
+  const navegacion = NAV.filter((n) => !esTaller && (!n.soloAdmin || esAdministrativo));
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -100,7 +112,7 @@ function PrivateLayout({ children }) {
 
           {/* Acción rápida + botón de menú (todas las pantallas) */}
           <div className="flex items-center gap-2">
-            {!enFormCotizacion && (
+            {esAdministrativo && !enFormCotizacion && (
               <Link
                 to="/cotizaciones/nueva"
                 onClick={() => setMenuOpen(false)}
@@ -123,7 +135,7 @@ function PrivateLayout({ children }) {
         {/* Menú desplegable (escritorio y móvil) */}
         {menuOpen && (
           <nav className="absolute right-4 sm:right-6 top-full mt-1 z-40 w-[min(20rem,calc(100vw-2rem))] bg-white rounded-2xl shadow-xl border border-[var(--line)] p-2 flex flex-col gap-1 max-h-[80vh] overflow-y-auto">
-            {NAV.map((n) => (
+            {navegacion.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -200,7 +212,7 @@ function PrivateLayout({ children }) {
               <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[var(--brand-red-50)]">
                 <Icon name="logout" className="w-5 h-5" />
               </span>
-              Cerrar sesión
+              Cambiar usuario
             </button>
           </nav>
         )}
@@ -228,12 +240,23 @@ function PrivateLayout({ children }) {
 // Igual que PrivateLayout pero sin encabezado (para la vista de reporte/impresión).
 function PrivateBare({ children }) {
   const { session, loading } = useAuth();
+  const { cargandoRol, esSuministros, inactivo } = useRol();
+  const location = useLocation();
   if (loading) return <div className="p-10 text-center text-gray-500">Cargando…</div>;
   if (!session) return <Navigate to="/login" replace />;
+  if (cargandoRol) return <div className="p-10 text-center text-gray-500">Cargando...</div>;
+  if (inactivo) return <Navigate to="/login" replace />;
+  if (esSuministros && !location.pathname.startsWith("/suministros/pedir") && !location.pathname.startsWith("/kiosk/suministros")) return <Navigate to="/suministros/pedir" replace />;
   return <Suspense fallback={Cargando}>{children}</Suspense>;
 }
 
 const Cargando = <div className="p-10 text-center text-gray-500">Cargando…</div>;
+
+function InicioPorRol() {
+  const { cargandoRol, esTaller } = useRol();
+  if (cargandoRol) return Cargando;
+  return esTaller ? <TallerDashboard /> : <Dashboard />;
+}
 
 export default function App() {
   return (
@@ -252,10 +275,18 @@ export default function App() {
         }
       />
       <Route
+        path="/suministros/pedir"
+        element={
+          <PrivateBare>
+            <KioskSuministros />
+          </PrivateBare>
+        }
+      />
+      <Route
         path="/"
         element={
           <PrivateLayout>
-            <Dashboard />
+            <InicioPorRol />
           </PrivateLayout>
         }
       />
@@ -465,6 +496,22 @@ export default function App() {
         element={
           <PrivateLayout>
             <Reportes />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/usuarios"
+        element={
+          <PrivateLayout>
+            <Usuarios />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/taller/trabajadores/:trabajadorId"
+        element={
+          <PrivateLayout>
+            <TrabajadorDetail />
           </PrivateLayout>
         }
       />

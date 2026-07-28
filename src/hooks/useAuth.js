@@ -16,6 +16,18 @@ export function useAuth() {
     session,
     loading: session === undefined,
     signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
+    async signInWithPin(pin) {
+      const r = await fetch("/api/auth-pin", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pin }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { error: { message: d.error || "No se pudo validar el PIN." } };
+      const intento = await supabase.auth.signInWithPassword({ email: d.loginEmail, password: pin });
+      if (intento.error) return intento;
+      return { ...intento, perfil: d.usuario };
+    },
     signOut: () => supabase.auth.signOut(),
   };
 }

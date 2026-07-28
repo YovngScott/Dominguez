@@ -161,6 +161,12 @@ const PATHS = {
       <path d="M6 6l12 12" />
     </>
   ),
+  backspace: (
+    <>
+      <path d="m21 4-9 8 9 8H8L3 12l5-8z" />
+      <path d="m13 9 4 6M17 9l-4 6" />
+    </>
+  ),
   logout: (
     <>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

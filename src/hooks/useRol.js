@@ -9,7 +9,7 @@ import { supabase } from "../lib/supabaseClient";
 // Si el usuario no tiene fila en "perfiles" se asume admin, así los usuarios
 // que ya existían siguen funcionando igual que siempre.
 export function useRol() {
-  const [rol, setRol] = useState(undefined); // undefined = cargando
+  const [perfil, setPerfil] = useState(undefined); // undefined = cargando
 
   useEffect(() => {
     let vivo = true;
@@ -19,15 +19,19 @@ export function useRol() {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session) {
-        if (vivo) setRol(null);
+        if (vivo) setPerfil(null);
         return;
       }
       const { data } = await supabase
         .from("perfiles")
-        .select("rol")
+        .select("rol, nombre_completo, especialidad, activo")
         .eq("user_id", session.user.id)
         .maybeSingle();
-      if (vivo) setRol(data?.rol || "admin");
+      if (vivo) {
+        // Las cuentas antiguas sin perfil siguen siendo Administración General
+        // para poder crear sus primeros accesos por PIN desde la app.
+        setPerfil(data || { rol: "administrativo_general", activo: true, nombre_completo: "Administración" });
+      }
     }
 
     cargar();
@@ -38,5 +42,15 @@ export function useRol() {
     };
   }, []);
 
-  return { rol, cargandoRol: rol === undefined, esKiosk: rol === "almacen_kiosk" };
+  const rol = perfil?.rol || null;
+  return {
+    perfil,
+    rol,
+    cargandoRol: perfil === undefined,
+    esKiosk: rol === "suministros",
+    esSuministros: rol === "suministros",
+    esAdministrativo: rol === "administrativo_general",
+    esTaller: rol === "administracion_taller",
+    inactivo: perfil?.activo === false,
+  };
 }
