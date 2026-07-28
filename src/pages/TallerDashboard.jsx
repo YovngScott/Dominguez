@@ -24,7 +24,7 @@ export default function TallerDashboard() {
     }
     const activos = {};
     (asignaciones.data || []).forEach((a) => {
-      if (a.estado === "asignado" && a.caso?.estado !== "entregado") activos[a.trabajador_id] = (activos[a.trabajador_id] || 0) + 1;
+      if (a.estado === "asignado" && a.caso?.estado === "vehiculo_en_taller") activos[a.trabajador_id] = (activos[a.trabajador_id] || 0) + 1;
     });
     setTrabajadores(personal.data || []);
     setConteos(activos);
