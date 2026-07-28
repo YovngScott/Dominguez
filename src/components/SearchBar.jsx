@@ -10,6 +10,12 @@ const CASO_SELECT = `
   aseguradora:aseguradoras(nombre)
 `;
 
+// Los vehículos ya entregados se excluyen del buscador: se consultan en el
+// apartado "Vehículos entregados". Así la búsqueda muestra solo lo que está
+// en proceso, que es lo que se busca en el día a día.
+const casosActivos = () =>
+  supabase.from("casos").select(CASO_SELECT).neq("estado", "entregado");
+
 export default function SearchBar({ autoFocus = false }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -25,9 +31,7 @@ export default function SearchBar({ autoFocus = false }) {
     }
     setLoading(true);
 
-    const byVehiculo = supabase
-      .from("casos")
-      .select(CASO_SELECT)
+    const byVehiculo = casosActivos()
       .or(`placa.ilike.%${q}%,chasis.ilike.%${q}%,numero_reclamo.ilike.%${q}%`)
       .limit(15);
 
@@ -44,13 +48,13 @@ export default function SearchBar({ autoFocus = false }) {
     const modeloIds = (modelosMatch.data || []).map((m) => m.id);
 
     const byClientePromise = clienteIds.length
-      ? supabase.from("casos").select(CASO_SELECT).in("cliente_id", clienteIds).limit(15)
+      ? casosActivos().in("cliente_id", clienteIds).limit(15)
       : Promise.resolve({ data: [] });
     const byMarcaPromise = marcaIds.length
-      ? supabase.from("casos").select(CASO_SELECT).in("marca_id", marcaIds).limit(15)
+      ? casosActivos().in("marca_id", marcaIds).limit(15)
       : Promise.resolve({ data: [] });
     const byModeloPromise = modeloIds.length
-      ? supabase.from("casos").select(CASO_SELECT).in("modelo_id", modeloIds).limit(15)
+      ? casosActivos().in("modelo_id", modeloIds).limit(15)
       : Promise.resolve({ data: [] });
 
     const [vehiculoRes, clienteRes, marcaRes, modeloRes] = await Promise.all([
