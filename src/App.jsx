@@ -162,7 +162,7 @@ function PrivateLayout({ children }) {
                 )}
               </NavLink>
             ))}
-            <button
+            {esAdministrativo && <button
               type="button"
               onClick={() => {
                 setMenuOpen(false);
@@ -174,7 +174,7 @@ function PrivateLayout({ children }) {
                 <Icon name="whatsapp" className="w-5 h-5" />
               </span>
               Conectar WhatsApp
-            </button>
+            </button>}
             <div className="h-px bg-[var(--line)] my-1" />
             <button
               type="button"
