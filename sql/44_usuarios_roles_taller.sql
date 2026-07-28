@@ -16,6 +16,13 @@ alter table perfiles add column if not exists pin_fingerprint text;
 alter table perfiles add column if not exists login_email text;
 alter table perfiles add column if not exists updated_at timestamptz not null default now();
 
+-- Primero se permiten ambos nombres de roles. Si se actualizara antes, el
+-- perfil viejo de la tablet chocaría con su check constraint anterior.
+alter table perfiles drop constraint if exists perfiles_rol_check;
+alter table perfiles add constraint perfiles_rol_check check (
+  rol in ('admin', 'almacen_kiosk', 'administrativo_general', 'suministros', 'administracion_taller')
+);
+
 update perfiles
 set nombre_completo = coalesce(nullif(nombre_completo, ''), nullif(nombre, ''), 'Usuario'),
     rol = case rol
