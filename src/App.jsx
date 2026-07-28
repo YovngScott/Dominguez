@@ -39,6 +39,7 @@ const KioskSuministros = lazy(() => import("./pages/KioskSuministros"));
 const TallerDashboard = lazy(() => import("./pages/TallerDashboard"));
 const TrabajadorDetail = lazy(() => import("./pages/TrabajadorDetail"));
 const TrabajadoresList = lazy(() => import("./pages/TrabajadoresList"));
+const ReporteTrabajadores = lazy(() => import("./pages/ReporteTrabajadores"));
 const Usuarios = lazy(() => import("./pages/Usuarios"));
 
 // Orden lógico por flujo de trabajo (de lo más usado a lo menos):
@@ -521,6 +522,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <TrabajadoresList />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/taller/reporte"
+        element={
+          <PrivateLayout>
+            <ReporteTrabajadores />
           </PrivateLayout>
         }
       />
