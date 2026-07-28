@@ -6,7 +6,7 @@ import Icon from "../components/Icon";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
 import { avisarCitaConfirmada } from "../lib/confirmarCita";
-import { vincularCasoDeCita } from "../lib/citaCaso";
+import { ESTADOS as ESTADOS_CASO } from "../lib/estados";
 
 const ESTADOS = ["pendiente", "confirmada", "atendida", "cancelada"];
 const ESTADO_COLOR = {
@@ -288,6 +288,8 @@ function CitaModal({ cita, onCancel, onSaved }) {
   const telefonoActual = String(form.telefono || "").replace(/\D/g, "");
   const telefonoCambio = editando && telefonoActual !== telefonoOriginal;
 
+  // Vehículos del cliente elegido: por ahí se vincula la cita con su caso.
+  // Solo los que siguen en proceso (los entregados ya no se agendan).
   async function cargarCasos(clienteId) {
     if (!clienteId) {
       setCasos([]);
@@ -295,10 +297,15 @@ function CitaModal({ cita, onCancel, onSaved }) {
     }
     const { data } = await supabase
       .from("casos")
-      .select("id, placa, marca:marcas(nombre), modelo:modelos(nombre)")
+      .select("id, placa, estado, marca:marcas(nombre), modelo:modelos(nombre)")
       .eq("cliente_id", clienteId)
+      .neq("estado", "entregado")
       .order("created_at", { ascending: false });
-    setCasos(data || []);
+    const lista = data || [];
+    setCasos(lista);
+    // Si el cliente tiene un solo vehículo en proceso, se enlaza solo.
+    if (lista.length === 1) setForm((f) => ({ ...f, caso_id: lista[0].id }));
+    return lista;
   }
 
   useEffect(() => {
@@ -331,17 +338,6 @@ function CitaModal({ cita, onCancel, onSaved }) {
     if (!form.nombre.trim()) return setError("El nombre es obligatorio.");
     if (!form.fecha) return setError("La fecha es obligatoria.");
     setGuardando(true);
-
-    // Toda cita queda vinculada a un vehículo: se busca el caso activo del
-    // cliente por nombre y, si no tiene, se crea uno "listo para trabajar"
-    // (queda a la espera de que traigan el vehículo).
-    const casoVinculado = await vincularCasoDeCita({
-      nombre: form.nombre,
-      telefono: form.telefono,
-      clienteId: form.cliente_id,
-      casoId: form.caso_id,
-    });
-
     const payload = {
       fecha: form.fecha,
       hora: form.hora || null,
@@ -350,7 +346,7 @@ function CitaModal({ cita, onCancel, onSaved }) {
       motivo: form.motivo || null,
       nota: form.nota || null,
       cliente_id: form.cliente_id || null,
-      caso_id: casoVinculado,
+      caso_id: form.caso_id || null,
     };
     let e;
     if (editando) {
@@ -435,18 +431,35 @@ function CitaModal({ cita, onCancel, onSaved }) {
             />
           </label>
 
-          {form.cliente_id && casos.length > 0 && (
+          {form.cliente_id && (
             <label className="block">
-              <span className="field-label">Caso enlazado (opcional)</span>
-              <Combobox
-                items={casos.map((c) => ({
-                  id: c.id,
-                  label: [c.marca?.nombre, c.modelo?.nombre, c.placa].filter(Boolean).join(" ") || "Caso",
-                }))}
-                value={form.caso_id}
-                onChange={(id) => up("caso_id", id)}
-                placeholder="Seleccionar caso…"
-              />
+              <span className="field-label">
+                Vehículo del cliente {casos.length > 0 ? `(${casos.length})` : ""}
+              </span>
+              {casos.length === 0 ? (
+                <p className="text-sm text-[var(--ink-soft)] border border-dashed border-[var(--line)] rounded-xl px-3 py-2.5">
+                  Este cliente no tiene vehículos en proceso.
+                </p>
+              ) : (
+                <>
+                  <Combobox
+                    items={casos.map((c) => ({
+                      id: c.id,
+                      label:
+                        ([c.marca?.nombre, c.modelo?.nombre, c.placa].filter(Boolean).join(" ") ||
+                          "Vehículo") +
+                        ` · ${ESTADOS_CASO[c.estado]?.short || c.estado}`,
+                    }))}
+                    value={form.caso_id}
+                    onChange={(id) => up("caso_id", id)}
+                    placeholder="Seleccionar vehículo…"
+                  />
+                  <span className="block text-xs text-[var(--ink-soft)] mt-1">
+                    La cita queda enlazada a este vehículo y se marca como atendida cuando lo reciban
+                    en el taller.
+                  </span>
+                </>
+              )}
             </label>
           )}
 
