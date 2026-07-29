@@ -32,3 +32,6 @@ dist-ssr
 
 # Codigo del servidor de impresion local (no pertenece a la web)
 index.js
+
+# Archivos temporales de pruebas (PDFs generados)
+tmp/
