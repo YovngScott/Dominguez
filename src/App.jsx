@@ -56,6 +56,7 @@ const NAV = [
   { to: "/clientes", label: "Clientes", icon: "user" },
   { to: "/contactos", label: "Contactos", icon: "mail" },
   { to: "/reportes", label: "Reportes", icon: "file" },
+  { to: "/taller/reporte", label: "Reporte de taller", icon: "wrench" },
   { to: "/usuarios", label: "Usuarios", icon: "user", soloAdmin: true },
 ];
 

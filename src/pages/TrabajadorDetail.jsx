@@ -13,6 +13,7 @@ export default function TrabajadorDetail() {
   const [asignaciones, setAsignaciones] = useState([]);
   const [casos, setCasos] = useState([]);
   const [modal, setModal] = useState(false);
+  const [completando, setCompletando] = useState(null); // asignación a completar
   const [busqueda, setBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -38,11 +39,16 @@ export default function TrabajadorDetail() {
     setGuardando(false);
   }
 
-  async function completar(asignacionId) {
-    if (!confirm("¿Marcar este trabajo como completado? El vehículo seguirá en el taller hasta que se entregue.")) return;
+  // Al completar se pide una nota con el trabajo realizado, para saber después
+  // qué le hizo cada trabajador a cada vehículo.
+  async function completar(nota) {
+    if (!completando) return;
     setGuardando(true); setError("");
-    const { error: e } = await supabase.from("casos_trabajadores").update({ estado: "completado", completado_at: new Date().toISOString() }).eq("id", asignacionId);
-    if (e) setError(e.message); else await cargar();
+    const { error: e } = await supabase
+      .from("casos_trabajadores")
+      .update({ estado: "completado", completado_at: new Date().toISOString(), nota: nota?.trim() || null })
+      .eq("id", completando.id);
+    if (e) setError(e.message); else { setCompletando(null); await cargar(); }
     setGuardando(false);
   }
 
@@ -63,14 +69,68 @@ export default function TrabajadorDetail() {
     <Link to="/taller/trabajadores" className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]">← Personal del taller</Link>
     <div className="card p-6 sm:p-7 mt-4 flex flex-wrap items-center justify-between gap-5"><div className="flex items-center gap-4"><span className="w-14 h-14 rounded-2xl bg-[var(--brand-red-50)] text-[var(--brand-red)] flex items-center justify-center"><Icon name="user" className="w-7 h-7" /></span><div><h1 className="text-2xl font-extrabold text-[var(--ink)]">{trabajador.nombre_completo}</h1><p className="text-[var(--ink-soft)]">Trabajador del taller</p></div></div><button onClick={() => setModal(true)} className="btn-primary"><Icon name="plus" className="w-5 h-5" /> Asignar vehículo</button></div>
     {error && <p className="mt-4 text-sm text-[var(--brand-red)]">{error}</p>}
-    <Seccion titulo={`En proceso (${activas.length})`} vacio="No tiene vehículos del taller asignados." asignaciones={activas} onCompletar={completar} onQuitar={quitar} bloqueado={guardando} />
+    <Seccion titulo={`En proceso (${activas.length})`} vacio="No tiene vehículos del taller asignados." asignaciones={activas} onCompletar={setCompletando} onQuitar={quitar} bloqueado={guardando} />
     {completadas.length > 0 && <Seccion titulo={`Completados (${completadas.length})`} asignaciones={completadas} tenue />}
     {modal && <AsignarModal busqueda={busqueda} onBusqueda={setBusqueda} resultados={resultados} onClose={() => { setModal(false); setBusqueda(""); }} onAsignar={asignar} guardando={guardando} />}
+    {completando && <CompletarModal asignacion={completando} onClose={() => setCompletando(null)} onConfirmar={completar} guardando={guardando} />}
   </div>;
 }
 
 function Seccion({ titulo, vacio, asignaciones, tenue, onCompletar, onQuitar, bloqueado }) {
-  return <section className="mt-7"><h2 className="text-lg font-bold text-[var(--ink)] mb-3">{titulo}</h2>{asignaciones.length === 0 ? <div className="card p-7 text-center text-sm text-[var(--ink-soft)]">{vacio}</div> : <div className={`card divide-y divide-[var(--line)] overflow-hidden ${tenue ? "opacity-75" : ""}`}>{asignaciones.map((a) => { const c = a.caso; return <div key={a.id} className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--paper)]"><Link to={`/casos/${c.id}`} className="min-w-0 flex-1"><p className="font-bold text-[var(--ink)] truncate">{vehiculo(c)}{c.numero_llave ? ` · Llave #${c.numero_llave}` : ""}</p><p className="text-sm text-[var(--ink-soft)] truncate">{c.cliente?.nombre_completo || "Sin asegurado"}{c.placa ? ` · ${c.placa}` : ""}{c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}</p></Link><div className="flex items-center gap-2 shrink-0">{onCompletar && <button type="button" disabled={bloqueado} onClick={() => onCompletar(a.id)} className="btn-ghost text-xs py-2 px-3 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"><Icon name="check" className="w-4 h-4" /> Completar</button>}{onQuitar && <button type="button" disabled={bloqueado} onClick={() => onQuitar(a.id)} className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)] hover:bg-[var(--brand-red-50)] rounded-lg disabled:opacity-50" aria-label="Quitar asignación"><Icon name="close" className="w-4 h-4" /></button>}<span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${a.estado === "completado" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}`}>{a.estado === "completado" ? "Completado" : "En el taller"}</span></div></div>; })}</div>}</section>;
+  return <section className="mt-7"><h2 className="text-lg font-bold text-[var(--ink)] mb-3">{titulo}</h2>{asignaciones.length === 0 ? <div className="card p-7 text-center text-sm text-[var(--ink-soft)]">{vacio}</div> : <div className={`card divide-y divide-[var(--line)] overflow-hidden ${tenue ? "opacity-75" : ""}`}>{asignaciones.map((a) => { const c = a.caso; return <div key={a.id} className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--paper)]"><Link to={`/casos/${c.id}`} className="min-w-0 flex-1"><p className="font-bold text-[var(--ink)] truncate">{vehiculo(c)}{c.numero_llave ? ` · Llave #${c.numero_llave}` : ""}</p><p className="text-sm text-[var(--ink-soft)] truncate">{c.cliente?.nombre_completo || "Sin asegurado"}{c.placa ? ` · ${c.placa}` : ""}{c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}</p>{a.nota && <p className="text-sm text-[var(--ink)] mt-1 flex items-start gap-1.5"><Icon name="wrench" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[var(--ink-soft)]" /><span>{a.nota}</span></p>}</Link><div className="flex items-center gap-2 shrink-0">{onCompletar && <button type="button" disabled={bloqueado} onClick={() => onCompletar(a)} className="btn-ghost text-xs py-2 px-3 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"><Icon name="check" className="w-4 h-4" /> Completar</button>}{onQuitar && <button type="button" disabled={bloqueado} onClick={() => onQuitar(a.id)} className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)] hover:bg-[var(--brand-red-50)] rounded-lg disabled:opacity-50" aria-label="Quitar asignación"><Icon name="close" className="w-4 h-4" /></button>}<span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${a.estado === "completado" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}`}>{a.estado === "completado" ? "Completado" : "En el taller"}</span></div></div>; })}</div>}</section>;
+}
+
+// Pide qué trabajo se le hizo al vehículo antes de darlo por completado.
+function CompletarModal({ asignacion, onClose, onConfirmar, guardando }) {
+  const [nota, setNota] = useState("");
+  const c = asignacion.caso;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center" onClick={onClose}>
+      <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-3 mb-4">
+          <span className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <Icon name="check" className="w-6 h-6" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-extrabold text-lg text-[var(--ink)]">Completar trabajo</h2>
+            <p className="text-sm text-[var(--ink-soft)] truncate">
+              {vehiculo(c)}{c?.numero_llave ? ` · Llave #${c.numero_llave}` : ""}
+            </p>
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="field-label">¿Qué trabajo se le hizo?</span>
+          <textarea
+            autoFocus
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            rows={3}
+            className="input"
+            placeholder="Ej. Pintura de puerta trasera derecha y pulido"
+          />
+          <span className="block text-xs text-[var(--ink-soft)] mt-1">
+            Queda en el reporte del trabajador. Puedes dejarlo vacío si no aplica.
+          </span>
+        </label>
+
+        <p className="text-xs text-[var(--ink-soft)] mt-3">
+          El vehículo seguirá en el taller hasta que se entregue.
+        </p>
+
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="btn-ghost flex-1">Cancelar</button>
+          <button
+            onClick={() => onConfirmar(nota)}
+            disabled={guardando}
+            className="btn-primary flex-1 disabled:opacity-50"
+          >
+            {guardando ? "Guardando…" : "Marcar completado"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AsignarModal({ busqueda, onBusqueda, resultados, onClose, onAsignar, guardando }) {
