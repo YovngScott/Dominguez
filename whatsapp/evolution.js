@@ -2,6 +2,33 @@
 // Usados por las funciones serverless de /api. La clave y la URL viven en
 // variables de entorno de Vercel, nunca en el navegador.
 
+// Traduce los errores "de infraestructura" a algo accionable. El más común es
+// que el servidor de Evolution (Railway) esté caído o borrado: en ese caso
+// Railway responde su propio 404 con "Application not found", que por sí solo
+// no le dice nada a quien usa la app.
+export function mensajeAmigable(textoCrudo, status) {
+  const t = String(textoCrudo || "");
+  if (/application not found/i.test(t)) {
+    return (
+      "El servidor de WhatsApp no está disponible (la dirección ya no responde). " +
+      "Hay que volver a desplegar Evolution API y actualizar EVOLUTION_API_URL en Vercel."
+    );
+  }
+  if (/instance .*not found|does not exist|name .*not found/i.test(t)) {
+    return (
+      "La instancia de WhatsApp no existe en el servidor. Hay que crearla de nuevo " +
+      "y volver a vincular el teléfono."
+    );
+  }
+  if (status === 401 || status === 403 || /unauthorized|forbidden/i.test(t)) {
+    return "El servidor de WhatsApp rechazó la clave (revisa EVOLUTION_API_KEY en Vercel).";
+  }
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|timeout|network/i.test(t)) {
+    return "No hay conexión con el servidor de WhatsApp. Puede estar apagado o sin internet.";
+  }
+  return t || "No se pudo comunicar con el servidor de WhatsApp.";
+}
+
 export function evolutionConfig() {
   const apiUrl = (process.env.EVOLUTION_API_URL || "").replace(/\/+$/, "");
   const apiKey = process.env.EVOLUTION_API_KEY;
@@ -33,11 +60,12 @@ export async function enviarTextoWhatsapp({ number, text }) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       const msg = data?.message || data?.error || "Error al enviar el WhatsApp (Evolution).";
-      return { ok: false, status: r.status, error: typeof msg === "string" ? msg : JSON.stringify(msg) };
+      const crudo = typeof msg === "string" ? msg : JSON.stringify(msg);
+      return { ok: false, status: r.status, error: mensajeAmigable(crudo, r.status) };
     }
     return { ok: true, status: 200, id: data?.key?.id || null };
   } catch (e) {
-    return { ok: false, status: 502, error: "No se pudo conectar con Evolution API: " + e.message };
+    return { ok: false, status: 502, error: mensajeAmigable(e.message, 502) };
   }
 }
 
@@ -51,10 +79,21 @@ export async function estadoWhatsapp() {
       headers: { apikey: apiKey },
     });
     const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const crudo = data?.message || data?.error || "";
+      // El servidor no existe / no responde: es distinto a "el teléfono se
+      // desvinculó", y se avisa aparte para no mandar a escanear un QR en vano.
+      const sinServidor = /application not found/i.test(String(crudo)) || r.status >= 500;
+      return {
+        ok: false,
+        state: sinServidor ? "sin_servidor" : "close",
+        error: mensajeAmigable(String(crudo), r.status),
+      };
+    }
     const state = data?.instance?.state || data?.state || "unknown";
-    return { ok: r.ok, state };
+    return { ok: true, state };
   } catch (e) {
-    return { ok: false, state: "error", error: e.message };
+    return { ok: false, state: "sin_servidor", error: mensajeAmigable(e.message, 502) };
   }
 }
 
@@ -73,7 +112,8 @@ export async function conectarWhatsapp({ number } = {}) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       const msg = data?.message || data?.error || "No se pudo generar el código de conexión.";
-      return { ok: false, status: r.status, error: typeof msg === "string" ? msg : JSON.stringify(msg) };
+      const crudo = typeof msg === "string" ? msg : JSON.stringify(msg);
+      return { ok: false, status: r.status, error: mensajeAmigable(crudo, r.status) };
     }
     // Evolution v2 responde { base64 (QR en imagen), code (texto del QR),
     // pairingCode }. Algunas versiones lo anidan bajo `qrcode`.
@@ -82,7 +122,7 @@ export async function conectarWhatsapp({ number } = {}) {
     const pairingCode = data?.pairingCode || data?.qrcode?.pairingCode || null;
     return { ok: true, base64, code, pairingCode };
   } catch (e) {
-    return { ok: false, status: 502, error: "No se pudo conectar con Evolution API: " + e.message };
+    return { ok: false, status: 502, error: mensajeAmigable(e.message, 502) };
   }
 }
 

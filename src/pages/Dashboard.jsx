@@ -164,11 +164,17 @@ export default function Dashboard() {
             <Icon name="whatsapp" className="w-5 h-5 text-amber-600 shrink-0" />
             <div className="text-sm">
               <p className="font-bold text-[var(--ink)]">
-                {waEstado === "connecting" ? "WhatsApp conectándose…" : "WhatsApp desconectado"}
+                {waEstado === "connecting"
+                  ? "WhatsApp conectándose…"
+                  : waEstado === "sin_servidor"
+                  ? "Servidor de WhatsApp no disponible"
+                  : "WhatsApp desconectado"}
               </p>
               <p className="text-[var(--ink-soft)]">
                 {waEstado === "connecting"
                   ? "Espera unos segundos y recarga."
+                  : waEstado === "sin_servidor"
+                  ? "La dirección del servidor ya no responde; no sirve escanear el QR hasta volver a desplegarlo."
                   : "No se enviarán las confirmaciones de citas hasta volver a vincular el teléfono."}
               </p>
             </div>
