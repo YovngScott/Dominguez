@@ -16,17 +16,20 @@ export function piezasDeCotizacion(cot) {
   return [...vistas.values()];
 }
 
-// Texto plano listo para WhatsApp. saludo + vehículo + lista numerada.
+// Texto listo para WhatsApp (usa *asteriscos* para la negrita, igual que los
+// mensajes de citas). saludo + vehículo + lista numerada.
 export function mensajeCotizarPiezas(cot, nombreSuplidor) {
   const vehiculo = [cot?.marca, cot?.modelo, cot?.anio].filter(Boolean).join(" ");
   const piezas = piezasDeCotizacion(cot);
 
   const lineas = [];
-  lineas.push(`Saludos${nombreSuplidor ? " " + nombreSuplidor : ""}, le escribimos de Dominguez Auto Pintura.`);
+  lineas.push(
+    `Saludos${nombreSuplidor ? " " + nombreSuplidor : ""} 👋 Le escribimos de *Dominguez Auto Pintura*.`
+  );
   lineas.push("");
   lineas.push(
     vehiculo
-      ? `Necesitamos cotizar las siguientes piezas para un ${vehiculo}:`
+      ? `Necesitamos cotizar las siguientes piezas para un *${vehiculo}*:`
       : "Necesitamos cotizar las siguientes piezas:"
   );
   lineas.push("");

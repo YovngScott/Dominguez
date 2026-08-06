@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { enviarWhatsappSuplidores } from "../lib/enviarWhatsapp";
 import { enlaceWhatsapp, mensajeCotizarPiezas, piezasDeCotizacion } from "../lib/mensajeSuplidor";
 import Icon from "./Icon";
 
-// Modal "Cotizar": se eligen uno o varios suplidores y a cada uno se le abre
-// WhatsApp con el saludo y la lista de piezas de la cotización ya escrita.
-// Se marca cuál ya se abrió para no perderse cuando son varios.
+// Modal "Cotizar": se eligen uno o varios suplidores y el sistema les manda
+// solo el saludo y la lista de piezas por WhatsApp, igual que las citas.
+// Si algún envío falla queda el enlace manual como respaldo.
 export default function CotizarSuplidoresModal({ cot, onClose }) {
   const [suplidores, setSuplidores] = useState([]);
   const [seleccion, setSeleccion] = useState(new Set());
-  const [enviados, setEnviados] = useState(new Set());
+  const [resultados, setResultados] = useState({}); // id → { ok, error }
+  const [enviando, setEnviando] = useState(false);
+  const [ok, setOk] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -39,12 +42,36 @@ export default function CotizarSuplidoresModal({ cot, onClose }) {
   }
 
   const elegidos = suplidores.filter((s) => seleccion.has(s.id));
+  const fallidos = elegidos.filter((s) => resultados[s.id] && !resultados[s.id].ok);
 
-  function abrirWhatsapp(s) {
+  async function enviar() {
     if (!piezas.length) return setError("Esta cotización no tiene piezas que pedir.");
+    if (!elegidos.length) return setError("Selecciona al menos un suplidor.");
     setError("");
+    setOk("");
+    setEnviando(true);
+    try {
+      const { resultados: res, enviados } = await enviarWhatsappSuplidores(
+        elegidos.map((s) => ({ id: s.id, telefono: s.telefono, texto: mensajeCotizarPiezas(cot, s.nombre) }))
+      );
+      const mapa = {};
+      (res || []).forEach((r) => (mapa[r.id] = { ok: r.ok, error: r.error }));
+      setResultados((prev) => ({ ...prev, ...mapa }));
+      if (enviados > 0) setOk(`Mensaje enviado a ${enviados} suplidor(es).`);
+      if (enviados < elegidos.length) {
+        setError("A algunos no se les pudo enviar. Usa el enlace manual de abajo para esos.");
+      }
+    } catch (e) {
+      setError(e.message || "No se pudo enviar el WhatsApp.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  // Respaldo cuando el servidor de WhatsApp falla: abre la conversación con el
+  // mensaje ya escrito para mandarlo a mano.
+  function abrirWhatsappManual(s) {
     window.open(enlaceWhatsapp(s.telefono, mensajeCotizarPiezas(cot, s.nombre)), "_blank", "noopener");
-    setEnviados((prev) => new Set(prev).add(s.id));
   }
 
   return (
@@ -57,7 +84,7 @@ export default function CotizarSuplidoresModal({ cot, onClose }) {
           </button>
         </div>
         <p className="text-sm text-[var(--ink-soft)] mb-4">
-          Se les manda el saludo y la lista de piezas por WhatsApp (sin precios).{" "}
+          Se les manda automáticamente por WhatsApp el saludo y la lista de piezas (sin precios).{" "}
           <Link to="/contactos?tab=suplidores" className="text-[var(--brand-red)] font-semibold hover:underline">
             Administrar suplidores
           </Link>
@@ -110,8 +137,11 @@ export default function CotizarSuplidoresModal({ cot, onClose }) {
                       {s.descripcion ? ` · ${s.descripcion}` : ""}
                     </span>
                   </span>
-                  {enviados.has(s.id) && (
-                    <span className="text-xs font-semibold text-emerald-600 shrink-0">✓ abierto</span>
+                  {resultados[s.id]?.ok && (
+                    <span className="text-xs font-semibold text-emerald-600 shrink-0">✓ enviado</span>
+                  )}
+                  {resultados[s.id] && !resultados[s.id].ok && (
+                    <span className="text-xs font-semibold text-[var(--brand-red)] shrink-0">✕ falló</span>
                   )}
                 </label>
               </li>
@@ -120,30 +150,37 @@ export default function CotizarSuplidoresModal({ cot, onClose }) {
         )}
 
         {error && <p className="text-sm text-[var(--brand-red)] mb-3">{error}</p>}
+        {ok && <p className="text-sm text-emerald-600 mb-3 font-medium">✓ {ok}</p>}
 
-        {/* Un botón por suplidor: WhatsApp solo permite abrir una conversación
-            a la vez, así que se van mandando de uno en uno. */}
-        {elegidos.length > 0 && (
+        {/* Respaldo manual solo para los que fallaron: abre la conversación con
+            el mensaje escrito para mandarlo a mano. */}
+        {fallidos.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-            {elegidos.map((s) => (
+            {fallidos.map((s) => (
               <button
                 key={s.id}
-                onClick={() => abrirWhatsapp(s)}
-                disabled={!piezas.length}
-                className={`gap-1.5 justify-center px-3 disabled:opacity-50 ${
-                  enviados.has(s.id) ? "btn-ghost" : "btn-primary"
-                }`}
+                onClick={() => abrirWhatsappManual(s)}
+                className="btn-ghost gap-1.5 justify-center px-3"
+                title={resultados[s.id]?.error || ""}
               >
                 <Icon name="whatsapp" className="w-4 h-4 shrink-0" />
-                <span className="truncate">{s.nombre}</span>
+                <span className="truncate">Enviar a mano a {s.nombre}</span>
               </button>
             ))}
           </div>
         )}
 
-        <div className="flex justify-end">
+        <div className="flex gap-3 justify-end">
           <button onClick={onClose} className="btn-ghost">
             Cerrar
+          </button>
+          <button
+            onClick={enviar}
+            disabled={enviando || !elegidos.length || !piezas.length}
+            className="btn-primary gap-1.5 disabled:opacity-50"
+          >
+            <Icon name="whatsapp" className="w-4 h-4" />
+            {enviando ? "Enviando…" : `Enviar por WhatsApp${elegidos.length ? ` (${elegidos.length})` : ""}`}
           </button>
         </div>
       </div>

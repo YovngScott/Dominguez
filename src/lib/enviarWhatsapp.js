@@ -18,3 +18,22 @@ export async function enviarWhatsappCita({ to, nombre, fecha, hora, vehiculo, se
   if (!r.ok || !data.success) throw new Error(data.error || `Error ${r.status} al enviar el WhatsApp.`);
   return data;
 }
+
+// Manda el mismo tipo de mensaje a varios suplidores de una vez (pedirles
+// precio de las piezas). destinatarios = [{ id, telefono, texto }].
+// Devuelve { enviados, resultados } con el detalle de cada uno.
+export async function enviarWhatsappSuplidores(destinatarios) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const r = await fetch("/api/whatsapp-suplidores", {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: `Bearer ${token || ""}` },
+    body: JSON.stringify({ destinatarios }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Error ${r.status} al enviar los WhatsApp.`);
+  return data;
+}
