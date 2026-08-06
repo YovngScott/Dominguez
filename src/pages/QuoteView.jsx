@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { calcularItem, nombrePieza, rd } from "../lib/cotizacion";
 import Icon from "../components/Icon";
 import EnviarCorreoModal from "../components/EnviarCorreoModal";
+import CotizarSuplidoresModal from "../components/CotizarSuplidoresModal";
 
 export default function QuoteView() {
   const { cotId } = useParams();
@@ -14,6 +15,7 @@ export default function QuoteView() {
   const [loading, setLoading] = useState(true);
   const [eliminando, setEliminando] = useState(false);
   const [enviarCorreoOpen, setEnviarCorreoOpen] = useState(false);
+  const [cotizarOpen, setCotizarOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -92,6 +94,13 @@ export default function QuoteView() {
           >
             <Icon name="receipt" className="w-4 h-4" /> Enviar por correo
           </button>
+          <button
+            onClick={() => setCotizarOpen(true)}
+            className="btn-ghost justify-center gap-1.5 px-3"
+            title="Pedir precios de las piezas a los suplidores"
+          >
+            <Icon name="coins" className="w-4 h-4" /> Cotizar
+          </button>
           {pdfUrl && (
             <a
               href={pdfUrl}
@@ -113,6 +122,8 @@ export default function QuoteView() {
           onClose={() => setEnviarCorreoOpen(false)}
         />
       )}
+
+      {cotizarOpen && <CotizarSuplidoresModal cot={cot} onClose={() => setCotizarOpen(false)} />}
 
       {cot.caso_id && (
         <div className="card p-4 mb-5 bg-[var(--brand-red-50)] border-[var(--brand-red)]">

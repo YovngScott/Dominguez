@@ -1,12 +1,52 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
+
+// El módulo Contactos tiene dos agendas: los correos de las aseguradoras (a
+// quienes se les manda la cotización) y los suplidores de piezas (a quienes se
+// les piden los precios por WhatsApp). Se cambia entre ellas con las pestañas.
+export default function ContactosList() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "suplidores" ? "suplidores" : "aseguradoras";
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+      <div className="flex gap-1.5 mb-6 p-1 rounded-2xl bg-[var(--paper)] border border-[var(--line)] w-full sm:w-auto sm:inline-flex">
+        <Pestana activo={tab === "aseguradoras"} onClick={() => setParams({})} icono="mail" texto="Aseguradoras" />
+        <Pestana
+          activo={tab === "suplidores"}
+          onClick={() => setParams({ tab: "suplidores" })}
+          icono="truck"
+          texto="Suplidores"
+        />
+      </div>
+
+      {tab === "suplidores" ? <PanelSuplidores /> : <PanelAseguradoras />}
+    </div>
+  );
+}
+
+function Pestana({ activo, onClick, icono, texto }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+        activo ? "bg-[var(--brand-red)] text-white" : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
+      }`}
+    >
+      <Icon name={icono} className="w-4 h-4 shrink-0" />
+      {texto}
+    </button>
+  );
+}
 
 // Agenda de contactos de las aseguradoras: los correos de las personas de los
 // seguros a las que se les envían las cotizaciones. Se pueden filtrar por
 // aseguradora y buscar por nombre o correo. Es la misma tabla
 // (aseguradora_contactos) que usa el modal "Enviar por correo" de la cotización.
-export default function ContactosList() {
+function PanelAseguradoras() {
   const [contactos, setContactos] = useState([]);
   const [aseguradoras, setAseguradoras] = useState([]);
   const [q, setQ] = useState("");
@@ -86,7 +126,7 @@ export default function ContactosList() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+    <>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Contactos</h1>
@@ -185,7 +225,7 @@ export default function ContactosList() {
           onSave={guardar}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -359,6 +399,205 @@ function ContactoModal({ contacto, aseguradoras, onCancel, onSave }) {
           <button
             onClick={() => onSave(form)}
             disabled={!emailValido || !form.aseguradora_id}
+            className="btn-primary disabled:opacity-50"
+          >
+            Guardar
+          </button>
+          <button onClick={onCancel} className="btn-ghost">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Agenda de suplidores de piezas: nombre, teléfono y una descripción de qué
+// vende cada uno. Se usan desde el botón "Cotizar" de la cotización para
+// pedirles precio por WhatsApp.
+function PanelSuplidores() {
+  const [suplidores, setSuplidores] = useState([]);
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null); // null | "nuevo" | suplidor en edición
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    const { data } = await supabase
+      .from("suplidores")
+      .select("id, nombre, telefono, descripcion, activo")
+      .order("nombre");
+    setSuplidores(data || []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const term = q.trim().toLowerCase();
+  const lista = suplidores.filter((s) =>
+    !term ? true : [s.nombre, s.telefono, s.descripcion].filter(Boolean).some((x) => String(x).toLowerCase().includes(term))
+  );
+
+  async function guardar(form) {
+    setError("");
+    const payload = {
+      nombre: form.nombre.trim(),
+      telefono: form.telefono.trim(),
+      descripcion: form.descripcion?.trim() || null,
+    };
+    const { error: e } = form.id
+      ? await supabase.from("suplidores").update(payload).eq("id", form.id)
+      : await supabase.from("suplidores").insert(payload);
+    if (e) {
+      setError("No se pudo guardar el suplidor.");
+      return;
+    }
+    setModal(null);
+    load();
+  }
+
+  async function eliminar(s) {
+    setError("");
+    if (!confirm(`¿Eliminar el suplidor "${s.nombre}"? Esta acción no se puede deshacer.`)) return;
+    const { error: e } = await supabase.from("suplidores").delete().eq("id", s.id);
+    if (e) {
+      setError("No se pudo eliminar el suplidor.");
+      return;
+    }
+    load();
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Suplidores</h1>
+          <p className="text-sm text-[var(--ink-soft)]">
+            A quienes se les piden los precios de las piezas · {suplidores.length} suplidor(es).
+          </p>
+        </div>
+        <button onClick={() => setModal("nuevo")} className="btn-primary gap-1.5">
+          <Icon name="plus" className="w-4 h-4" /> Suplidor
+        </button>
+      </div>
+
+      <div className="relative mb-4">
+        <Icon
+          name="search"
+          className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--ink-soft)] pointer-events-none"
+        />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por nombre, teléfono o descripción…"
+          className="input w-full !pl-10"
+        />
+      </div>
+
+      {error && <p className="text-sm text-[var(--brand-red)] mb-3">{error}</p>}
+
+      {loading ? (
+        <p className="text-[var(--ink-soft)]">Cargando…</p>
+      ) : lista.length === 0 ? (
+        <div className="card p-10 text-center text-[var(--ink-soft)]">
+          <Icon name="truck" className="w-10 h-10 mx-auto mb-3 opacity-40" />
+          {term ? "Sin coincidencias con la búsqueda." : "Aún no hay suplidores. Agrega el primero con el botón “+ Suplidor”."}
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {lista.map((s) => (
+            <div key={s.id} className="card p-4 flex items-start gap-3">
+              <span className="w-11 h-11 rounded-xl shrink-0 flex items-center justify-center font-bold text-[var(--brand-red)] bg-[var(--brand-red-50)] uppercase">
+                {iniciales(s.nombre)}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-[var(--ink)] truncate">{s.nombre}</p>
+                {s.descripcion && <p className="text-xs text-[var(--ink-soft)] line-clamp-2">{s.descripcion}</p>}
+                <a
+                  href={`tel:${s.telefono}`}
+                  className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)] truncate flex items-center gap-1.5 mt-0.5"
+                >
+                  <Icon name="whatsapp" className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{s.telefono}</span>
+                </a>
+              </div>
+              <div className="flex flex-col gap-1 shrink-0">
+                <button onClick={() => setModal(s)} className="btn-ghost text-sm py-1.5 px-2.5" title="Editar">
+                  <Icon name="pencil" className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => eliminar(s)}
+                  className="btn-ghost text-sm py-1.5 px-2.5 !text-[var(--brand-red)] hover:!border-[var(--brand-red)]"
+                  title="Eliminar"
+                >
+                  <Icon name="trash" className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modal && (
+        <SuplidorModal
+          suplidor={modal === "nuevo" ? null : modal}
+          onCancel={() => setModal(null)}
+          onSave={guardar}
+        />
+      )}
+    </>
+  );
+}
+
+function SuplidorModal({ suplidor, onCancel, onSave }) {
+  const [form, setForm] = useState(suplidor || { nombre: "", telefono: "", descripcion: "" });
+  const up = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  // Al menos 10 dígitos: es lo que necesita el enlace de WhatsApp.
+  const telValido = String(form.telefono || "").replace(/\D/g, "").length >= 10;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-[var(--ink)] mb-4">
+          {suplidor ? "Editar suplidor" : "Nuevo suplidor"}
+        </h2>
+        <div className="space-y-3">
+          <label className="block">
+            <span className="field-label">Nombre *</span>
+            <input
+              value={form.nombre || ""}
+              onChange={(e) => up("nombre", e.target.value)}
+              className="input"
+              placeholder="Ej: Repuestos El Progreso"
+            />
+          </label>
+          <label className="block">
+            <span className="field-label">Teléfono (WhatsApp) *</span>
+            <input
+              type="tel"
+              value={form.telefono || ""}
+              onChange={(e) => up("telefono", e.target.value)}
+              className="input"
+              placeholder="809-555-1234"
+            />
+          </label>
+          <label className="block">
+            <span className="field-label">Descripción (opcional)</span>
+            <textarea
+              value={form.descripcion || ""}
+              onChange={(e) => up("descripcion", e.target.value)}
+              className="input min-h-20"
+              placeholder="Ej: Piezas originales Toyota y Honda, entrega el mismo día"
+            />
+          </label>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={() => onSave(form)}
+            disabled={!form.nombre?.trim() || !telValido}
             className="btn-primary disabled:opacity-50"
           >
             Guardar
