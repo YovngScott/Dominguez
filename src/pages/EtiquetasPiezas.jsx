@@ -5,6 +5,7 @@ import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
+import { marcarPiezasRecibidas } from "../lib/piezas";
 import {
   agregarPiezaCatalogo,
   findOrCreateMarca,
@@ -185,6 +186,10 @@ export default function EtiquetasPiezas() {
     try {
       const casoId = await vincularCaso();
       await guardarEtiqueta(validas, casoId);
+      // Si se le está haciendo etiqueta a una pieza es porque ya llegó al
+      // taller, así que queda marcada como recibida en el checklist del caso
+      // sin tener que volver a marcarla a mano allá.
+      await marcarPiezasRecibidas(casoId, validas.flat());
       return casoId;
     } catch (err) {
       setError("No se pudo guardar automáticamente: " + (err.message || "intenta de nuevo."));
@@ -520,7 +525,15 @@ export default function EtiquetasPiezas() {
               <input value={form.anio} onChange={(e) => up("anio", e.target.value)} className="input" placeholder="2020" />
             </Campo>
             <Campo label="No. de reclamo">
-              <input value={form.reclamo} onChange={(e) => up("reclamo", e.target.value)} className="input" />
+              {/* Al terminar de escribir el reclamo se vuelve a guardar: así el
+                  caso queda enlazado y las piezas aparecen recibidas en él sin
+                  esperar a que se agregue otra pieza o se imprima. */}
+              <input
+                value={form.reclamo}
+                onChange={(e) => up("reclamo", e.target.value)}
+                onBlur={() => persistirCajas(cajas)}
+                className="input"
+              />
             </Campo>
           </div>
         </div>

@@ -2,15 +2,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza } from "../lib/cotizacion";
+import { clavePieza as clave } from "../lib/piezas";
 import { formatoTramo } from "../lib/tramos";
 import TramoPicker from "./TramoPicker";
 import Icon from "./Icon";
 import Lightbox from "./Lightbox";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
-
-// Clave estable para identificar una pieza entre cotizaciones del mismo caso.
-const clave = (s) => (s || "").trim().toLowerCase();
 
 /**
  * Checklist de piezas de un caso. Las piezas se leen de las cotizaciones
