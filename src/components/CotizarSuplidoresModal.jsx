@@ -95,6 +95,9 @@ export default function CotizarSuplidoresModal({ cot, onClose }) {
           <p className="text-xs font-bold uppercase tracking-wide text-[var(--brand-red)] mb-1.5">
             {piezas.length} pieza(s) a cotizar
           </p>
+          {cot.chasis && (
+            <p className="text-xs text-[var(--ink-soft)] mb-1.5 truncate">Chasis: {cot.chasis}</p>
+          )}
           {piezas.length === 0 ? (
             <p className="text-sm text-[var(--ink-soft)]">Esta cotización no tiene piezas.</p>
           ) : (

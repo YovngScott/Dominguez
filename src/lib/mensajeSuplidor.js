@@ -17,9 +17,10 @@ export function piezasDeCotizacion(cot) {
 }
 
 // Texto listo para WhatsApp (usa *asteriscos* para la negrita, igual que los
-// mensajes de citas). saludo + vehículo + lista numerada.
+// mensajes de citas). saludo + vehículo + chasis + lista numerada.
 export function mensajeCotizarPiezas(cot, nombreSuplidor) {
   const vehiculo = [cot?.marca, cot?.modelo, cot?.anio].filter(Boolean).join(" ");
+  const chasis = String(cot?.chasis || "").trim();
   const piezas = piezasDeCotizacion(cot);
 
   const lineas = [];
@@ -32,6 +33,9 @@ export function mensajeCotizarPiezas(cot, nombreSuplidor) {
       ? `Necesitamos cotizar las siguientes piezas para un *${vehiculo}*:`
       : "Necesitamos cotizar las siguientes piezas:"
   );
+  // El chasis va en su propia línea para que el suplidor lo pueda copiar y
+  // buscar la pieza exacta del vehículo.
+  if (chasis) lineas.push(`Chasis: ${chasis}`);
   lineas.push("");
   piezas.forEach((p, i) => {
     lineas.push(`${i + 1}. ${p.nombre}${p.cantidad > 1 ? ` (${p.cantidad})` : ""}`);
