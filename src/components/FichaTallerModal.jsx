@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza, rd } from "../lib/cotizacion";
 import { clavePieza } from "../lib/piezas";
-import { agregarPiezaCatalogo, agregarServicioCatalogo } from "../lib/catalogo";
 import Combobox from "./Combobox";
 import Icon from "./Icon";
 
@@ -138,10 +137,6 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
       return n;
     });
     setManualesPiezas((prev) => [...prev, { nombre: limpio, cantidad }]);
-    if (!piezasCatalogo.some((p) => clavePieza(p.label) === k)) {
-      agregarPiezaCatalogo(limpio);
-      setPiezasCatalogo((prev) => [...prev, { id: limpio, label: limpio }]);
-    }
   }
 
   function agregarTrabajo(desc, cantidad) {
@@ -154,10 +149,6 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
       return n;
     });
     setManualesMano((prev) => [...prev, { descripcion: limpio, cantidad }]);
-    if (!serviciosCatalogo.some((s) => clavePieza(s.label) === k)) {
-      agregarServicioCatalogo(limpio);
-      setServiciosCatalogo((prev) => [...prev, { id: limpio, label: limpio }]);
-    }
   }
 
   async function imprimir() {
@@ -183,7 +174,7 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="card w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="card w-full max-w-5xl h-[92vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Encabezado */}
@@ -215,7 +206,7 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
         </div>
 
         {/* Cuerpo */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6">
           {loading ? (
             <p className="text-sm text-[var(--ink-soft)]">Cargando…</p>
           ) : tab === "cotizaciones" ? (
@@ -284,7 +275,7 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
               </>
             )
           ) : (
-            <div className="grid sm:grid-cols-2 gap-5">
+            <div className="grid sm:grid-cols-2 gap-6 h-full">
               <ListaEditable
                 titulo="Piezas a reemplazar"
                 items={piezas.map((p) => ({ texto: p.nombre, cantidad: p.cantidad }))}
@@ -348,7 +339,9 @@ function TabBtn({ activo, onClick, icono, children }) {
 }
 
 // Columna de la ficha (piezas o mano de obra): lista con papelera por línea y
-// un campo abajo para agregar, con autocompletado del catálogo.
+// un campo abajo para agregar. El campo SUGIERE lo que ya está en el catálogo,
+// pero lo que se escriba aquí no se guarda en él: la ficha es de este vehículo
+// y no tiene por qué ensuciar el catálogo de todo el taller.
 function ListaEditable({ titulo, items, catalogo, placeholder, vacio, onAgregar, onQuitar }) {
   const [nuevo, setNuevo] = useState("");
   const [cant, setCant] = useState("1");
@@ -361,37 +354,41 @@ function ListaEditable({ titulo, items, catalogo, placeholder, vacio, onAgregar,
   }
 
   return (
-    <div className="min-w-0">
-      <h4 className="text-xs font-bold uppercase tracking-wide text-[var(--brand-red)] mb-2">
+    // La lista crece con el alto de la tarjeta y el campo de agregar queda
+    // siempre abajo a la vista, aunque haya muchas líneas.
+    <div className="min-w-0 flex flex-col min-h-0">
+      <h4 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-red)] mb-3 shrink-0">
         {titulo} <span className="text-[var(--ink-soft)]">({items.length})</span>
       </h4>
 
-      {items.length === 0 ? (
-        <p className="text-sm text-[var(--ink-soft)] py-4 text-center border border-dashed border-[var(--line)] rounded-xl mb-3">
-          {vacio}
-        </p>
-      ) : (
-        <ul className="divide-y divide-[var(--line)] mb-3">
-          {items.map((it, i) => (
-            <li key={i} className="flex items-center gap-2 py-2">
-              <span className="text-xs font-bold text-[var(--ink-soft)] w-5 shrink-0">{i + 1}</span>
-              <span className="flex-1 text-sm text-[var(--ink)] min-w-0 break-words">{it.texto}</span>
-              {it.cantidad > 1 && (
-                <span className="text-xs text-[var(--ink-soft)] shrink-0">x{it.cantidad}</span>
-              )}
-              <button
-                onClick={() => onQuitar(it.texto)}
-                className="text-[var(--ink-soft)] hover:text-[var(--brand-red)] shrink-0 p-1"
-                title="Quitar de la ficha"
-              >
-                <Icon name="trash" className="w-4 h-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="flex-1 min-h-0 overflow-y-auto mb-3">
+        {items.length === 0 ? (
+          <p className="text-sm text-[var(--ink-soft)] py-8 text-center border border-dashed border-[var(--line)] rounded-xl">
+            {vacio}
+          </p>
+        ) : (
+          <ul className="divide-y divide-[var(--line)]">
+            {items.map((it, i) => (
+              <li key={i} className="flex items-center gap-2.5 py-2.5">
+                <span className="text-xs font-bold text-[var(--ink-soft)] w-5 shrink-0">{i + 1}</span>
+                <span className="flex-1 text-[15px] text-[var(--ink)] min-w-0 break-words">{it.texto}</span>
+                {it.cantidad > 1 && (
+                  <span className="text-xs font-semibold text-[var(--ink-soft)] shrink-0">x{it.cantidad}</span>
+                )}
+                <button
+                  onClick={() => onQuitar(it.texto)}
+                  className="text-[var(--ink-soft)] hover:text-[var(--brand-red)] shrink-0 p-1.5"
+                  title="Quitar de la ficha"
+                >
+                  <Icon name="trash" className="w-4 h-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 shrink-0">
         <div className="flex-1 min-w-0">
           <Combobox items={catalogo} value={nuevo} onChange={(v) => setNuevo(v)} placeholder={placeholder} allowCreate />
         </div>
@@ -403,7 +400,7 @@ function ListaEditable({ titulo, items, catalogo, placeholder, vacio, onAgregar,
           className="input w-16 shrink-0"
           aria-label="Cantidad"
         />
-        <button onClick={agregar} className="btn-ghost px-2.5 shrink-0" title="Agregar">
+        <button onClick={agregar} className="btn-primary px-3 shrink-0" title="Agregar a la ficha">
           <Icon name="plus" className="w-4 h-4" />
         </button>
       </div>
