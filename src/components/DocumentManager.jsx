@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { uuid } from "../lib/uuid";
-import Combobox from "./Combobox";
 import Icon from "./Icon";
 
 const SIGNED_URL_TTL = 60 * 60; // 1 hora
@@ -109,12 +108,21 @@ export default function DocumentManager({ casoId }) {
       </div>
 
       <div className="mb-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
-        <Combobox
-          items={tipos.map((t) => ({ id: t.id, label: t.nombre }))}
+        {/* Lista cerrada, no campo de escritura: los tipos de documento son
+            fijos y escribir aquí solo se prestaba a confusión. */}
+        <select
           value={tipoSubida}
-          onChange={(v) => setTipoSubida(v)}
-          placeholder="Tipo…"
-        />
+          onChange={(e) => setTipoSubida(e.target.value)}
+          className="input"
+          aria-label="Tipo de documento"
+        >
+          {!tipos.length && <option value="">Cargando…</option>}
+          {tipos.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.nombre}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
