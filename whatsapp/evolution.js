@@ -91,9 +91,51 @@ export async function estadoWhatsapp() {
       };
     }
     const state = data?.instance?.state || data?.state || "unknown";
+
+    // OJO: connectionState miente. Cuando alguien desvincula el dispositivo
+    // desde el teléfono, Evolution sigue guardando "open" aunque el socket
+    // esté muerto, y los envíos fallan con "Connection Closed". Por eso se
+    // confirma con una operación real de solo lectura (consultar un número no
+    // envía ningún mensaje).
+    if (state === "open") {
+      const vivo = await socketVivo(apiUrl, apiKey, instancia);
+      if (!vivo.ok) {
+        return {
+          ok: false,
+          state: "sesion_muerta",
+          error:
+            "La sesión de WhatsApp se cerró (el teléfono desvinculó el dispositivo). " +
+            "Hay que volver a vincularlo.",
+        };
+      }
+    }
+
     return { ok: true, state };
   } catch (e) {
     return { ok: false, state: "sin_servidor", error: mensajeAmigable(e.message, 502) };
+  }
+}
+
+// Comprueba que el socket de WhatsApp realmente responda. Usa la consulta de
+// números (solo lectura: NO manda mensajes) contra el propio número del taller.
+async function socketVivo(apiUrl, apiKey, instancia) {
+  try {
+    const propio = normalizarTelefono(
+      process.env.SHOP_WHATSAPP || "8095757986",
+      process.env.WHATSAPP_DEFAULT_COUNTRY || "1"
+    );
+    const r = await fetch(`${apiUrl}/chat/whatsappNumbers/${encodeURIComponent(instancia)}`, {
+      method: "POST",
+      headers: { apikey: apiKey, "content-type": "application/json" },
+      body: JSON.stringify({ numbers: [propio] }),
+    });
+    if (r.ok) return { ok: true };
+    const data = await r.json().catch(() => ({}));
+    const msg = JSON.stringify(data?.output?.payload?.message || data?.message || "");
+    // 428 "Connection Closed" = la sesión está muerta aunque diga "open".
+    return { ok: !(r.status === 428 || /connection closed/i.test(msg)) };
+  } catch {
+    return { ok: false };
   }
 }
 

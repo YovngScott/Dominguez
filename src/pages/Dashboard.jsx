@@ -171,6 +171,8 @@ export default function Dashboard() {
                   ? "WhatsApp conectándose…"
                   : waEstado === "sin_servidor"
                   ? "Servidor de WhatsApp no disponible"
+                  : waEstado === "sesion_muerta"
+                  ? "WhatsApp se desvinculó del teléfono"
                   : "WhatsApp desconectado"}
               </p>
               <p className="text-[var(--ink-soft)]">
@@ -178,6 +180,8 @@ export default function Dashboard() {
                   ? "Espera unos segundos y recarga."
                   : waEstado === "sin_servidor"
                   ? "La dirección del servidor ya no responde; no sirve escanear el QR hasta volver a desplegarlo."
+                  : waEstado === "sesion_muerta"
+                  ? "Alguien quitó el dispositivo desde WhatsApp del taller. Vuelve a vincularlo con “Conectar WhatsApp” en el menú."
                   : "No se enviarán las confirmaciones de citas hasta volver a vincular el teléfono."}
               </p>
               {waError && (
