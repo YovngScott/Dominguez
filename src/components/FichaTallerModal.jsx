@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza, rd } from "../lib/cotizacion";
 import { clavePieza } from "../lib/piezas";
@@ -8,11 +8,15 @@ import Icon from "./Icon";
 // Modal de la ficha de taller (la hoja que se pone en el carro con lo que hay
 // que hacerle). Antes salía directo del PDF con TODAS las cotizaciones juntas,
 // y no servía si el vehículo aún no tenía cotización. Ahora se elige qué
-// cotizaciones incluir y se puede escribir el trabajo a mano.
+// cotizaciones incluir y se puede escribir el trabajo a mano. Cómo quedó
+// armada se guarda en el caso (casos.ficha_taller) para no volver a escribirla
+// al reimprimir.
 export default function FichaTallerModal({ casoId, caso, onClose }) {
   const [tab, setTab] = useState("cotizaciones");
   const [cots, setCots] = useState([]);
-  const [seleccion, setSeleccion] = useState(new Set());
+  // Se guardan las cotizaciones DESMARCADAS y no las marcadas: así una
+  // cotización nueva entra sola en la ficha sin tener que ir a marcarla.
+  const [desmarcadas, setDesmarcadas] = useState(new Set());
   const [trabajosOrden, setTrabajosOrden] = useState([]); // trabajos escritos en el recibo
   const [quitadas, setQuitadas] = useState(new Set()); // líneas borradas a mano
   const [manualesPiezas, setManualesPiezas] = useState([]);
@@ -21,7 +25,9 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
   const [serviciosCatalogo, setServiciosCatalogo] = useState([]);
   const [loading, setLoading] = useState(true);
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState("");
+  const cargado = useRef(false); // evita guardar durante la carga inicial
 
   useEffect(() => {
     async function load() {
@@ -30,24 +36,25 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
       const filtros = [`caso_id.eq.${casoId}`];
       if (caso?.chasis?.trim()) filtros.push(`chasis.ilike.${caso.chasis.trim()}`);
 
-      const [{ data: cs }, { data: ordenes }, { data: pc }, { data: sc }] = await Promise.all([
-        supabase
-          .from("cotizaciones")
-          .select("id, numero, total, items_piezas, items_mano_obra, created_at")
-          .or(filtros.join(","))
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("ordenes_reparacion")
-          .select("trabajos")
-          .eq("caso_id", casoId)
-          .order("created_at", { ascending: false })
-          .limit(1),
-        supabase.from("piezas_catalogo").select("nombre").order("nombre"),
-        supabase.from("servicios_catalogo").select("nombre").order("nombre"),
-      ]);
+      const [{ data: cs }, { data: ordenes }, { data: pc }, { data: sc }, { data: casoRow }] =
+        await Promise.all([
+          supabase
+            .from("cotizaciones")
+            .select("id, numero, total, items_piezas, items_mano_obra, created_at")
+            .or(filtros.join(","))
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("ordenes_reparacion")
+            .select("trabajos")
+            .eq("caso_id", casoId)
+            .order("created_at", { ascending: false })
+            .limit(1),
+          supabase.from("piezas_catalogo").select("nombre").order("nombre"),
+          supabase.from("servicios_catalogo").select("nombre").order("nombre"),
+          supabase.from("casos").select("ficha_taller").eq("id", casoId).maybeSingle(),
+        ]);
 
       setCots(cs || []);
-      setSeleccion(new Set((cs || []).map((c) => c.id))); // por defecto todas
       setTrabajosOrden(
         (ordenes?.[0]?.trabajos || "")
           .split(/\r?\n|,|;/)
@@ -56,20 +63,53 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
       );
       setPiezasCatalogo((pc || []).map((p) => ({ id: p.nombre, label: p.nombre })));
       setServiciosCatalogo((sc || []).map((s) => ({ id: s.nombre, label: s.nombre })));
+
+      // Cómo quedó la ficha la última vez (si la migración 49 aún no se corrió,
+      // ficha_taller no existe y simplemente se empieza en blanco).
+      const g = casoRow?.ficha_taller || {};
+      setDesmarcadas(new Set(g.desmarcadas || []));
+      setQuitadas(new Set(g.quitadas || []));
+      setManualesPiezas(g.piezas || []);
+      setManualesMano(g.mano || []);
+
       // Sin cotizaciones no hay nada que elegir: se abre directo en la pestaña
       // de escribir a mano, que es lo único que se puede hacer.
       if (!cs?.length) setTab("manual");
       setLoading(false);
+      cargado.current = true;
     }
     load();
   }, [casoId, caso?.chasis]);
+
+  // Autoguardado: cada cambio se guarda solo en el caso poco después, para que
+  // no dependa de que el usuario recuerde pulsar nada antes de cerrar.
+  useEffect(() => {
+    if (!cargado.current) return;
+    setGuardado(false);
+    const t = setTimeout(async () => {
+      const { error: e } = await supabase
+        .from("casos")
+        .update({
+          ficha_taller: {
+            desmarcadas: [...desmarcadas],
+            quitadas: [...quitadas],
+            piezas: manualesPiezas,
+            mano: manualesMano,
+          },
+        })
+        .eq("id", casoId);
+      if (e) setError("No se pudo guardar la ficha. Ejecuta la migración sql/49_caso_ficha_taller.sql.");
+      else setGuardado(true);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [casoId, desmarcadas, quitadas, manualesPiezas, manualesMano]);
 
   // Piezas y mano de obra que salen de las cotizaciones marcadas (sin repetir),
   // más lo agregado a mano. Las quitadas con la papelera no entran.
   const piezas = useMemo(() => {
     const map = new Map();
     cots
-      .filter((c) => seleccion.has(c.id))
+      .filter((c) => !desmarcadas.has(c.id))
       .forEach((c) => {
         (c.items_piezas || []).forEach((it) => {
           const nombre = nombrePieza(it);
@@ -83,12 +123,12 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
       if (k && !map.has(k)) map.set(k, p);
     });
     return [...map.values()];
-  }, [cots, seleccion, quitadas, manualesPiezas]);
+  }, [cots, desmarcadas, quitadas, manualesPiezas]);
 
   const manoObra = useMemo(() => {
     const map = new Map();
     cots
-      .filter((c) => seleccion.has(c.id))
+      .filter((c) => !desmarcadas.has(c.id))
       .forEach((c) => {
         (c.items_mano_obra || []).forEach((it) => {
           const desc = it.pieza ? `${it.nombre} · ${nombrePieza({ ...it, nombre: it.pieza })}` : it.nombre;
@@ -108,10 +148,10 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
       if (k && !map.has(k)) map.set(k, m);
     });
     return [...map.values()];
-  }, [cots, seleccion, quitadas, trabajosOrden, manualesMano]);
+  }, [cots, desmarcadas, quitadas, trabajosOrden, manualesMano]);
 
   function toggleCot(id) {
-    setSeleccion((prev) => {
+    setDesmarcadas((prev) => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id);
       else n.add(id);
@@ -225,20 +265,20 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <p className="text-sm text-[var(--ink-soft)]">Marca cuáles entran en la ficha.</p>
                   <div className="flex gap-3 text-xs shrink-0">
-                    <button
-                      onClick={() => setSeleccion(new Set(cots.map((c) => c.id)))}
-                      className="text-[var(--brand-red)] font-semibold"
-                    >
+                    <button onClick={() => setDesmarcadas(new Set())} className="text-[var(--brand-red)] font-semibold">
                       Todas
                     </button>
-                    <button onClick={() => setSeleccion(new Set())} className="text-[var(--ink-soft)] font-semibold">
+                    <button
+                      onClick={() => setDesmarcadas(new Set(cots.map((c) => c.id)))}
+                      className="text-[var(--ink-soft)] font-semibold"
+                    >
                       Ninguna
                     </button>
                   </div>
                 </div>
                 <ul className="space-y-2">
                   {cots.map((c) => {
-                    const sel = seleccion.has(c.id);
+                    const sel = !desmarcadas.has(c.id);
                     const nPiezas = (c.items_piezas || []).length;
                     const nMano = (c.items_mano_obra || []).length;
                     return (
@@ -304,6 +344,7 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm text-[var(--ink-soft)] flex-1 min-w-0">
               {piezas.length} pieza(s) · {manoObra.length} trabajo(s) en la ficha
+              {guardado && <span className="text-emerald-600 font-medium"> · Guardado</span>}
             </p>
             <button onClick={onClose} className="btn-ghost">
               Cancelar
