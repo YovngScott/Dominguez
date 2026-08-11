@@ -5,6 +5,8 @@ import { nombrePieza } from "../lib/cotizacion";
 import { clavePieza as clave } from "../lib/piezas";
 import { formatoTramo } from "../lib/tramos";
 import TramoPicker from "./TramoPicker";
+import Combobox from "./Combobox";
+import ConfirmDialog from "./ConfirmDialog";
 import Icon from "./Icon";
 import Lightbox from "./Lightbox";
 import { compressImage } from "../lib/imageCompress";
@@ -16,7 +18,7 @@ import { uuid } from "../lib/uuid";
  * tabla piezas_recibidas, así la cotización y su PDF nunca se modifican.
  */
 export default function PiezasManager({ casoId, caso }) {
-  const [piezas, setPiezas] = useState([]); // [{ clave, nombre, cantidad, cotizacion }]
+  const [piezas, setPiezas] = useState([]); // [{ clave, nombre, cantidad, cotizacion, manual }]
   const [recibidas, setRecibidas] = useState(new Set()); // claves recibidas
   const [entregadas, setEntregadas] = useState(new Set()); // claves entregadas a un reparador
   const [tramos, setTramos] = useState({}); // clave -> tramo (ej. "B2")
@@ -34,6 +36,9 @@ export default function PiezasManager({ casoId, caso }) {
   const [fotosRecibidas, setFotosRecibidas] = useState(new Map());
   const [subiendoFotoRecibida, setSubiendoFotoRecibida] = useState(null);
   const [eliminandoFoto, setEliminandoFoto] = useState(false);
+  const [editorPieza, setEditorPieza] = useState(null); // null | "nueva" | pieza en edición
+  const [piezaAEliminar, setPiezaAEliminar] = useState(null);
+  const [catalogo, setCatalogo] = useState([]);
 
   async function load() {
     setLoading(true);
@@ -111,15 +116,6 @@ export default function PiezasManager({ casoId, caso }) {
         }
       });
     });
-    const paths = [...fotoPorPieza.values()].filter(Boolean);
-    const { data: signed } = paths.length
-      ? await supabase.storage.from("fotos-casos").createSignedUrls(paths, 60 * 60)
-      : { data: [] };
-    const urls = new Map((signed || []).map((s) => [s.path, s.signedUrl]));
-    setPiezas([...map.values()].map((p) => {
-      const foto_path = fotoPorPieza.get(p.clave) || p.foto_path;
-      return { ...p, foto_path, foto_url: foto_path ? urls.get(foto_path) || "" : "" };
-    }));
     if (!caso) {
       if (cots?.length) setInfoCaso(cots[cots.length - 1]);
       else if (etqs?.length) setInfoCaso(etqs[etqs.length - 1]);
@@ -130,6 +126,35 @@ export default function PiezasManager({ casoId, caso }) {
     // el caso del vehículo aunque sean distintos.
     const casoIds = [...new Set([casoId, ...etqs.map((e) => e.caso_id).filter(Boolean)])];
     setCasosRel(casoIds);
+
+    // Ajustes hechos a mano sobre la lista: piezas quitadas (entraron por error)
+    // y piezas agregadas que no están en ninguna cotización ni etiqueta.
+    // Si la migración 50 aún no se corrió, se sigue sin ajustes.
+    const { data: manuales } = await supabase
+      .from("piezas_caso_manuales")
+      .select("pieza_clave, pieza_nombre, cantidad, oculta")
+      .in("caso_id", casoIds);
+    (manuales || []).forEach((m) => {
+      if (m.oculta) map.delete(m.pieza_clave);
+      else map.set(m.pieza_clave, {
+        clave: m.pieza_clave,
+        nombre: m.pieza_nombre,
+        cantidad: Number(m.cantidad) || 1,
+        cotizacion: null,
+        foto_path: null,
+        manual: true,
+      });
+    });
+
+    const paths = [...fotoPorPieza.values()].filter(Boolean);
+    const { data: signed } = paths.length
+      ? await supabase.storage.from("fotos-casos").createSignedUrls(paths, 60 * 60)
+      : { data: [] };
+    const urls = new Map((signed || []).map((s) => [s.path, s.signedUrl]));
+    setPiezas([...map.values()].map((p) => {
+      const foto_path = fotoPorPieza.get(p.clave) || p.foto_path;
+      return { ...p, foto_path, foto_url: foto_path ? urls.get(foto_path) || "" : "" };
+    }));
 
     // Se intenta leer con "entregada_at"; si la columna aún no existe (migración
     // 38 sin correr), se reintenta sin ella para no romper la lista.
@@ -161,6 +186,108 @@ export default function PiezasManager({ casoId, caso }) {
     });
     setTramos(tmap);
     setLoading(false);
+  }
+
+  // Catálogo de piezas, para autocompletar al agregar o corregir una.
+  useEffect(() => {
+    supabase
+      .from("piezas_catalogo")
+      .select("nombre")
+      .order("nombre")
+      .then(({ data }) => setCatalogo((data || []).map((p) => ({ id: p.nombre, label: p.nombre }))));
+  }, []);
+
+  /**
+   * Agrega una pieza al checklist o corrige una existente.
+   *
+   * Las piezas del caso salen de las cotizaciones y las etiquetas, no de una
+   * tabla propia, así que "agregar" y "corregir" se guardan aparte en
+   * piezas_caso_manuales. La cotización nunca se toca: lo que se le mandó al
+   * seguro tiene que seguir coincidiendo con lo que el seguro tiene.
+   */
+  async function guardarPieza({ nombre, cantidad }, original) {
+    const limpio = (nombre || "").trim();
+    if (!limpio) return;
+    const nuevaClave = clave(limpio);
+    setError("");
+
+    const { data: userData } = await supabase.auth.getUser();
+    const filas = [
+      {
+        caso_id: casoId,
+        pieza_clave: nuevaClave,
+        pieza_nombre: limpio,
+        cantidad: Math.max(1, Number(cantidad) || 1),
+        oculta: false,
+        created_by: userData?.user?.id,
+      },
+    ];
+
+    // Al corregir el nombre cambia la clave: la línea vieja se oculta para que
+    // no queden las dos. Si la vieja era manual, se borra en vez de ocultarse.
+    if (original && original.clave !== nuevaClave) {
+      if (original.manual) {
+        await supabase.from("piezas_caso_manuales").delete().in("caso_id", casosRel).eq("pieza_clave", original.clave);
+      } else {
+        filas.push({
+          caso_id: casoId,
+          pieza_clave: original.clave,
+          pieza_nombre: original.nombre,
+          cantidad: original.cantidad || 1,
+          oculta: true,
+          created_by: userData?.user?.id,
+        });
+      }
+      // El estado (recibida, tramo, foto) viaja con el nombre nuevo.
+      await supabase
+        .from("piezas_recibidas")
+        .update({ pieza_clave: nuevaClave, pieza_nombre: limpio })
+        .in("caso_id", casosRel)
+        .eq("pieza_clave", original.clave);
+    }
+
+    const { error: e } = await supabase
+      .from("piezas_caso_manuales")
+      .upsert(filas, { onConflict: "caso_id,pieza_clave" });
+    if (e) {
+      setError("No se pudo guardar. Ejecuta la migración sql/50_piezas_caso_manuales.sql en Supabase.");
+      return;
+    }
+    setEditorPieza(null);
+    load();
+  }
+
+  /** Quita una pieza del checklist del caso (no de la cotización). */
+  async function eliminarPieza(p) {
+    setError("");
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (p.manual) {
+      // Era una línea agregada a mano: se borra y desaparece.
+      await supabase.from("piezas_caso_manuales").delete().in("caso_id", casosRel).eq("pieza_clave", p.clave);
+    } else {
+      // Viene de una cotización o etiqueta: se marca oculta para que no vuelva
+      // a aparecer la próxima vez que se arme la lista.
+      const { error: e } = await supabase.from("piezas_caso_manuales").upsert(
+        {
+          caso_id: casoId,
+          pieza_clave: p.clave,
+          pieza_nombre: p.nombre,
+          cantidad: p.cantidad || 1,
+          oculta: true,
+          created_by: userData?.user?.id,
+        },
+        { onConflict: "caso_id,pieza_clave" }
+      );
+      if (e) {
+        setError("No se pudo quitar. Ejecuta la migración sql/50_piezas_caso_manuales.sql en Supabase.");
+        return;
+      }
+    }
+    // Si ya no está en el caso, tampoco puede estar recibida ni ocupar anaquel.
+    await supabase.from("piezas_recibidas").delete().in("caso_id", casosRel).eq("pieza_clave", p.clave);
+    setPiezaAEliminar(null);
+    load();
   }
 
   useEffect(() => {
@@ -400,6 +527,9 @@ export default function PiezasManager({ casoId, caso }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button onClick={() => setEditorPieza("nueva")} className="btn-ghost text-sm py-2 px-3 gap-1.5">
+            <Icon name="plus" className="w-4 h-4" /> Agregar pieza
+          </button>
           <button
             onClick={abrirEtiquetas}
             disabled={!piezas.length}
@@ -426,7 +556,8 @@ export default function PiezasManager({ casoId, caso }) {
         <p className="text-sm text-[var(--ink-soft)]">Cargando…</p>
       ) : piezas.length === 0 ? (
         <p className="text-sm text-[var(--ink-soft)]">
-          No hay piezas. Agrega piezas en una cotización de este vehículo y aparecerán aquí.
+          No hay piezas. Salen solas de las cotizaciones y las etiquetas de este vehículo, o puedes
+          agregarlas a mano con “Agregar pieza”.
         </p>
       ) : (
         <ul className="divide-y divide-[var(--line)]">
@@ -507,6 +638,24 @@ export default function PiezasManager({ casoId, caso }) {
                     </button>
                   </div>
                 )}
+
+                {/* Corregir el nombre o quitar la pieza del caso */}
+                <div className="flex items-center shrink-0">
+                  <button
+                    onClick={() => setEditorPieza(p)}
+                    title="Corregir el nombre o la cantidad"
+                    className="p-2 rounded-lg text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--brand-red)]"
+                  >
+                    <Icon name="pencil" className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setPiezaAEliminar(p)}
+                    title="Quitar esta pieza del caso"
+                    className="p-2 rounded-lg text-[var(--ink-soft)] hover:bg-[var(--paper)] hover:text-[var(--brand-red)]"
+                  >
+                    <Icon name="trash" className="w-4 h-4" />
+                  </button>
+                </div>
               </li>
             );
           })}
@@ -550,6 +699,88 @@ export default function PiezasManager({ casoId, caso }) {
           deleting={eliminandoFoto}
         />
       )}
+
+      {editorPieza && (
+        <PiezaModal
+          pieza={editorPieza === "nueva" ? null : editorPieza}
+          catalogo={catalogo}
+          onCancel={() => setEditorPieza(null)}
+          onSave={guardarPieza}
+        />
+      )}
+
+      {piezaAEliminar && (
+        <ConfirmDialog
+          titulo="Quitar la pieza del caso"
+          mensaje={
+            piezaAEliminar.manual
+              ? `“${piezaAEliminar.nombre}” se agregó a mano y desaparecerá de la lista.`
+              : `“${piezaAEliminar.nombre}” dejará de aparecer en este caso. La cotización NO se toca: sigue igual que como se le envió al seguro.`
+          }
+          confirmLabel="Quitar"
+          onConfirm={() => eliminarPieza(piezaAEliminar)}
+          onCancel={() => setPiezaAEliminar(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Alta y corrección de una pieza del checklist. El nombre autocompleta con el
+// catálogo, pero admite escribir cualquier cosa: los nombres de piezas varían
+// mucho entre aseguradoras.
+function PiezaModal({ pieza, catalogo, onCancel, onSave }) {
+  const [nombre, setNombre] = useState(pieza?.nombre || "");
+  const [cantidad, setCantidad] = useState(String(pieza?.cantidad || 1));
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar() {
+    if (!nombre.trim() || guardando) return;
+    setGuardando(true);
+    await onSave({ nombre, cantidad }, pieza);
+    setGuardando(false);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-[var(--ink)] mb-1">{pieza ? "Corregir pieza" : "Agregar pieza"}</h3>
+        <p className="text-sm text-[var(--ink-soft)] mb-4">
+          {pieza && !pieza.manual
+            ? "Esta pieza vino de una cotización. El cambio es solo para este caso: la cotización y su PDF quedan igual."
+            : "Se agrega solo al checklist de este caso, sin tocar ninguna cotización."}
+        </p>
+        <div className="space-y-3">
+          <label className="block">
+            <span className="field-label">Nombre de la pieza *</span>
+            <Combobox
+              items={catalogo}
+              value={nombre}
+              onChange={(v) => setNombre(v)}
+              placeholder="Ej. Bumper delantero"
+              allowCreate
+            />
+          </label>
+          <label className="block">
+            <span className="field-label">Cantidad</span>
+            <input
+              type="number"
+              min="1"
+              value={cantidad}
+              onChange={(e) => setCantidad(e.target.value)}
+              className="input w-28"
+            />
+          </label>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button onClick={guardar} disabled={!nombre.trim() || guardando} className="btn-primary disabled:opacity-50">
+            {guardando ? "Guardando…" : "Guardar"}
+          </button>
+          <button onClick={onCancel} className="btn-ghost">
+            Cancelar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
