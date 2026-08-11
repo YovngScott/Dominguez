@@ -6,9 +6,10 @@ import PiezasManager from "../components/PiezasManager";
 import DocumentManager from "../components/DocumentManager";
 import SignaturePad from "../components/SignaturePad";
 import SelectorLlave from "../components/SelectorLlave";
+import FichaTallerModal from "../components/FichaTallerModal";
 import Icon from "../components/Icon";
 import { ESTADOS } from "../lib/estados";
-import { rd, nombrePieza } from "../lib/cotizacion";
+import { rd } from "../lib/cotizacion";
 import { marcarCitasAtendidas } from "../lib/citaCaso";
 
 const ESTADO_ORDEN = ["en_espera_piezas", "listo_para_trabajar", "entregado"];
@@ -36,7 +37,7 @@ export default function CaseDetail() {
   const [firmaUrl, setFirmaUrl] = useState(null);
   const [showFirma, setShowFirma] = useState(false);
   const [guardandoFirma, setGuardandoFirma] = useState(false);
-  const [imprimiendoFicha, setImprimiendoFicha] = useState(false);
+  const [fichaOpen, setFichaOpen] = useState(false);
   const [imprimiendoMateriales, setImprimiendoMateriales] = useState(false);
 
   async function loadCaso() {
@@ -151,75 +152,23 @@ export default function CaseDetail() {
     }
   }
 
-  // Genera la hoja "Trabajo a realizar" con las piezas y la mano de obra
-  // tomadas de las cotizaciones del vehículo. Se imprime y se pone en el carro.
-  async function imprimirFichaTaller() {
-    setImprimiendoFicha(true);
-    try {
-      const filtros = [`caso_id.eq.${casoId}`];
-      if (caso.chasis?.trim()) filtros.push(`chasis.ilike.${caso.chasis.trim()}`);
-      const { data: cots } = await supabase
-        .from("cotizaciones")
-        .select("items_piezas, items_mano_obra, created_at")
-        .or(filtros.join(","))
-        .order("created_at", { ascending: false });
-      const { data: ordenes } = await supabase
-        .from("ordenes_reparacion")
-        .select("trabajos")
-        .eq("caso_id", casoId)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      // Junta piezas (sin repetir) y mano de obra de todas las cotizaciones.
-      const piezasMap = new Map();
-      const mano = [];
-      const manoVistas = new Set();
-      (cots || []).forEach((c) => {
-        (c.items_piezas || []).forEach((it) => {
-          const nombre = nombrePieza(it);
-          const k = nombre.toLowerCase();
-          if (nombre && !piezasMap.has(k)) piezasMap.set(k, { nombre, cantidad: Number(it.cantidad) || 1 });
-        });
-        (c.items_mano_obra || []).forEach((it) => {
-          const desc = it.pieza ? `${it.nombre} · ${nombrePieza({ ...it, nombre: it.pieza })}` : it.nombre;
-          const k = (desc || "").toLowerCase();
-          if (desc && !manoVistas.has(k)) {
-            manoVistas.add(k);
-            mano.push({ descripcion: desc, cantidad: Number(it.cantidad) || 1 });
-          }
-        });
-      });
-
-      // Incluye los trabajos escritos directamente en el recibo/orden.
-      (ordenes?.[0]?.trabajos || "").split(/\r?\n|,|;/).map((t) => t.trim()).filter(Boolean).forEach((desc) => {
-        const k = desc.toLowerCase();
-        if (!manoVistas.has(k)) { manoVistas.add(k); mano.push({ descripcion: desc, cantidad: 1 }); }
-      });
-
-      const { generarFichaTaller } = await import("../lib/fichaTallerPdf");
-      const blob = generarFichaTaller({
-        caso: {
-          aseguradora_nombre: caso.aseguradora?.nombre,
-          cliente_nombre: caso.cliente?.nombre_completo,
-          cliente_telefono: caso.cliente?.telefono,
-          marca: caso.marca?.nombre,
-          modelo: caso.modelo?.nombre,
-          anio: caso.anio,
-          placa: caso.placa,
-          chasis: caso.chasis,
-          color: caso.color,
-          fecha_ingreso: caso.fecha_ingreso,
-          fecha_entrega: caso.fecha_entrega,
-          numero_llave: caso.numero_llave,
-          numero_reclamo: caso.numero_reclamo,
-        },
-        piezas: [...piezasMap.values()],
-        manoObra: mano,
-      });
-      window.open(URL.createObjectURL(blob), "_blank");
-    } finally {
-      setImprimiendoFicha(false);
-    }
+  // Datos del vehículo que van en el encabezado de los PDF del caso.
+  function datosCasoPdf() {
+    return {
+      aseguradora_nombre: caso.aseguradora?.nombre,
+      cliente_nombre: caso.cliente?.nombre_completo,
+      cliente_telefono: caso.cliente?.telefono,
+      marca: caso.marca?.nombre,
+      modelo: caso.modelo?.nombre,
+      anio: caso.anio,
+      placa: caso.placa,
+      chasis: caso.chasis,
+      color: caso.color,
+      fecha_ingreso: caso.fecha_ingreso,
+      fecha_entrega: caso.fecha_entrega,
+      numero_llave: caso.numero_llave,
+      numero_reclamo: caso.numero_reclamo,
+    };
   }
 
   async function imprimirMateriales() {
@@ -233,21 +182,7 @@ export default function CaseDetail() {
         .limit(1);
       const { generarReporteMateriales } = await import("../lib/materialesPdf");
       const blob = generarReporteMateriales({
-        caso: {
-          aseguradora_nombre: caso.aseguradora?.nombre,
-          cliente_nombre: caso.cliente?.nombre_completo,
-          cliente_telefono: caso.cliente?.telefono,
-          marca: caso.marca?.nombre,
-          modelo: caso.modelo?.nombre,
-          anio: caso.anio,
-          placa: caso.placa,
-          chasis: caso.chasis,
-          color: caso.color,
-          numero_reclamo: caso.numero_reclamo,
-          fecha_ingreso: caso.fecha_ingreso,
-          fecha_entrega: caso.fecha_entrega,
-          numero_llave: caso.numero_llave,
-        },
+        caso: datosCasoPdf(),
         orden: ordenes?.[0] || {},
       });
       /*
@@ -307,17 +242,12 @@ export default function CaseDetail() {
           <div className="flex flex-wrap gap-2">
           {
             <button
-              onClick={imprimirFichaTaller}
-              disabled={imprimiendoFicha}
-              className="ficha-print-button btn-primary text-sm py-2 px-3 gap-1.5 disabled:opacity-50"
+              onClick={() => setFichaOpen(true)}
+              className="ficha-print-button btn-primary text-sm py-2 px-3 gap-1.5"
             >
               <span aria-hidden="true">🔑</span>
               <Icon name="key" className="w-4 h-4" />
-              <span>{imprimiendoFicha ? "Generando..." : "Imprimir ficha de taller"}</span>
-              {/*
-              <Icon name="clipboard" className="w-4 h-4" />
-              {generandoTrabajo ? "Generando…" : "Trabajo a realizar"}
-              */}
+              <span>Imprimir ficha de taller</span>
             </button>
           }
           <button
@@ -493,6 +423,10 @@ export default function CaseDetail() {
           onCancel={() => setShowFirma(false)}
           submitting={guardandoFirma}
         />
+      )}
+
+      {fichaOpen && (
+        <FichaTallerModal casoId={casoId} caso={datosCasoPdf()} onClose={() => setFichaOpen(false)} />
       )}
     </div>
   );
