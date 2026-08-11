@@ -147,6 +147,12 @@ export default function CotizarSuplidoresModal({ cot, onClose }) {
                     <span className="text-xs font-semibold text-[var(--brand-red)] shrink-0">✕ falló</span>
                   )}
                 </label>
+                {/* El motivo va a la vista, no escondido en un tooltip: saber si
+                    el servidor está caído o si el número está mal cambia por
+                    completo lo que hay que hacer. */}
+                {resultados[s.id]?.error && (
+                  <p className="text-xs text-[var(--brand-red)] px-3 pb-2.5 -mt-1">{resultados[s.id].error}</p>
+                )}
               </li>
             ))}
           </ul>

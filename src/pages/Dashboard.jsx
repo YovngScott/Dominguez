@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [estancados, setEstancados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [waEstado, setWaEstado] = useState(null); // "open" | "connecting" | "close" | ...
+  const [waError, setWaError] = useState(""); // motivo técnico, para saber qué arreglar
   const [porReponer, setPorReponer] = useState([]); // insumos agotados o bajo el mínimo
 
   // Insumos que hay que comprar (el módulo de almacén puede no estar aún
@@ -62,8 +63,10 @@ export default function Dashboard() {
         });
         const d = await r.json();
         setWaEstado(d?.state || null);
+        setWaError(d?.error || "");
       } catch {
         setWaEstado(null);
+        setWaError("");
       }
     }
     checkWa();
@@ -177,6 +180,9 @@ export default function Dashboard() {
                   ? "La dirección del servidor ya no responde; no sirve escanear el QR hasta volver a desplegarlo."
                   : "No se enviarán las confirmaciones de citas hasta volver a vincular el teléfono."}
               </p>
+              {waError && (
+                <p className="text-xs text-[var(--ink-soft)] mt-1.5 opacity-80">Detalle: {waError}</p>
+              )}
             </div>
           </div>
         )}

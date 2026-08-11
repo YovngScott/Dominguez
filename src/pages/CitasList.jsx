@@ -253,12 +253,18 @@ export default function CitasList() {
             if (info?.editando && info?.telefonoCambio && info?.wa === true)
               setAviso({ tipo: "ok", texto: `Cita actualizada y WhatsApp enviado al nuevo número de ${info.nombre}.` });
             else if (info?.editando && info?.telefonoCambio && info?.wa === false)
-              setAviso({ tipo: "fail", texto: "La cita se actualizó, pero no se pudo enviar el WhatsApp al nuevo número." });
+              setAviso({
+                tipo: "fail",
+                texto: `La cita se actualizó, pero no se pudo enviar el WhatsApp al nuevo número.${info.waError ? " " + info.waError : ""}`,
+              });
             else if (info?.editando)
               setAviso({ tipo: "info", texto: "Cita actualizada correctamente." });
             else if (info?.wa === true) setAviso({ tipo: "ok", texto: `WhatsApp de confirmación enviado a ${info.nombre}.` });
             else if (info?.wa === false)
-              setAviso({ tipo: "fail", texto: "La cita se guardó, pero no se pudo enviar el WhatsApp. Revisa la conexión de WhatsApp." });
+              setAviso({
+                tipo: "fail",
+                texto: `La cita se guardó, pero no se pudo enviar el WhatsApp. ${info.waError || "Revisa la conexión de WhatsApp."}`,
+              });
           }}
         />
       )}
@@ -368,6 +374,7 @@ function CitaModal({ cita, onCancel, onSaved }) {
     // el cierre: si falla, la cita ya quedó guardada. wa: null = sin teléfono,
     // true = enviado, false = falló.
     let wa = null;
+    let waError = "";
     if (form.telefono?.trim() && (!editando || telefonoCambio)) {
       const casoSel = casos.find((c) => c.id === form.caso_id);
       const vehiculo = casoSel
@@ -387,12 +394,14 @@ function CitaModal({ cita, onCancel, onSaved }) {
         wa = true;
       } catch (err) {
         wa = false;
-        console.warn("No se pudo enviar el WhatsApp automático:", err.message);
+        // El motivo sube a la pantalla: antes solo iba a la consola y el
+        // usuario no tenía forma de saber qué había que arreglar.
+        waError = err.message || "";
       }
     }
 
     setGuardando(false);
-    onSaved({ wa, nombre: form.nombre, editando, telefonoCambio });
+    onSaved({ wa, waError, nombre: form.nombre, editando, telefonoCambio });
   }
 
   return (
