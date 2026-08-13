@@ -1,4 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+// Compara sin tildes ni mayúsculas: "guardalodo" encuentra "GUARDALODO".
+const norm = (s) =>
+  String(s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+// Qué tan bien calza el texto escrito con la sugerencia (menor = mejor):
+//   0 → es exactamente lo escrito
+//   1 → empieza con lo escrito        ("GUARDALODO" al buscar "guar")
+//   2 → alguna palabra empieza así    ("FLEAR GUARDALODO")
+//   3 → solo lo contiene en el medio  ("BASE PANTALLA LH" al buscar "antall")
+function relevancia(label, q) {
+  const l = norm(label);
+  if (l === q) return 0;
+  if (l.startsWith(q)) return 1;
+  if (l.split(/[\s\-/(),.]+/).some((palabra) => palabra.startsWith(q))) return 2;
+  return 3;
+}
 
 /**
  * Campo de autocompletado: muestra sugerencias mientras se escribe.
@@ -39,8 +59,23 @@ export default function Combobox({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const q = query.trim().toLowerCase();
-  const filtered = q ? items.filter((i) => i.label.toLowerCase().includes(q)) : items;
+  // Las sugerencias salen ordenadas por relevancia: primero las que empiezan
+  // con lo escrito y de último las que solo lo contienen en el medio. Sin esto,
+  // al buscar "guar" aparecían antes piezas donde "guar" está al final.
+  const q = norm(query.trim());
+  const filtered = useMemo(() => {
+    if (!q) return items;
+    return items
+      .map((i) => ({ item: i, r: relevancia(i.label, q), pos: norm(i.label).indexOf(q) }))
+      .filter((x) => x.pos !== -1)
+      .sort(
+        (a, b) =>
+          a.r - b.r || // mejor coincidencia primero
+          a.pos - b.pos || // luego, lo escrito más al principio
+          a.item.label.localeCompare(b.item.label, "es") // y al final, alfabético
+      )
+      .map((x) => x.item);
+  }, [items, q]);
 
   function selectItem(item) {
     onChange?.(item.id, item.label);
