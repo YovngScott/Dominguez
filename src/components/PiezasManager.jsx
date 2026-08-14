@@ -13,6 +13,34 @@ import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
 
 /**
+ * Traduce el error de Supabase al guardar un ajuste de piezas.
+ *
+ * Antes esto decía siempre "ejecuta la migración", que solo es cierto si la
+ * tabla no existe. Cuando el motivo era otro (permisos, un dato inválido) el
+ * mensaje mandaba a corregir lo que ya estaba bien.
+ */
+function mensajeGuardado(e) {
+  const texto = [e?.message, e?.details, e?.hint].filter(Boolean).join(" · ");
+  // 42P01 = la tabla no existe; PGRST205 = PostgREST no la tiene en su caché.
+  if (e?.code === "42P01" || e?.code === "PGRST205" || /does not exist|schema cache/i.test(texto)) {
+    return (
+      "Supabase no encuentra la tabla piezas_caso_manuales. Si ya ejecutaste la migración, corre " +
+      "NOTIFY pgrst, 'reload schema'; para que la reconozca. Detalle: " + texto
+    );
+  }
+  if (e?.code === "42501" || /row-level security|permission denied/i.test(texto)) {
+    return (
+      "La base de datos rechazó el cambio por permisos. Falta la parte final de " +
+      "sql/50_piezas_caso_manuales.sql (enable row level security + create policy). Detalle: " + texto
+    );
+  }
+  if (e?.code === "42703" || /column .* does not exist/i.test(texto)) {
+    return "A la tabla piezas_caso_manuales le falta una columna. Vuelve a ejecutar sql/50_piezas_caso_manuales.sql completo. Detalle: " + texto;
+  }
+  return "No se pudo guardar: " + (texto || "error desconocido.");
+}
+
+/**
  * Checklist de piezas de un caso. Las piezas se leen de las cotizaciones
  * del caso (items_piezas); el estado "recibida" se guarda aparte en la
  * tabla piezas_recibidas, así la cotización y su PDF nunca se modifican.
@@ -250,7 +278,7 @@ export default function PiezasManager({ casoId, caso }) {
       .from("piezas_caso_manuales")
       .upsert(filas, { onConflict: "caso_id,pieza_clave" });
     if (e) {
-      setError("No se pudo guardar. Ejecuta la migración sql/50_piezas_caso_manuales.sql en Supabase.");
+      setError(mensajeGuardado(e));
       return;
     }
     setEditorPieza(null);
@@ -280,7 +308,7 @@ export default function PiezasManager({ casoId, caso }) {
         { onConflict: "caso_id,pieza_clave" }
       );
       if (e) {
-        setError("No se pudo quitar. Ejecuta la migración sql/50_piezas_caso_manuales.sql en Supabase.");
+        setError(mensajeGuardado(e));
         return;
       }
     }
@@ -733,6 +761,10 @@ function PiezaModal({ pieza, catalogo, onCancel, onSave }) {
   const [nombre, setNombre] = useState(pieza?.nombre || "");
   const [cantidad, setCantidad] = useState(String(pieza?.cantidad || 1));
   const [guardando, setGuardando] = useState(false);
+  const [confirmarSalida, setConfirmarSalida] = useState(false);
+
+  const hayCambios =
+    nombre.trim() !== (pieza?.nombre || "") || cantidad !== String(pieza?.cantidad || 1);
 
   async function guardar() {
     if (!nombre.trim() || guardando) return;
@@ -741,8 +773,29 @@ function PiezaModal({ pieza, catalogo, onCancel, onSave }) {
     setGuardando(false);
   }
 
+  // Un clic fuera de la tarjeta cerraba y se perdía lo escrito sin avisar.
+  // Ahora solo cierra directo si no se escribió nada.
+  function intentarCerrar() {
+    if (hayCambios) setConfirmarSalida(true);
+    else onCancel();
+  }
+
+  if (confirmarSalida) {
+    return (
+      <ConfirmDialog
+        titulo="Vas a perder lo escrito"
+        mensaje={`Todavía no se guardó “${nombre.trim() || "la pieza"}”. Si sales ahora se pierde.`}
+        icon="pencil"
+        confirmLabel="Salir sin guardar"
+        cancelLabel="Seguir editando"
+        onConfirm={onCancel}
+        onCancel={() => setConfirmarSalida(false)}
+      />
+    );
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={intentarCerrar}>
       <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold text-[var(--ink)] mb-1">{pieza ? "Corregir pieza" : "Agregar pieza"}</h3>
         <p className="text-sm text-[var(--ink-soft)] mb-4">
