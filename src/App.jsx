@@ -35,6 +35,7 @@ const ContactosList = lazy(() => import("./pages/ContactosList"));
 const CitasList = lazy(() => import("./pages/CitasList"));
 const Reportes = lazy(() => import("./pages/Reportes"));
 const Suministros = lazy(() => import("./pages/Suministros"));
+const Nevera = lazy(() => import("./pages/Nevera"));
 const KioskSuministros = lazy(() => import("./pages/KioskSuministros"));
 const TallerDashboard = lazy(() => import("./pages/TallerDashboard"));
 const TrabajadorDetail = lazy(() => import("./pages/TrabajadorDetail"));
@@ -51,6 +52,7 @@ const NAV = [
   { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
   { to: "/tramos", label: "Tramos", icon: "grid" },
   { to: "/suministros", label: "Almacén", icon: "package" },
+  { to: "/nevera", label: "Nevera", icon: "coins" },
   { to: "/citas", label: "Citas", icon: "clock" },
   { to: "/entregados", label: "Vehículos entregados", icon: "check" },
   { to: "/clientes", label: "Clientes", icon: "user" },
@@ -459,6 +461,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <Suministros />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/nevera"
+        element={
+          <PrivateLayout>
+            <Nevera />
           </PrivateLayout>
         }
       />
