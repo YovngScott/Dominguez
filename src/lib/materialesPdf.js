@@ -10,8 +10,8 @@ const val = (x) => String(x || "-");
 
 function dato(doc, x, y, label, value, w) {
   // Tipografía cómoda para lectura en papel, manteniendo el bloque compacto.
-  doc.setFont("helvetica", "bold"); doc.setFontSize(5.8); doc.setTextColor(...SOFT); doc.text(label, x, y);
-  doc.setFontSize(8.4); doc.setTextColor(...INK); doc.text(doc.splitTextToSize(val(value), w)[0], x, y + 3.2);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...SOFT); doc.text(label, x, y);
+  doc.setFontSize(9.6); doc.setTextColor(...INK); doc.text(doc.splitTextToSize(val(value), w)[0], x, y + 3.5);
 }
 
 // Formato compacto de UNA hoja, igual a la hoja física anterior. Los datos del
@@ -35,17 +35,17 @@ export function generarReporteMateriales({ caso = {}, orden = {} }) {
   y += 24;
   const xs = [M, M + 36, M + 118, M + 146, M + 170, W - M];
   const headers = ["EMPLEADO", "MATERIALES", "MARCA", "CANTIDAD", "COSTO"];
-  doc.setFillColor(...INK); doc.rect(M, y, CW, 5.8, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(7.8); doc.setTextColor(255, 255, 255); headers.forEach((h, i) => doc.text(h, xs[i] + 2, y + 3.9)); y += 5.8;
+  doc.setFillColor(...INK); doc.rect(M, y, CW, 5.8, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(9.2); doc.setTextColor(255, 255, 255); headers.forEach((h, i) => doc.text(h, xs[i] + 2, y + 4.1)); y += 5.8;
   const rowH = 5.7;
-  doc.setDrawColor(...LINE); doc.setLineWidth(0.25); doc.setFont("helvetica", "normal"); doc.setFontSize(8.8); doc.setTextColor(...INK);
+  doc.setDrawColor(...LINE); doc.setLineWidth(0.25); doc.setFont("helvetica", "bold"); doc.setFontSize(11.2); doc.setTextColor(...INK);
   MATERIALES.forEach((material) => {
     doc.rect(M, y, CW, rowH, "S");
     for (let i = 1; i < xs.length - 1; i += 1) doc.line(xs[i], y, xs[i], y + rowH);
-    doc.text(material, xs[1] + 2, y + 4.1);
+    doc.text(material, xs[1] + 2, y + 4.25);
     y += rowH;
   });
   y += 3;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...INK); doc.text("TOTAL DE MATERIALES: RD$ __________________________________", M, y);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); doc.setTextColor(...INK); doc.text("TOTAL DE MATERIALES: RD$ __________________________________", M, y);
   y += 7.5;
   doc.setDrawColor(...INK); doc.line(M + 55, y, W - M - 55, y);
   doc.setFontSize(8.5); doc.setTextColor(...SOFT); doc.text("ENCARGADO DPTO. SUMINISTRO", W / 2, y + 4, { align: "center" });
