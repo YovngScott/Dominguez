@@ -10,7 +10,7 @@ const val = (x) => String(x || "-");
 
 function dato(doc, x, y, label, value, w) {
   // Tipografía cómoda para lectura en papel, manteniendo el bloque compacto.
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...SOFT); doc.text(label, x, y);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(...RED); doc.text(label, x, y);
   doc.setFontSize(9.6); doc.setTextColor(...INK); doc.text(doc.splitTextToSize(val(value), w)[0], x, y + 3.5);
 }
 
@@ -22,7 +22,7 @@ export function generarReporteMateriales({ caso = {}, orden = {} }) {
   const vehiculo = [caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ");
   doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(...INK); doc.text("REPORTE DE MATERIALES", M, 8);
   doc.setFontSize(8.5); doc.setTextColor(...SOFT); doc.text("PARA SUMINISTROS", M, 11.5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.text(`Fecha de impresion: ${new Date().toLocaleDateString("es-DO")}`, M, 14.5);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(7.5); doc.setTextColor(...RED); doc.text(`FECHA DE IMPRESION: ${new Date().toLocaleDateString("es-DO")}`, M, 14.5);
   doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.text("LLAVE", W - M, 6.5, { align: "right" }); doc.setFontSize(17); doc.setTextColor(...RED); doc.text(caso.numero_llave ? `#${caso.numero_llave}` : "-", W - M, 13, { align: "right" });
 
   let y = 17;
@@ -36,7 +36,8 @@ export function generarReporteMateriales({ caso = {}, orden = {} }) {
   const xs = [M, M + 36, M + 118, M + 146, M + 170, W - M];
   const headers = ["EMPLEADO", "MATERIALES", "MARCA", "CANTIDAD", "COSTO"];
   doc.setFillColor(...INK); doc.rect(M, y, CW, 5.8, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(9.2); doc.setTextColor(255, 255, 255); headers.forEach((h, i) => doc.text(h, xs[i] + 2, y + 4.1)); y += 5.8;
-  const rowH = 5.7;
+  // Se aprovecha el espacio liberado del pie para dar más aire a cada fila.
+  const rowH = 6.1;
   doc.setDrawColor(...LINE); doc.setLineWidth(0.25); doc.setFont("helvetica", "bold"); doc.setFontSize(11.2); doc.setTextColor(...INK);
   MATERIALES.forEach((material) => {
     doc.rect(M, y, CW, rowH, "S");
@@ -44,11 +45,5 @@ export function generarReporteMateriales({ caso = {}, orden = {} }) {
     doc.text(material, xs[1] + 2, y + 4.25);
     y += rowH;
   });
-  y += 3;
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); doc.setTextColor(...INK); doc.text("TOTAL DE MATERIALES: RD$ __________________________________", M, y);
-  y += 7.5;
-  doc.setDrawColor(...INK); doc.line(M + 55, y, W - M - 55, y);
-  doc.setFontSize(8.5); doc.setTextColor(...SOFT); doc.text("ENCARGADO DPTO. SUMINISTRO", W / 2, y + 4, { align: "center" });
-  doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...RED); doc.text(caso.numero_llave ? `LLAVE #${caso.numero_llave}` : "LLAVE SIN ASIGNAR", W - M, H - 9, { align: "right" });
   return doc.output("blob");
 }
