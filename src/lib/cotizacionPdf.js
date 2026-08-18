@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { calcularItem, nombrePieza, calcularTotales } from "./cotizacion";
+import { calcularItem, nombrePieza, calcularTotales } from "./cotizacion.js";
 
 // Datos fijos del taller (encabezado del documento)
 const TALLER = {
@@ -101,7 +101,9 @@ export async function generarPdfCotizacion(cot) {
 
   // ===== Cajas de información =====
   const boxY = 45;
-  const boxH = 40;
+  // Un encabezado compacto deja espacio real para las tablas y evita crear una
+  // segunda hoja solo para el resumen en las cotizaciones normales.
+  const boxH = 36;
   doc.setDrawColor(...LINEA);
   doc.setLineWidth(0.3);
   doc.roundedRect(M, boxY, 92, boxH, 2.5, 2.5, "S");
@@ -117,21 +119,21 @@ export async function generarPdfCotizacion(cot) {
   doc.setTextColor(...GRIS);
   if (cot.aseguradora_direccion) doc.text(cot.aseguradora_direccion, M + 5, boxY + 16);
   if (cot.aseguradora_telefono) doc.text(`Tel: ${cot.aseguradora_telefono}`, M + 5, boxY + 24);
-  campos(doc, M + 5, boxY + 33, [["No reclamo:", cot.numero_reclamo || "—"]], 9);
+  campos(doc, M + 5, boxY + 30, [["No reclamo:", cot.numero_reclamo || "—"]], 9);
 
   // Derecha: vehículo + póliza + asegurado
   const rx = 113;
-  let ry = boxY + 7;
+  let ry = boxY + 6;
   campos(doc, rx, ry, [["Marca:", cot.marca || "—"], ["Modelo:", cot.modelo || "—"]]);
-  ry += 6;
+  ry += 5;
   campos(doc, rx, ry, [["Año:", cot.anio || "—"], ["Color:", cot.color || "—"], ["Placa:", cot.placa || "—"]]);
-  ry += 6;
+  ry += 5;
   campos(doc, rx, ry, [["Chasis:", cot.chasis || "—"]]);
-  ry += 6;
+  ry += 5;
   campos(doc, rx, ry, [["Póliza:", cot.numero_poliza || "—"]]);
-  ry += 6;
+  ry += 5;
   campos(doc, rx, ry, [["Asegurado/a:", cot.cliente_nombre || "—"]]);
-  ry += 6;
+  ry += 5;
   campos(doc, rx, ry, [["Tel:", (cot.telefonos || []).filter(Boolean).join(" / ") || "—"]]);
 
   // ===== Tablas =====
@@ -187,8 +189,9 @@ export async function generarPdfCotizacion(cot) {
       foot: [["TOTAL", "", "", "", "", "", fmt(netoTotal)]],
       theme: "plain",
       margin: { left: M, right: M },
-      styles: { fontSize: 8, textColor: TINTA, cellPadding: { top: 1.8, bottom: 1.8, left: 2, right: 2 } },
-      headStyles: { fillColor: GRIS_BG, textColor: GRIS, fontStyle: "bold", fontSize: 7, lineWidth: 0 },
+      // Menos aire vertical, conservando una letra legible al imprimir.
+      styles: { fontSize: 8, textColor: TINTA, cellPadding: { top: 1.25, bottom: 1.25, left: 2, right: 2 } },
+      headStyles: { fillColor: GRIS_BG, textColor: GRIS, fontStyle: "bold", fontSize: 7.2, lineWidth: 0 },
       footStyles: { fillColor: [255, 255, 255], textColor: TINTA, fontStyle: "bold", lineWidth: { top: 0.3 }, lineColor: LINEA },
       bodyStyles: { lineWidth: { bottom: 0.2 }, lineColor: LINEA },
       columnStyles: colStyles,
@@ -205,9 +208,9 @@ export async function generarPdfCotizacion(cot) {
   const netoPiezas = calcularTotales(piezas, []).subtotal;
   const netoMano = calcularTotales([], mano).subtotal;
 
-  let y = boxY + boxH + 8;
-  y = tabla("PIEZAS", filasPieza, netoPiezas, y) + 8;
-  y = tabla("MANO DE OBRA", filasMano, netoMano, y) + 10;
+  let y = boxY + boxH + 6;
+  y = tabla("PIEZAS", filasPieza, netoPiezas, y) + 6;
+  y = tabla("MANO DE OBRA", filasMano, netoMano, y) + 7;
 
   // ===== Caja de totales (derecha) =====
   const totales = calcularTotales(piezas, mano);
@@ -219,12 +222,14 @@ export async function generarPdfCotizacion(cot) {
   lineas.push(["Sub-Total:", fmt(totales.subtotal), false]);
   lineas.push(["Descuento (0%):", fmt(0), false]);
 
-  if (y + 10 + lineas.length * 7 + 28 > H - 45) {
+  const tbH = lineas.length * 6.3 + 29;
+  // El sello ocupa el lado izquierdo y el resumen el derecho; pueden convivir
+  // en el pie sin desperdiciar una hoja adicional.
+  if (y + tbH > H - 27) {
     doc.addPage();
     y = M;
   }
 
-  const tbH = lineas.length * 7 + 32;
   doc.setFillColor(247, 248, 250);
   doc.setDrawColor(...LINEA);
   doc.roundedRect(tbX, y, tbW, tbH, 2.5, 2.5, "FD");
@@ -236,7 +241,7 @@ export async function generarPdfCotizacion(cot) {
     doc.setTextColor(...TINTA);
     doc.text(lab, tbX + 5, ty);
     doc.text(val, tbX + tbW - 5, ty, { align: "right" });
-    ty += 7;
+    ty += 6.3;
   });
   // separador
   doc.setDrawColor(...GRIS);
@@ -246,7 +251,7 @@ export async function generarPdfCotizacion(cot) {
   doc.setFont("helvetica", "bold");
   doc.text("ITBIS (18%):", tbX + 5, ty);
   doc.text(fmt(totales.itbis), tbX + tbW - 5, ty, { align: "right" });
-  ty += 11;
+  ty += 10;
   doc.setFontSize(15);
   doc.text("TOTAL:", tbX + 5, ty);
   doc.text(fmt(totales.total), tbX + tbW - 5, ty, { align: "right" });
