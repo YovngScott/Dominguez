@@ -14,7 +14,6 @@ export default function QuoteView() {
   const [evidencias, setEvidencias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [eliminando, setEliminando] = useState(false);
-  const [regenerando, setRegenerando] = useState(false);
   const [enviarCorreoOpen, setEnviarCorreoOpen] = useState(false);
   const [cotizarOpen, setCotizarOpen] = useState(false);
 
@@ -61,38 +60,6 @@ export default function QuoteView() {
     navigate("/cotizaciones");
   }
 
-  // Los PDFs ya creados son archivos guardados en Storage; este botón vuelve a
-  // generarlo con el diseño vigente y sustituye el archivo anterior.
-  async function regenerarPdf() {
-    if (!cot) return;
-    setRegenerando(true);
-    try {
-      const { data: aseg } = cot.aseguradora_id
-        ? await supabase.from("aseguradoras").select("nombre, direccion, telefono").eq("id", cot.aseguradora_id).maybeSingle()
-        : { data: null };
-      const { generarPdfCotizacion } = await import("../lib/cotizacionPdf");
-      const blob = await generarPdfCotizacion({
-        ...cot,
-        aseguradora_nombre: aseg?.nombre || cot.aseguradora_nombre,
-        aseguradora_direccion: aseg?.direccion || cot.aseguradora_direccion,
-        aseguradora_telefono: aseg?.telefono || cot.aseguradora_telefono,
-      });
-      const pdfPath = cot.pdf_path || `${cot.id}/cotizacion.pdf`;
-      const { error } = await supabase.storage
-        .from("cotizaciones")
-        .upload(pdfPath, blob, { contentType: "application/pdf", upsert: true });
-      if (error) throw error;
-      await supabase.from("cotizaciones").update({ pdf_path: pdfPath }).eq("id", cot.id);
-      const { data: signed } = await supabase.storage.from("cotizaciones").createSignedUrl(pdfPath, 3600);
-      setPdfUrl(signed?.signedUrl || null);
-      setCot((actual) => ({ ...actual, pdf_path: pdfPath }));
-    } catch (err) {
-      alert(err.message || "No se pudo regenerar el PDF.");
-    } finally {
-      setRegenerando(false);
-    }
-  }
-
   if (loading) return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
   if (!cot) return <p className="p-10 text-center text-[var(--ink-soft)]">Cotización no encontrada.</p>;
 
@@ -133,14 +100,6 @@ export default function QuoteView() {
             title="Pedir precios de las piezas a los suplidores"
           >
             <Icon name="coins" className="w-4 h-4" /> Cotizar
-          </button>
-          <button
-            onClick={regenerarPdf}
-            disabled={regenerando}
-            className="btn-ghost justify-center gap-1.5 px-3"
-            title="Reemplaza el PDF guardado con el diseño actual"
-          >
-            <Icon name="clock" className="w-4 h-4" /> {regenerando ? "Generando…" : "Regenerar PDF"}
           </button>
           {pdfUrl && (
             <a
