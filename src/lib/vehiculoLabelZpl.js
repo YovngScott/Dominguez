@@ -7,6 +7,8 @@ const W = 812;
 const H = 406;
 const M = 18;
 const RW = W - M * 2;
+// Compensa el margen superior más corto del rollo nuevo (≈1.5 mm).
+const TOP = 28;
 
 function ascii(s) {
   return String(s == null ? "" : s)
@@ -26,7 +28,7 @@ function lineas(texto, fontH, anchoDots) {
 function etiquetaVehiculo(marca, modelo, anio, trabajos) {
   const items = (trabajos || []).map((t) => ascii(t)).filter(Boolean);
   let z = `^XA^PW${W}^LL${H}^LH0,0`;
-  let y = 16;
+  let y = TOP;
 
   const veh = [marca, modelo, anio].filter(Boolean).join(" ") || "-";
   const vehH = 46;

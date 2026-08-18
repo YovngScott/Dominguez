@@ -12,6 +12,9 @@ const W = 812; // 4" @ 203 dpi
 const H = 406; // 2"
 const LX = 18; // margen izquierdo
 const RW = W - LX * 2; // ancho útil
+// El nuevo rollo tiene un margen superior algo más corto; bajamos el arte 1.5 mm
+// para que ningún texto quede pegado al borde de corte.
+const TOP = 28;
 
 // Quita acentos y caracteres que rompen ZPL (^ ~ \).
 function ascii(s) {
@@ -57,7 +60,7 @@ function fechaHoraAhora() {
 // Si hay qrUrl, dibuja un QR arriba a la derecha (abre el caso al escanearlo).
 function etiqueta(caso, grupo, qrUrl, sello) {
   let z = `^XA^PW${W}^LL${H}^LH0,0`;
-  let y = 16;
+  let y = TOP;
 
   // QR arriba a la derecha. Magnificación 3 (no 4): con la URL real (que lleva
   // el UUID del caso) el QR es de ~41 módulos; a mag 4 se salía del borde y
@@ -65,7 +68,7 @@ function etiqueta(caso, grupo, qrUrl, sello) {
   const QRW = 128; // ancho aprox. del QR a mag 3
   const headW = qrUrl ? RW - (QRW + 20) : RW;
   if (qrUrl) {
-    z += `^FO${W - 8 - QRW},10^BQN,2,3^FDLA,${ascii(qrUrl)}^FS`;
+    z += `^FO${W - 8 - QRW},${TOP - 6}^BQN,2,3^FDLA,${ascii(qrUrl)}^FS`;
   }
 
   // Vehículo
@@ -153,7 +156,7 @@ function normalizarCajas(cajas, piezas) {
 // Reparte una caja en grupos que caben en el alto de la etiqueta.
 function repartir(caso, piezasCaja) {
   // Estima el alto del encabezado (en dots) tal como lo dibuja etiqueta():
-  let header = 16;
+  let header = TOP;
   const vehL = Math.min(2, lineas([caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ") || "-", 40, RW));
   header += vehL * 42 + 6;
   if (ascii(caso.aseguradora_nombre)) header += Math.min(2, lineas(caso.aseguradora_nombre, 32, RW)) * 34 + 4;
