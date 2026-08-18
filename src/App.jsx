@@ -42,12 +42,14 @@ const TrabajadorDetail = lazy(() => import("./pages/TrabajadorDetail"));
 const TrabajadoresList = lazy(() => import("./pages/TrabajadoresList"));
 const ReporteTrabajadores = lazy(() => import("./pages/ReporteTrabajadores"));
 const Usuarios = lazy(() => import("./pages/Usuarios"));
+const Llaves = lazy(() => import("./pages/Llaves"));
 
 // Orden lógico por flujo de trabajo (de lo más usado a lo menos):
 // operación diaria → almacén de piezas → agenda/cierre → directorio → análisis.
 const NAV = [
   { to: "/cotizaciones", label: "Cotizaciones", icon: "receipt" },
   { to: "/ordenes", label: "Recibos", icon: "clipboard" },
+  { to: "/llaves", label: "Llaves", icon: "key" },
   { to: "/piezas", label: "Piezas", icon: "layers" },
   { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
   { to: "/tramos", label: "Tramos", icon: "grid" },
@@ -461,6 +463,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <Suministros />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/llaves"
+        element={
+          <PrivateLayout>
+            <Llaves />
           </PrivateLayout>
         }
       />

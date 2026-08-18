@@ -40,6 +40,7 @@ export default function Dashboard() {
   const [waEstado, setWaEstado] = useState(null); // "open" | "connecting" | "close" | ...
   const [waError, setWaError] = useState(""); // motivo técnico, para saber qué arreglar
   const [porReponer, setPorReponer] = useState([]); // insumos agotados o bajo el mínimo
+  const [llavesAsignadas, setLlavesAsignadas] = useState([]);
 
   // Insumos que hay que comprar (el módulo de almacén puede no estar aún
   // migrado: si falla, simplemente no se muestra la alerta).
@@ -83,7 +84,7 @@ export default function Dashboard() {
       const { data: casos } = await supabase
         .from("casos")
         .select(
-          `id, aseguradora_id, estado, fecha_ingreso, created_at, numero_reclamo, placa,
+          `id, aseguradora_id, estado, fecha_ingreso, created_at, numero_reclamo, placa, numero_llave,
            aseguradora:aseguradoras(nombre),
            marca:marcas(nombre), modelo:modelos(nombre),
            cliente:clientes(nombre_completo)`
@@ -139,6 +140,7 @@ export default function Dashboard() {
       setConteos(counts);
       setMetricas(m);
       setCasosActivos(activos);
+      setLlavesAsignadas(activos.filter((c) => c.numero_llave));
       setEstancados(conAlerta);
       setLoading(false);
     }
@@ -229,6 +231,12 @@ export default function Dashboard() {
             />
           ))}
         </div>
+
+        <Link to="/llaves" className="card p-4 mb-6 border-l-4 flex items-center gap-3 hover:shadow-md transition-shadow" style={{ borderLeftColor: "#d97706" }}>
+          <span className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"><Icon name="key" className="w-6 h-6" /></span>
+          <div className="min-w-0 flex-1"><p className="font-bold text-[var(--ink)]">Llaves en uso</p><p className="text-sm text-[var(--ink-soft)] truncate">{llavesAsignadas.length} de 64 asignadas{llavesAsignadas.length ? ` · ${llavesAsignadas.slice(0, 6).map((c) => `#${c.numero_llave}`).join(", ")}${llavesAsignadas.length > 6 ? "…" : ""}` : " · Todas disponibles"}</p></div>
+          <span className="text-sm font-bold text-[var(--brand-red)]">Ver mapa</span>
+        </Link>
 
         {/* Lista de la métrica seleccionada (deslizable) */}
         {metricaSel && (() => {
