@@ -6,18 +6,22 @@
 // tiene en su lista (app.dominguezautopintura.com, etc.). Desde otro dominio
 // el navegador las bloquea por CORS; en ese caso caemos al PDF automáticamente.
 
-// El print server corre en la PC de la impresora, puerto 9100. Si la app se
-// abre desde Vercel, "location.hostname" es dominguez.vercel.app (la nube),
-// no esta PC. En ese caso debemos hablar con el servidor local por loopback.
-// El servidor STAGE ya autoriza Vercel por CORS/PNA para que esto imprima sin
-// pasar por el diálogo de Windows.
+// IP de la PC del taller donde está conectada físicamente la 4BARCODE.
+// Así cualquier compañero, aun entrando por Vercel, envía la etiqueta a una
+// sola impresora central dentro de la red local del taller.
+const SERVIDOR_TALLER = "10.0.0.13";
+
+// El print server corre en la PC de la impresora, puerto 9100. La app abierta
+// desde Vercel no puede usar su propio hostname (la nube); debe usar la IP LAN
+// del servidor central. El servidor STAGE autoriza Vercel por CORS/PNA para
+// imprimir sin abrir el diálogo de Windows.
 const HOST = typeof location !== "undefined" && location.hostname ? location.hostname : "127.0.0.1";
 const ES_ORIGEN_LOCAL =
   HOST === "localhost" ||
   HOST === "127.0.0.1" ||
   HOST === "::1" ||
   /^(?:10|192\.168|172\.(?:1[6-9]|2\d|3[0-1]))\./.test(HOST);
-const SERVIDOR_HOST = ES_ORIGEN_LOCAL ? HOST : "127.0.0.1";
+const SERVIDOR_HOST = ES_ORIGEN_LOCAL ? HOST : SERVIDOR_TALLER;
 const BASE = `http://${SERVIDOR_HOST}:9100`;
 const TOKEN = "dps-7f3a9c2e1b4d6f8a0e5c3b7d9a1f4e2c"; // token estático del print server
 const LS_PRINTER = "impresoraEtiquetas";
