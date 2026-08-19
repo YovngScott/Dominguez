@@ -33,8 +33,10 @@ export function generarReporteMateriales({ caso = {}, orden = {} }) {
   dato(doc, cols[0], y + 17, "RECLAMO", caso.numero_reclamo, w); dato(doc, cols[1], y + 17, "ENTRADA", caso.fecha_ingreso, w); dato(doc, cols[2], y + 17, "SALIDA", caso.fecha_entrega ? new Date(caso.fecha_entrega).toLocaleDateString("es-DO") : "-", w); dato(doc, cols[3], y + 17, "NUMERO DE LLAVE", caso.numero_llave ? `#${caso.numero_llave}` : "Sin asignar", w);
 
   y += 24;
-  // Hoja manual de suministros: solo los tres datos que realmente se llenan.
-  const xs = [M, M + 48, M + 160, W - M];
+  // Hoja manual de suministros: las tres columnas tienen exactamente
+  // el mismo ancho para que se puedan llenar a mano con comodidad.
+  const anchoColumna = CW / 3;
+  const xs = [M, M + anchoColumna, M + anchoColumna * 2, W - M];
   const headers = ["EMPLEADO", "MATERIALES", "CANTIDAD"];
   doc.setFillColor(...INK); doc.rect(M, y, CW, 5.8, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(9.2); doc.setTextColor(255, 255, 255); headers.forEach((h, i) => doc.text(h, xs[i] + 2, y + 4.1)); y += 5.8;
   // Se reserva el pie para el número de llave y se prioriza una letra mayor.
