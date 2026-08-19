@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { nombrePieza } from "../lib/cotizacion";
+import { nombrePieza, normalizarNombrePieza } from "../lib/cotizacion";
 import { clavePieza as clave } from "../lib/piezas";
 import { formatoTramo } from "../lib/tramos";
 import TramoPicker from "./TramoPicker";
@@ -234,7 +234,7 @@ export default function PiezasManager({ casoId, caso }) {
    * seguro tiene que seguir coincidiendo con lo que el seguro tiene.
    */
   async function guardarPieza({ nombre, cantidad }, original) {
-    const limpio = (nombre || "").trim();
+    const limpio = normalizarNombrePieza(nombre);
     if (!limpio) return;
     const nuevaClave = clave(limpio);
     setError("");
@@ -769,7 +769,7 @@ function PiezaModal({ pieza, catalogo, onCancel, onSave }) {
   async function guardar() {
     if (!nombre.trim() || guardando) return;
     setGuardando(true);
-    await onSave({ nombre, cantidad }, pieza);
+    await onSave({ nombre: normalizarNombrePieza(nombre), cantidad }, pieza);
     setGuardando(false);
   }
 
@@ -810,9 +810,13 @@ function PiezaModal({ pieza, catalogo, onCancel, onSave }) {
               items={catalogo}
               value={nombre}
               onChange={(v) => setNombre(v)}
-              placeholder="Ej. Bumper delantero"
+              placeholder="Ej. Bumper DELT RH"
               allowCreate
+              maxResults={12}
             />
+            <p className="text-[11px] text-[var(--ink-soft)] mt-1.5">
+              Ej.: BUMPER DELT RH · PUERTA TRAS LH
+            </p>
           </label>
           <label className="block">
             <span className="field-label">Cantidad</span>

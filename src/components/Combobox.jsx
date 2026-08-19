@@ -37,6 +37,8 @@ export default function Combobox({
   disabled = false,
   allowCreate = false,
   emptyText = "Sin coincidencias",
+  maxResults = 50,
+  autoFocus = false,
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -64,7 +66,7 @@ export default function Combobox({
   // al buscar "guar" aparecían antes piezas donde "guar" está al final.
   const q = norm(query.trim());
   const filtered = useMemo(() => {
-    if (!q) return items;
+    if (!q) return items.slice(0, maxResults);
     return items
       .map((i) => ({ item: i, r: relevancia(i.label, q), pos: norm(i.label).indexOf(q) }))
       .filter((x) => x.pos !== -1)
@@ -74,8 +76,9 @@ export default function Combobox({
           a.pos - b.pos || // luego, lo escrito más al principio
           a.item.label.localeCompare(b.item.label, "es") // y al final, alfabético
       )
-      .map((x) => x.item);
-  }, [items, q]);
+      .map((x) => x.item)
+      .slice(0, maxResults);
+  }, [items, q, maxResults]);
 
   function selectItem(item) {
     onChange?.(item.id, item.label);
@@ -124,6 +127,7 @@ export default function Combobox({
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
         autoComplete="off"
+        autoFocus={autoFocus}
       />
       <span
         className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)] text-xs transition-transform ${

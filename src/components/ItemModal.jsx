@@ -1,134 +1,75 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Combobox from "./Combobox";
-import { calcularItem, rd, LADOS, SUB_LADOS, ITBIS_DEFAULT } from "../lib/cotizacion";
+import { calcularItem, nombrePieza, normalizarNombrePieza, rd, ITBIS_DEFAULT } from "../lib/cotizacion";
 
-const VACIO = {
-  nombre: "",
-  pieza: "",
-  lado: "",
-  sub_lado: "",
-  cantidad: 1,
-  precio: 0,
-  itbis_pct: ITBIS_DEFAULT,
-  incluye_itbis: false,
-};
+const VACIO = { nombre: "", pieza: "", cantidad: 1, precio: 0, itbis_pct: ITBIS_DEFAULT, incluye_itbis: false };
 
-/**
- * Modal para agregar/editar una pieza o un servicio.
- * tipo: "pieza" | "servicio"
- */
-export default function ItemModal({
-  tipo,
-  initial,
-  onConfirm,
-  onCancel,
-  sugerenciasPiezas = [],
-  sugerenciasServicios = [],
-}) {
-  const [item, setItem] = useState({ ...VACIO, ...initial });
+/** Modal ágil para agregar/editar una pieza o un servicio desde el teléfono. */
+export default function ItemModal({ tipo, initial, onConfirm, onCancel, sugerenciasPiezas = [], sugerenciasServicios = [] }) {
   const esServicio = tipo === "servicio";
+  const inicial = useMemo(() => {
+    const base = { ...VACIO, ...initial };
+    // Compatibilidad: las piezas antiguas tenían lado/sub-lado separados.
+    if (esServicio) base.pieza = nombrePieza({ nombre: base.pieza, lado: base.lado, sub_lado: base.sub_lado });
+    else base.nombre = nombrePieza(base);
+    delete base.lado;
+    delete base.sub_lado;
+    return base;
+  }, [initial, esServicio]);
+  const [item, setItem] = useState(inicial);
 
-  function up(campo, valor) {
-    setItem((it) => ({ ...it, [campo]: valor }));
+  function up(campo, valor) { setItem((it) => ({ ...it, [campo]: valor })); }
+  const { total } = calcularItem(item);
+  const nombreValido = item.nombre.trim();
+
+  function guardar() {
+    const limpio = { ...item };
+    if (esServicio) limpio.pieza = normalizarNombrePieza(limpio.pieza);
+    else limpio.nombre = normalizarNombrePieza(limpio.nombre);
+    onConfirm(limpio);
   }
 
-  const { total } = calcularItem(item);
-  const nombreValido = esServicio ? item.nombre.trim() : item.nombre.trim();
-
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="card w-full max-w-2xl p-6">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4">
+      <div className="card w-full max-w-lg max-h-[calc(100dvh-1.5rem)] overflow-y-auto p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-[var(--ink)]">
-            {esServicio ? "Agregar servicio" : "Agregar pieza"}
-          </h3>
-          <button onClick={onCancel} className="text-[var(--ink-soft)] text-xl px-2">
-            ✕
-          </button>
+          <div>
+            <h3 className="text-lg font-bold text-[var(--ink)]">{esServicio ? "Agregar servicio" : "Agregar pieza"}</h3>
+            {!esServicio && <p className="text-xs text-[var(--ink-soft)] mt-0.5">Escribe una sola descripción completa.</p>}
+          </div>
+          <button onClick={onCancel} className="text-[var(--ink-soft)] text-xl p-2 -mr-2" aria-label="Cerrar">✕</button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="space-y-3">
           {esServicio && (
-            <Campo label="Nombre del servicio" full>
-              <Combobox
-                items={sugerenciasServicios}
-                value={item.nombre}
-                onChange={(val) => up("nombre", val)}
-                placeholder="ej. Pintura completa"
-                allowCreate
-              />
+            <Campo label="Nombre del servicio">
+              <Combobox items={sugerenciasServicios} value={item.nombre} onChange={(val) => up("nombre", val)} placeholder="Ej. Cambiar y pintar" allowCreate autoFocus maxResults={12} />
             </Campo>
           )}
 
-          <Campo label={esServicio ? "Pieza relacionada" : "Nombre de la pieza"} full={!esServicio}>
+          <Campo label={esServicio ? "Pieza relacionada" : "Pieza"}>
             <Combobox
               items={sugerenciasPiezas}
               value={esServicio ? item.pieza : item.nombre}
-              onChange={(val) => up(esServicio ? "pieza" : "nombre", val)}
-              placeholder="ej. Bumper, Puerta, Foco…"
+              onChange={(val) => up(esServicio ? "pieza" : "nombre", normalizarNombrePieza(val))}
+              placeholder="Ej. Bumper DELT RH"
               allowCreate
+              autoFocus={!esServicio}
+              maxResults={12}
             />
-          </Campo>
-
-          <Campo label="Lado">
-            <Combobox
-              items={LADOS.map((l) => ({ id: l, label: l }))}
-              value={item.lado}
-              onChange={(val) => up("lado", val)}
-              placeholder="Seleccionar…"
-            />
-          </Campo>
-
-          <Campo label="Sub-lado">
-            <Combobox
-              items={SUB_LADOS.map((l) => ({ id: l, label: l }))}
-              value={item.sub_lado}
-              onChange={(val) => up("sub_lado", val)}
-              placeholder="Seleccionar…"
-            />
+            <p className="text-[11px] text-[var(--ink-soft)] mt-1.5">DELT delantero · TRAS trasero · RH derecha · LH izquierda · SUP superior · INF inferior</p>
           </Campo>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mt-3">
-          <Campo label="Cantidad">
-            <input
-              type="number"
-              min="1"
-              value={item.cantidad}
-              onChange={(e) => up("cantidad", e.target.value)}
-              className="input"
-            />
-          </Campo>
-          <Campo label="Precio (RD$)">
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={item.precio}
-              onChange={(e) => up("precio", e.target.value)}
-              className="input"
-            />
-          </Campo>
-          <Campo label="ITBIS (%)">
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={item.itbis_pct}
-              onChange={(e) => up("itbis_pct", e.target.value)}
-              className="input"
-            />
-          </Campo>
+        <div className="grid grid-cols-[0.8fr_1.25fr_72px] gap-2.5 mt-3">
+          <Campo label="Cant."><input type="number" min="1" value={item.cantidad} onChange={(e) => up("cantidad", e.target.value)} className="input" /></Campo>
+          <Campo label="Precio (RD$)"><input type="number" min="0" step="0.01" value={item.precio} onChange={(e) => up("precio", e.target.value)} className="input" /></Campo>
+          <Campo label="ITBIS"><input type="number" min="0" step="0.01" value={item.itbis_pct} onChange={(e) => up("itbis_pct", e.target.value)} className="input px-2 text-center" /></Campo>
         </div>
 
         <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={item.incluye_itbis}
-            onChange={(e) => up("incluye_itbis", e.target.checked)}
-            className="w-5 h-5 accent-[var(--brand-red)]"
-          />
-          <span className="text-sm text-[var(--ink-soft)]">El precio ingresado ya incluye ITBIS</span>
+          <input type="checkbox" checked={item.incluye_itbis} onChange={(e) => up("incluye_itbis", e.target.checked)} className="w-5 h-5 accent-[var(--brand-red)]" />
+          <span className="text-sm text-[var(--ink-soft)]">El precio ya incluye ITBIS</span>
         </label>
 
         <div className="flex items-center justify-between bg-[var(--paper)] rounded-xl px-4 py-3 mt-4">
@@ -137,27 +78,14 @@ export default function ItemModal({
         </div>
 
         <div className="flex justify-end gap-3 mt-5">
-          <button onClick={onCancel} className="btn-ghost">
-            Cancelar
-          </button>
-          <button
-            onClick={() => onConfirm(item)}
-            disabled={!nombreValido}
-            className="btn-primary"
-          >
-            {initial ? "Guardar" : "Agregar"}
-          </button>
+          <button onClick={onCancel} className="btn-ghost">Cancelar</button>
+          <button onClick={guardar} disabled={!nombreValido} className="btn-primary">{initial ? "Guardar" : "Agregar"}</button>
         </div>
       </div>
     </div>
   );
 }
 
-function Campo({ label, children, full }) {
-  return (
-    <label className={`block ${full ? "col-span-2" : ""}`}>
-      <span className="field-label">{label}</span>
-      {children}
-    </label>
-  );
+function Campo({ label, children }) {
+  return <label className="block"><span className="field-label">{label}</span>{children}</label>;
 }

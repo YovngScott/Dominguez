@@ -2,9 +2,6 @@
 
 export const ITBIS_DEFAULT = 18;
 
-export const LADOS = ["Delantero", "Trasero", "Izquierdo", "Derecho", "N/A"];
-export const SUB_LADOS = ["Izquierdo", "Derecho", "Central", "N/A"];
-
 export const TIPOS_IDENTIFICACION = ["Cédula", "Pasaporte", "RNC"];
 
 export const TIPOS_VEHICULO = [
@@ -60,12 +57,50 @@ export function calcularTotales(piezas = [], manoObra = []) {
   };
 }
 
-/** Nombre completo de una pieza incluyendo lado/sub-lado si aplica. */
+// Abreviaturas únicas que se usan en el catálogo y al escribir una pieza.
+// Mantenerlas aquí permite que las cotizaciones históricas (que tenían los
+// campos lado/sub_lado) también se vean con el formato nuevo, sin tocar sus
+// precios ni sus datos guardados.
+const ABREVIATURAS_PIEZA = [
+  [/\bPARACHOQUES?\b/g, "BUMPER"],
+  [/\bBOMPER\b/g, "BUMPER"],
+  [/\bGUARDALODOS\b/g, "GUARDALODO"],
+  [/\bDELANTERO\b/g, "DELT"],
+  [/\bTRASERO\b/g, "TRAS"],
+  [/\bIZQUIERDO\b/g, "LH"],
+  [/\bIZQUIERDA\b/g, "LH"],
+  [/\bDERECHO\b/g, "RH"],
+  [/\bDERECHA\b/g, "RH"],
+  [/\bSUPERIOR\b/g, "SUP"],
+  [/\bINFERIOR\b/g, "INF"],
+  [/\bCENTRAL\b/g, "CENT"],
+];
+
+/** Convierte nombres y lados antiguos al formato corto del taller. */
+export function normalizarNombrePieza(valor) {
+  let texto = String(valor || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[,_/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  ABREVIATURAS_PIEZA.forEach(([patron, reemplazo]) => {
+    texto = texto.replace(patron, reemplazo);
+  });
+  return texto.replace(/\s+/g, " ").trim();
+}
+
+/** Nombre visible de la pieza. Compatibilidad con lado/sub-lado antiguos. */
 export function nombrePieza(item) {
-  const partes = [item.nombre];
-  if (item.lado && item.lado !== "N/A") partes.push(item.lado.toUpperCase());
-  if (item.sub_lado && item.sub_lado !== "N/A") partes.push(item.sub_lado.toUpperCase());
-  return partes.filter(Boolean).join(" ");
+  const base = normalizarNombrePieza(item?.nombre);
+  const extras = [item?.lado, item?.sub_lado]
+    .filter((parte) => parte && parte !== "N/A")
+    .map(normalizarNombrePieza)
+    .filter(Boolean);
+  const existentes = new Set(base.split(" "));
+  const nuevos = extras.filter((parte) => !existentes.has(parte));
+  return [base, ...nuevos].filter(Boolean).join(" ");
 }
 
 export function round2(x) {

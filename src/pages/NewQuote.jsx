@@ -13,6 +13,7 @@ import {
   calcularItem,
   calcularTotales,
   nombrePieza,
+  normalizarNombrePieza,
   rd,
   TIPOS_VEHICULO,
 } from "../lib/cotizacion";
@@ -209,16 +210,19 @@ export default function NewQuote() {
   // ---- Ítems ----
   function guardarItem(item) {
     const key = modal.tipo === "pieza" ? "items_piezas" : "items_mano_obra";
+    const piezaNormalizada = normalizarNombrePieza(modal.tipo === "pieza" ? item.nombre : item.pieza);
+    const itemLimpio = modal.tipo === "pieza"
+      ? { ...item, nombre: piezaNormalizada }
+      : { ...item, pieza: piezaNormalizada };
     setForm((f) => {
       const arr = [...f[key]];
-      if (modal.index != null) arr[modal.index] = item;
-      else arr.push(item);
+      if (modal.index != null) arr[modal.index] = itemLimpio;
+      else arr.push(itemLimpio);
       return { ...f, [key]: arr };
     });
 
     // Si la pieza no está en el catálogo, se guarda para autocompletar luego
-    const nombrePiezaItem = modal.tipo === "pieza" ? item.nombre : item.pieza;
-    const limpio = (nombrePiezaItem || "").trim();
+    const limpio = piezaNormalizada;
     if (limpio && !piezasCatalogo.some((p) => p.label.toLowerCase() === limpio.toLowerCase())) {
       agregarPiezaCatalogo(limpio);
       setPiezasCatalogo((prev) => [...prev, { id: limpio, label: limpio }]);

@@ -6,6 +6,7 @@ import { uuid } from "../lib/uuid";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import { marcarPiezasRecibidas } from "../lib/piezas";
+import { normalizarNombrePieza } from "../lib/cotizacion";
 import {
   agregarPiezaCatalogo,
   findOrCreateMarca,
@@ -198,7 +199,7 @@ export default function EtiquetasPiezas() {
   }
 
   async function agregarPiezaConFoto(cajaIdx, nombre, cantidad, file) {
-    const limpio = (nombre || "").trim();
+    const limpio = normalizarNombrePieza(nombre);
     if (!limpio) return;
     let foto = {};
     if (file) foto = await subirFotoPieza(file);
@@ -619,8 +620,9 @@ function CajaCard({ indice, total, piezas, piezasCatalogo, onAgregar, onQuitar, 
             items={piezasCatalogo}
             value={nuevaPieza}
             onChange={(v) => setNuevaPieza(v)}
-            placeholder="Nombre de la pieza (ej. Bumper delantero)…"
+            placeholder="Ej. Bumper DELT RH"
             allowCreate
+            maxResults={12}
           />
         </div>
         <input

@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { normalizarNombrePieza } from "./cotizacion";
 
 // Busca una marca por nombre; si no existe, la crea. Devuelve su id.
 export async function findOrCreateMarca(nombre) {
@@ -52,8 +53,10 @@ export async function getAseguradoraGeneralId() {
 
 // Agrega una pieza al catálogo si aún no existe (para autocompletar luego).
 export async function agregarPiezaCatalogo(nombre) {
-  const n = (nombre || "").trim();
+  const n = normalizarNombrePieza(nombre);
   if (!n) return;
+  const { data: existe } = await supabase.from("piezas_catalogo").select("id").ilike("nombre", n).limit(1);
+  if (existe?.[0]) return;
   await supabase.from("piezas_catalogo").insert({ nombre: n });
   // si ya existe, el unique constraint lo rechaza silenciosamente (ignoramos error)
 }
