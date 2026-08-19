@@ -7,17 +7,20 @@ const norm = (s) =>
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase();
 
-// Qué tan bien calza el texto escrito con la sugerencia (menor = mejor):
-//   0 → es exactamente lo escrito
-//   1 → empieza con lo escrito        ("GUARDALODO" al buscar "guar")
-//   2 → alguna palabra empieza así    ("FLEAR GUARDALODO")
-//   3 → solo lo contiene en el medio  ("BASE PANTALLA LH" al buscar "antall")
+const ES_SEPARADOR = (caracter) => !caracter || /[\s\-/(),.]/.test(caracter);
+
+// Qué tan bien calza el texto escrito con la sugerencia (menor = mejor).
+// Una frase completa como "PUERTA TRAS" va antes que "RIBETE PUERTA TRAS"
+// y antes que coincidencias parciales como "PUERTA TRASERA".
 function relevancia(label, q) {
   const l = norm(label);
   if (l === q) return 0;
-  if (l.startsWith(q)) return 1;
-  if (l.split(/[\s\-/(),.]+/).some((palabra) => palabra.startsWith(q))) return 2;
-  return 3;
+  const pos = l.indexOf(q);
+  if (pos === 0 && ES_SEPARADOR(l[q.length])) return 1;
+  if (pos > 0 && ES_SEPARADOR(l[pos - 1]) && ES_SEPARADOR(l[pos + q.length])) return 2;
+  if (pos === 0) return 3;
+  if (l.split(/[\s\-/(),.]+/).some((palabra) => palabra.startsWith(q))) return 4;
+  return 5;
 }
 
 /**

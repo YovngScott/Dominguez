@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza, normalizarNombrePieza } from "../lib/cotizacion";
+import { opcionesPiezasCanonicas } from "../lib/catalogo";
 import { clavePieza as clave } from "../lib/piezas";
 import { formatoTramo } from "../lib/tramos";
 import TramoPicker from "./TramoPicker";
@@ -222,7 +223,7 @@ export default function PiezasManager({ casoId, caso }) {
       .from("piezas_catalogo")
       .select("nombre")
       .order("nombre")
-      .then(({ data }) => setCatalogo((data || []).map((p) => ({ id: p.nombre, label: p.nombre }))));
+      .then(({ data }) => setCatalogo(opcionesPiezasCanonicas(data)));
   }, []);
 
   /**

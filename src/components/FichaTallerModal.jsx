@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { nombrePieza, rd } from "../lib/cotizacion";
+import { opcionesPiezasCanonicas } from "../lib/catalogo";
 import { clavePieza } from "../lib/piezas";
 import Combobox from "./Combobox";
 import Icon from "./Icon";
@@ -61,7 +62,7 @@ export default function FichaTallerModal({ casoId, caso, onClose }) {
           .map((t) => t.trim())
           .filter(Boolean)
       );
-      setPiezasCatalogo((pc || []).map((p) => ({ id: p.nombre, label: p.nombre })));
+      setPiezasCatalogo(opcionesPiezasCanonicas(pc));
       setServiciosCatalogo((sc || []).map((s) => ({ id: s.nombre, label: s.nombre })));
 
       // Cómo quedó la ficha la última vez (si la migración 49 aún no se corrió,

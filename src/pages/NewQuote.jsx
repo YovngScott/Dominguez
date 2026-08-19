@@ -6,7 +6,13 @@ import ItemModal from "../components/ItemModal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { compressImage } from "../lib/imageCompress";
 import { uuid } from "../lib/uuid";
-import { agregarPiezaCatalogo, agregarServicioCatalogo, findOrCreateMarca, findOrCreateModelo } from "../lib/catalogo";
+import {
+  agregarPiezaCatalogo,
+  agregarServicioCatalogo,
+  findOrCreateMarca,
+  findOrCreateModelo,
+  opcionesPiezasCanonicas,
+} from "../lib/catalogo";
 import { useFormDraft, clearFormDraft } from "../hooks/useFormDraft";
 import Icon from "../components/Icon";
 import {
@@ -121,7 +127,7 @@ export default function NewQuote() {
         ]);
       setAseguradoras(asegs || []);
       setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
-      setPiezasCatalogo((piezas || []).map((p) => ({ id: p.nombre, label: p.nombre })));
+      setPiezasCatalogo(opcionesPiezasCanonicas(piezas));
       setServiciosCatalogo((servicios || []).map((s) => ({ id: s.nombre, label: s.nombre })));
       setCategoriaDanosId(catDanos?.id || null);
     }

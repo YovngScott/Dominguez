@@ -23,25 +23,27 @@ as $$
   ), paso_2 as (
     select regexp_replace(v, '\mBOMPER\M', 'BUMPER', 'g') as v from paso_1
   ), paso_3 as (
-    select regexp_replace(v, '\mGUARDALODOS\M', 'GUARDALODO', 'g') as v from paso_2
+    select regexp_replace(v, '\mCENSOR\M', 'SENSOR', 'g') as v from paso_2
   ), paso_4 as (
-    select regexp_replace(v, '\mDELANTERO\M', 'DELT', 'g') as v from paso_3
+    select regexp_replace(v, '\mGUARDALODOS\M', 'GUARDALODO', 'g') as v from paso_3
   ), paso_5 as (
-    select regexp_replace(v, '\mTRASERO\M', 'TRAS', 'g') as v from paso_4
+    select regexp_replace(v, '\m(DELANT+ER[OA]|FRONTAL)\M', 'DELT', 'g') as v from paso_4
   ), paso_6 as (
-    select regexp_replace(v, '\mIZQUIERDO\M', 'LH', 'g') as v from paso_5
+    select regexp_replace(v, '\m(TRASER[OA]|POSTERIOR)\M', 'TRAS', 'g') as v from paso_5
   ), paso_7 as (
-    select regexp_replace(v, '\mIZQUIERDA\M', 'LH', 'g') as v from paso_6
+    select regexp_replace(v, '\mIZQUIERD[OA]\M', 'LH', 'g') as v from paso_6
   ), paso_8 as (
-    select regexp_replace(v, '\mDERECHO\M', 'RH', 'g') as v from paso_7
+    select regexp_replace(v, '\mIZQ\M', 'LH', 'g') as v from paso_7
   ), paso_9 as (
-    select regexp_replace(v, '\mDERECHA\M', 'RH', 'g') as v from paso_8
+    select regexp_replace(v, '\mDERECH[OA]\M', 'RH', 'g') as v from paso_8
   ), paso_10 as (
-    select regexp_replace(v, '\mSUPERIOR\M', 'SUP', 'g') as v from paso_9
+    select regexp_replace(v, '\mDER\M', 'RH', 'g') as v from paso_9
   ), paso_11 as (
-    select regexp_replace(v, '\mINFERIOR\M', 'INF', 'g') as v from paso_10
+    select regexp_replace(v, '\mSUPERIOR\M', 'SUP', 'g') as v from paso_10
+  ), paso_12 as (
+    select regexp_replace(v, '\mINFERIOR\M', 'INF', 'g') as v from paso_11
   )
-  select btrim(regexp_replace(v, '\s+', ' ', 'g')) from paso_11;
+  select btrim(regexp_replace(v, '\s+', ' ', 'g')) from paso_12;
 $$;
 
 -- Se conservan las filas más antiguas. Las duplicadas se borran solo cuando
@@ -61,6 +63,73 @@ where p.id = r.id and r.fila > 1;
 update piezas_catalogo
 set nombre = pg_temp.normalizar_pieza(nombre)
 where nombre is distinct from pg_temp.normalizar_pieza(nombre);
+
+-- Variantes frecuentes, todas con el formato corto único. No genera
+-- combinaciones inútiles: al escribir una pieza no habrá una lista eterna.
+insert into piezas_catalogo (nombre, categoria) values
+  ('BUMPER DELT', 'BUMPER'),
+  ('BUMPER DELT LH', 'BUMPER'),
+  ('BUMPER DELT RH', 'BUMPER'),
+  ('BUMPER DELT CENT', 'BUMPER'),
+  ('BUMPER DELT SUP', 'BUMPER'),
+  ('BUMPER DELT INF', 'BUMPER'),
+  ('BUMPER TRAS', 'BUMPER'),
+  ('BUMPER TRAS LH', 'BUMPER'),
+  ('BUMPER TRAS RH', 'BUMPER'),
+  ('BUMPER TRAS CENT', 'BUMPER'),
+  ('BUMPER TRAS SUP', 'BUMPER'),
+  ('BUMPER TRAS INF', 'BUMPER'),
+  ('PUERTA DELT LH', 'PUERTA'),
+  ('PUERTA DELT RH', 'PUERTA'),
+  ('PUERTA TRAS LH', 'PUERTA'),
+  ('PUERTA TRAS RH', 'PUERTA'),
+  ('GUARDALODO DELT LH', 'CARROCERIA'),
+  ('GUARDALODO DELT RH', 'CARROCERIA'),
+  ('GUARDALODO TRAS LH', 'CARROCERIA'),
+  ('GUARDALODO TRAS RH', 'CARROCERIA'),
+  ('FLEAR GUARDALODO DELT LH', 'CARROCERIA'),
+  ('FLEAR GUARDALODO DELT RH', 'CARROCERIA'),
+  ('FLEAR GUARDALODO TRAS LH', 'CARROCERIA'),
+  ('FLEAR GUARDALODO TRAS RH', 'CARROCERIA'),
+  ('FARO DELT LH', 'LUCES'),
+  ('FARO DELT RH', 'LUCES'),
+  ('HALOGENO DELT LH', 'LUCES'),
+  ('HALOGENO DELT RH', 'LUCES'),
+  ('STOP TRAS LH', 'LUCES'),
+  ('STOP TRAS RH', 'LUCES'),
+  ('PANTALLA DELT LH', 'CARROCERIA'),
+  ('PANTALLA DELT RH', 'CARROCERIA'),
+  ('DESLIZADOR BUMPER DELT LH', 'BUMPER'),
+  ('DESLIZADOR BUMPER DELT RH', 'BUMPER'),
+  ('SPOILER BUMPER DELT', 'BUMPER'),
+  ('SPOILER BUMPER TRAS', 'BUMPER'),
+  ('RIBETE PUERTA DELT LH', 'PUERTA'),
+  ('RIBETE PUERTA DELT RH', 'PUERTA'),
+  ('RIBETE PUERTA TRAS LH', 'PUERTA'),
+  ('RIBETE PUERTA TRAS RH', 'PUERTA'),
+  ('GOMA PUERTA DELT LH', 'PUERTA'),
+  ('GOMA PUERTA DELT RH', 'PUERTA'),
+  ('GOMA PUERTA TRAS LH', 'PUERTA'),
+  ('GOMA PUERTA TRAS RH', 'PUERTA'),
+  ('VIDRIO PUERTA DELT LH', 'CRISTALES'),
+  ('VIDRIO PUERTA DELT RH', 'CRISTALES'),
+  ('VIDRIO PUERTA TRAS LH', 'CRISTALES'),
+  ('VIDRIO PUERTA TRAS RH', 'CRISTALES'),
+  ('ESPEJO LH', 'ESPEJOS'),
+  ('ESPEJO RH', 'ESPEJOS'),
+  ('TAPA ESPEJO LH', 'ESPEJOS'),
+  ('TAPA ESPEJO RH', 'ESPEJOS'),
+  ('BASE ESPEJO LH', 'ESPEJOS'),
+  ('BASE ESPEJO RH', 'ESPEJOS'),
+  ('BONETE', 'FRENTE'),
+  ('BISAGRA BONETE LH', 'FRENTE'),
+  ('BISAGRA BONETE RH', 'FRENTE'),
+  ('TAPA BAUL', 'TRASERA'),
+  ('COMPUERTA TRAS', 'TRASERA'),
+  ('PARRILLA DELT', 'FRENTE'),
+  ('REFUERZO BUMPER DELT', 'BUMPER'),
+  ('REFUERZO BUMPER TRAS', 'BUMPER')
+on conflict (nombre) do nothing;
 
 drop function pg_temp.normalizar_pieza(text);
 

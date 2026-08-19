@@ -13,6 +13,7 @@ import {
   findOrCreateModelo,
   findOrCreateAseguradora,
   getAseguradoraGeneralId,
+  opcionesPiezasCanonicas,
 } from "../lib/catalogo";
 import {
   imprimirEtiquetas,
@@ -69,7 +70,7 @@ export default function EtiquetasPiezas() {
       ]);
       setAseguradoras((asegs || []).map((a) => ({ id: a.nombre, label: a.nombre })));
       setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
-      setPiezasCatalogo((pc || []).map((p) => ({ id: p.nombre, label: p.nombre })));
+      setPiezasCatalogo(opcionesPiezasCanonicas(pc));
     }
     load();
   }, []);

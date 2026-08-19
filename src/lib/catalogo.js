@@ -1,6 +1,20 @@
 import { supabase } from "./supabaseClient";
 import { normalizarNombrePieza } from "./cotizacion";
 
+/**
+ * Mientras se limpia la base, pueden coexistir nombres viejos como
+ * "PUERTA TRASERA LH". La interfaz los canoniza y elimina repetidos antes
+ * de mostrarlos para que el buscador no confunda al usuario.
+ */
+export function opcionesPiezasCanonicas(filas = []) {
+  const unicas = new Map();
+  filas.forEach((fila) => {
+    const nombre = normalizarNombrePieza(typeof fila === "string" ? fila : fila?.nombre);
+    if (nombre) unicas.set(nombre, { id: nombre, label: nombre });
+  });
+  return [...unicas.values()].sort((a, b) => a.label.localeCompare(b.label, "es"));
+}
+
 // Busca una marca por nombre; si no existe, la crea. Devuelve su id.
 export async function findOrCreateMarca(nombre) {
   const n = (nombre || "").trim();
