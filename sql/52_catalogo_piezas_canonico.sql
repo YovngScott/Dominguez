@@ -3,9 +3,7 @@
 -- Limpia el catálogo de autocompletado de piezas.
 --
 -- Conserva las cotizaciones y etiquetas históricas: solo cambia el catálogo
--- usado para buscar/agregar piezas nuevas. Normaliza abreviaturas y elimina
--- únicamente filas que quedan idénticas después de normalizarlas.
--- Ejecutar UNA vez en el SQL Editor de Supabase.
+-- usado para buscar/agregar piezas nuevas. Ejecutar UNA vez en Supabase.
 -- =========================================================
 
 begin;
@@ -13,35 +11,43 @@ begin;
 -- No hay valor útil que conservar si alguna pieza quedó vacía.
 delete from piezas_catalogo where btrim(coalesce(nombre, '')) = '';
 
--- Primero se eliminan duplicados por su futuro nombre; esto evita chocar con
--- la restricción unique al actualizar la fila que se conserva.
+-- Función temporal: desaparece al cerrar esta sesión y no cambia el esquema.
+-- Los pasos separados evitan errores de sintaxis y hacen la limpieza auditable.
+create or replace function pg_temp.normalizar_pieza(valor text)
+returns text
+language sql
+immutable
+as $$
+  with paso_1 as (
+    select regexp_replace(upper(btrim(valor)), '\mPARACHOQUES?\M', 'BUMPER', 'g') as v
+  ), paso_2 as (
+    select regexp_replace(v, '\mBOMPER\M', 'BUMPER', 'g') as v from paso_1
+  ), paso_3 as (
+    select regexp_replace(v, '\mGUARDALODOS\M', 'GUARDALODO', 'g') as v from paso_2
+  ), paso_4 as (
+    select regexp_replace(v, '\mDELANTERO\M', 'DELT', 'g') as v from paso_3
+  ), paso_5 as (
+    select regexp_replace(v, '\mTRASERO\M', 'TRAS', 'g') as v from paso_4
+  ), paso_6 as (
+    select regexp_replace(v, '\mIZQUIERDO\M', 'LH', 'g') as v from paso_5
+  ), paso_7 as (
+    select regexp_replace(v, '\mIZQUIERDA\M', 'LH', 'g') as v from paso_6
+  ), paso_8 as (
+    select regexp_replace(v, '\mDERECHO\M', 'RH', 'g') as v from paso_7
+  ), paso_9 as (
+    select regexp_replace(v, '\mDERECHA\M', 'RH', 'g') as v from paso_8
+  ), paso_10 as (
+    select regexp_replace(v, '\mSUPERIOR\M', 'SUP', 'g') as v from paso_9
+  ), paso_11 as (
+    select regexp_replace(v, '\mINFERIOR\M', 'INF', 'g') as v from paso_10
+  )
+  select btrim(regexp_replace(v, '\s+', ' ', 'g')) from paso_11;
+$$;
+
+-- Se conservan las filas más antiguas. Las duplicadas se borran solo cuando
+-- ambas quedan exactamente iguales después de normalizarse.
 with normalizados as (
-  select
-    id,
-    btrim(regexp_replace(
-      regexp_replace(
-        regexp_replace(
-          regexp_replace(
-            regexp_replace(
-              regexp_replace(
-                regexp_replace(
-                  regexp_replace(
-                    regexp_replace(
-                      regexp_replace(
-                        regexp_replace(
-                          regexp_replace(
-                            regexp_replace(upper(btrim(nombre)), '\mPARACHOQUES?\M', 'BUMPER', 'g'),
-                          '\mBOMPER\M', 'BUMPER', 'g'),
-                        '\mGUARDALODOS\M', 'GUARDALODO', 'g'),
-                      '\mDELANTERO\M', 'DELT', 'g'),
-                    '\mTRASERO\M', 'TRAS', 'g'),
-                  '\mIZQUIERDO\M', 'LH', 'g'),
-                '\mIZQUIERDA\M', 'LH', 'g'),
-              '\mDERECHO\M', 'RH', 'g'),
-            '\mDERECHA\M', 'RH', 'g'),
-                          '\mSUPERIOR\M', 'SUP', 'g'),
-        '\mINFERIOR\M', 'INF', 'g'),
-      '\s+', ' ', 'g')) as canon
+  select id, pg_temp.normalizar_pieza(nombre) as canon
   from piezas_catalogo
 ), repetidas as (
   select id, row_number() over (partition by canon order by id) as fila
@@ -51,45 +57,16 @@ delete from piezas_catalogo p
 using repetidas r
 where p.id = r.id and r.fila > 1;
 
--- Ahora actualiza las sobrevivientes al mismo formato corto del formulario.
-with normalizados as (
-  select
-    id,
-    btrim(regexp_replace(
-      regexp_replace(
-        regexp_replace(
-          regexp_replace(
-            regexp_replace(
-              regexp_replace(
-                regexp_replace(
-                  regexp_replace(
-                    regexp_replace(
-                      regexp_replace(
-                        regexp_replace(
-                          regexp_replace(
-                            regexp_replace(upper(btrim(nombre)), '\mPARACHOQUES?\M', 'BUMPER', 'g'),
-                          '\mBOMPER\M', 'BUMPER', 'g'),
-                        '\mGUARDALODOS\M', 'GUARDALODO', 'g'),
-                      '\mDELANTERO\M', 'DELT', 'g'),
-                    '\mTRASERO\M', 'TRAS', 'g'),
-                  '\mIZQUIERDO\M', 'LH', 'g'),
-                '\mIZQUIERDA\M', 'LH', 'g'),
-              '\mDERECHO\M', 'RH', 'g'),
-            '\mDERECHA\M', 'RH', 'g'),
-                          '\mSUPERIOR\M', 'SUP', 'g'),
-        '\mINFERIOR\M', 'INF', 'g'),
-      '\s+', ' ', 'g')) as canon
-  from piezas_catalogo
-)
-update piezas_catalogo p
-set nombre = n.canon
-from normalizados n
-where p.id = n.id and p.nombre is distinct from n.canon;
+-- Ahora que ya no hay colisiones, se actualizan los nombres sobrevivientes.
+update piezas_catalogo
+set nombre = pg_temp.normalizar_pieza(nombre)
+where nombre is distinct from pg_temp.normalizar_pieza(nombre);
+
+drop function pg_temp.normalizar_pieza(text);
 
 commit;
 
--- Verificación: debe devolver 0 filas. Si sale alguna, hay un duplicado que
--- no es idéntico al normalizarlo y se puede revisar manualmente sin riesgo.
+-- Verificación: debe devolver 0 filas.
 select upper(btrim(nombre)) as nombre_normalizado, count(*) as repetidas
 from piezas_catalogo
 group by upper(btrim(nombre))
