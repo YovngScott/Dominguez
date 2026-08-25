@@ -48,6 +48,11 @@ export default async function handler(req, res) {
   const ai = new GoogleGenAI({ apiKey: geminiKey });
   const action = req.query?.action || req.body?.action;
 
+  // El bot de correo automático (sin acción y sin casoId explícito) está desactivado a solicitud del usuario
+  if (!action && !req.body?.casoId && !req.query?.casoId) {
+    return res.status(200).json({ success: false, message: "El bot de correo automático ha sido desactivado." });
+  }
+
   if (action === "listar_modelos") {
     try {
       const list = await ai.models.list();

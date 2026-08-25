@@ -239,9 +239,8 @@ async function findOrCreateAseguradora(supabase, nombre) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Método no permitido. Usa POST." });
-  }
+  // Chatbot de WhatsApp desactivado a solicitud del usuario
+  return res.status(200).send("Chatbot de WhatsApp desactivado.");
 
   const sbUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
