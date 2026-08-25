@@ -11,6 +11,19 @@ function generateUUID() {
   return crypto.randomUUID();
 }
 
+// Helper to query active employee phone numbers from DB
+async function obtenerTelefonosNotificacion(supabase) {
+  try {
+    const { data } = await supabase.from("telefonos_notificacion").select("telefono").eq("activo", true);
+    if (data && data.length > 0) {
+      return [...new Set(data.map((t) => normalizarTelefono(t.telefono)))];
+    }
+  } catch {
+    /* fallback */
+  }
+  return [normalizarTelefono(process.env.SHOP_WHATSAPP || "8095757986")];
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed. Use POST." });
@@ -104,16 +117,18 @@ export default async function handler(req, res) {
         }
       }
 
-      // Send WhatsApp notification summary
+      // Send WhatsApp notification summary to all active employee recipients
       if (evolutionConfig().ok) {
-        const numTaller = normalizarTelefono(process.env.SHOP_WHATSAPP || "8095757986");
+        const telefonosRecipientes = await obtenerTelefonosNotificacion(supabase);
         const asegName = data.aseguradora ? `[Seguros ${data.aseguradora}]` : "[Seguros]";
-        await enviarTextoWhatsapp({
-          number: numTaller,
-          text: `📧 *Notificación de Correo (Sin PDFs) - ${asegName}*\n\n` +
-                `${customerDetails}` +
-                `📝 *Resumen del Correo:* \n${data.resumen_contexto}`
-        });
+        for (const num of telefonosRecipientes) {
+          await enviarTextoWhatsapp({
+            number: num,
+            text: `📧 *Notificación de Correo (Sin PDFs) - ${asegName}*\n\n` +
+                  `${customerDetails}` +
+                  `📝 *Resumen del Correo:* \n${data.resumen_contexto}`
+          });
+        }
       }
 
       return res.status(200).json({ success: true, mode: "text_summary" });
@@ -330,42 +345,44 @@ export default async function handler(req, res) {
       }
     }
 
-    // Send WhatsApp Notifications
+    // Send WhatsApp Notifications to all active employee recipients
     if (evolutionConfig().ok) {
-      const numTaller = normalizarTelefono(process.env.SHOP_WHATSAPP || "8095757986");
+      const telefonosRecipientes = await obtenerTelefonosNotificacion(supabase);
       const clienteNombre = caseData.cliente?.nombre || "Cliente";
 
-      // Alert A: Supplier is Dominguez Auto Pintura (Profit Trigger!)
-      if (extractedData.es_suplidor_dominguez) {
-        await enviarTextoWhatsapp({
-          number: numTaller,
-          text: `🔥 *¡APROBACIÓN DE SUMINISTRO PROPIO!* \n\n` +
-                `El seguro *${asegNombreLabel}* ha asignado a *DOMINGUEZ AUTO PINTURA* como suplidor para la compra de las piezas del cliente *${clienteNombre}* (Chasis: ...${normalizedChasis.slice(-6)}).\n\n` +
-                `Los documentos ya están guardados en el caso. Favor proceder con la facturación y despacho.`
-        });
-      }
+      for (const num of telefonosRecipientes) {
+        // Alert A: Supplier is Dominguez Auto Pintura (Profit Trigger!)
+        if (extractedData.es_suplidor_dominguez) {
+          await enviarTextoWhatsapp({
+            number: num,
+            text: `🔥 *¡APROBACIÓN DE SUMINISTRO PROPIO!* \n\n` +
+                  `El seguro *${asegNombreLabel}* ha asignado a *DOMINGUEZ AUTO PINTURA* como suplidor para la compra de las piezas del cliente *${clienteNombre}* (Chasis: ...${normalizedChasis.slice(-6)}).\n\n` +
+                  `Los documentos ya están guardados en el caso. Favor proceder con la facturación y despacho.`
+          });
+        }
 
-      // Alert B: Price discrepancy report
-      if (priceDivergence) {
-        await enviarTextoWhatsapp({
-          number: numTaller,
-          text: `⚠️ *Cotización de ${asegNombreLabel} Procesada (Con diferencias)*\n\n` +
-                `Cliente: *${clienteNombre}*\n` +
-                `Vehículo: Chasis ...${normalizedChasis.slice(-6)}\n` +
-                `Reclamo: ${normalizedReclamo}` +
-                `${comparisonReport}\n\n` +
-                `Los documentos han sido cargados al caso automáticamente.`
-        });
-      } else {
-        // Alert C: perfect match notification
-        await enviarTextoWhatsapp({
-          number: numTaller,
-          text: `✅ *Cotización de ${asegNombreLabel} Procesada (Todo en orden)*\n\n` +
-                `Cliente: *${clienteNombre}*\n` +
-                `Vehículo: Chasis ...${normalizedChasis.slice(-6)}\n` +
-                `Reclamo: ${normalizedReclamo}\n\n` +
-                `Los montos coinciden perfectamente. Los documentos han sido vinculados al caso con éxito.`
-        });
+        // Alert B: Price discrepancy report
+        if (priceDivergence) {
+          await enviarTextoWhatsapp({
+            number: num,
+            text: `⚠️ *Cotización de ${asegNombreLabel} Procesada (Con diferencias)*\n\n` +
+                  `Cliente: *${clienteNombre}*\n` +
+                  `Vehículo: Chasis ...${normalizedChasis.slice(-6)}\n` +
+                  `Reclamo: ${normalizedReclamo}` +
+                  `${comparisonReport}\n\n` +
+                  `Los documentos han sido cargados al caso automáticamente.`
+          });
+        } else {
+          // Alert C: perfect match notification
+          await enviarTextoWhatsapp({
+            number: num,
+            text: `✅ *Cotización de ${asegNombreLabel} Procesada (Todo en orden)*\n\n` +
+                  `Cliente: *${clienteNombre}*\n` +
+                  `Vehículo: Chasis ...${normalizedChasis.slice(-6)}\n` +
+                  `Reclamo: ${normalizedReclamo}\n\n` +
+                  `Los montos coinciden perfectamente. Los documentos han sido vinculados al caso con éxito.`
+          });
+        }
       }
     }
 

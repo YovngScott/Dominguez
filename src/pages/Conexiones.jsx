@@ -43,6 +43,8 @@ const PROVEEDORES = [
   }
 ];
 
+const ROLES_EMPLEADO = ["Recepción", "Encargado de Taller", "Gerencia", "Compras / Repuestos", "Seguros"];
+
 export default function Conexiones() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -56,6 +58,20 @@ export default function Conexiones() {
     }
   });
 
+  // Cargar teléfonos de notificación de empleados
+  const [telefonos, setTelefonos] = useState(() => {
+    try {
+      const guardados = localStorage.getItem("telefonos_notificacion_guardados");
+      return guardados ? JSON.parse(guardados) : [
+        { id: "1", nombre_empleado: "Recepción Principal Taller", telefono: "8095757986", rol: "Recepción", activo: true }
+      ];
+    } catch {
+      return [
+        { id: "1", nombre_empleado: "Recepción Principal Taller", telefono: "8095757986", rol: "Recepción", activo: true }
+      ];
+    }
+  });
+
   const [loading, setLoading] = useState(true);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [waEstado, setWaEstado] = useState("loading");
@@ -65,7 +81,7 @@ export default function Conexiones() {
   const [resultadoPrueba, setResultadoPrueba] = useState({});
   const [notificacionOAuth, setNotificacionOAuth] = useState(null);
 
-  // Formulario Modal
+  // Formulario Modal Correo
   const [metodoAuth, setMetodoAuth] = useState("oauth");
   const [form, setForm] = useState({
     nombre_cuenta: "",
@@ -79,11 +95,34 @@ export default function Conexiones() {
   const [errorModal, setErrorModal] = useState("");
   const [guardandoModal, setGuardandoModal] = useState(false);
 
-  // Helper para sincronizar estado y localStorage
+  // Formulario Modal Teléfono Empleado
+  const [modalTelAbierto, setModalTelAbierto] = useState(false);
+  const [telEditar, setTelEditar] = useState(null);
+  const [formTel, setFormTel] = useState({
+    nombre_empleado: "",
+    telefono: "",
+    rol: "Recepción",
+    activo: true
+  });
+  const [errorTel, setErrorTel] = useState("");
+  const [probandoTelId, setProbandoTelId] = useState(null);
+  const [resultadoTelPrueba, setResultadoTelPrueba] = useState({});
+
+  // Helper para sincronizar estado y localStorage de correos
   function guardarCuentasMemoria(nuevasCuentas) {
     setCuentas(nuevasCuentas);
     try {
       localStorage.setItem("cuentas_correo_guardadas", JSON.stringify(nuevasCuentas));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Helper para sincronizar estado y localStorage de teléfonos
+  function guardarTelefonosMemoria(nuevosTelefonos) {
+    setTelefonos(nuevosTelefonos);
+    try {
+      localStorage.setItem("telefonos_notificacion_guardados", JSON.stringify(nuevosTelefonos));
     } catch {
       /* ignore */
     }
@@ -136,21 +175,30 @@ export default function Conexiones() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Cargar cuentas desde Supabase
-  async function cargarCuentas() {
+  // Cargar cuentas y teléfonos desde Supabase
+  async function cargarDatos() {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: dataCuentas, error: errCuentas } = await supabase
         .from("cuentas_correo_config")
         .select("*")
         .order("created_at", { ascending: true });
 
-      if (!error && data && data.length > 0) {
-        guardarCuentasMemoria(data);
+      if (!errCuentas && dataCuentas && dataCuentas.length > 0) {
+        guardarCuentasMemoria(dataCuentas);
+      }
+
+      const { data: dataTel, error: errTel } = await supabase
+        .from("telefonos_notificacion")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (!errTel && dataTel && dataTel.length > 0) {
+        guardarTelefonosMemoria(dataTel);
       }
     } catch {
       /* fallback a localStorage */
-    } fontally: {
+    } finally {
       setLoading(false);
     }
   }
@@ -170,11 +218,11 @@ export default function Conexiones() {
   }
 
   useEffect(() => {
-    cargarCuentas();
+    cargarDatos();
     cargarEstadoWhatsApp();
   }, []);
 
-  // Cambiar estado activo/inactivo
+  // Cambiar estado activo/inactivo de correo
   async function toggleActivo(cuenta) {
     const nuevoEstado = !cuenta.activo;
     const actualizadas = cuentas.map((c) => (c.id === cuenta.id ? { ...c, activo: nuevoEstado } : c));
@@ -187,7 +235,20 @@ export default function Conexiones() {
     }
   }
 
-  // Establecer como predeterminado
+  // Cambiar estado activo/inactivo de teléfono
+  async function toggleActivoTel(tel) {
+    const nuevoEstado = !tel.activo;
+    const actualizados = telefonos.map((t) => (t.id === tel.id ? { ...t, activo: nuevoEstado } : t));
+    guardarTelefonosMemoria(actualizados);
+
+    try {
+      await supabase.from("telefonos_notificacion").update({ activo: nuevoEstado }).eq("id", tel.id);
+    } catch {
+      /* fallback */
+    }
+  }
+
+  // Establecer correo como predeterminado
   async function marcarPredeterminado(cuenta) {
     const actualizadas = cuentas.map((c) => ({
       ...c,
@@ -203,7 +264,7 @@ export default function Conexiones() {
     }
   }
 
-  // Eliminar cuenta
+  // Eliminar correo
   async function eliminarCuenta(id) {
     if (!confirm("¿Seguro que deseas revocar el acceso del bot a esta cuenta de correo?")) return;
 
@@ -220,7 +281,21 @@ export default function Conexiones() {
     }
   }
 
-  // Probar lectura e integración de correo
+  // Eliminar teléfono de empleado
+  async function eliminarTelefono(id) {
+    if (!confirm("¿Seguro que deseas eliminar este número de las alertas de WhatsApp?")) return;
+
+    const filtrados = telefonos.filter((t) => t.id !== id);
+    guardarTelefonosMemoria(filtrados);
+
+    try {
+      await supabase.from("telefonos_notificacion").delete().eq("id", id);
+    } catch {
+      /* fallback */
+    }
+  }
+
+  // Probar lectura de correo
   async function probarConexion(cuenta) {
     setProbandoId(cuenta.id);
     setResultadoPrueba((prev) => ({ ...prev, [cuenta.id]: null }));
@@ -247,7 +322,33 @@ export default function Conexiones() {
     }
   }
 
-  // Iniciar flujo de inicio de sesión con Google (OAuth 2.0)
+  // Probar envío de alerta por WhatsApp a teléfono de empleado
+  async function probarEnvioWhatsApp(tel) {
+    setProbandoTelId(tel.id);
+    setResultadoTelPrueba((prev) => ({ ...prev, [tel.id]: null }));
+    try {
+      const r = await fetch("/api/whatsapp-webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          test_number: tel.telefono,
+          message: `🤖 *Prueba de Alerta de WhatsApp*\n\nHola *${tel.nombre_empleado}* (${tel.rol}). Tu número ha sido configurado para recibir alertas automáticas del bot de IA en Dominguez Auto Pintura.`
+        })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok || d.success) {
+        setResultadoTelPrueba((prev) => ({ ...prev, [tel.id]: { ok: true, msg: "Mensaje de prueba enviado por WhatsApp con éxito." } }));
+      } else {
+        setResultadoTelPrueba((prev) => ({ ...prev, [tel.id]: { ok: false, msg: d.error || "Error al enviar WhatsApp." } }));
+      }
+    } catch (e) {
+      setResultadoTelPrueba((prev) => ({ ...prev, [tel.id]: { ok: false, msg: e.message } }));
+    } finally {
+      setProbandoTelId(null);
+    }
+  }
+
+  // Iniciar flujo OAuth Google
   function iniciarGoogleOAuth(emailActual) {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "1086486162907-61uap64mm6hv8rtfqo0mf2l4apkqs776.apps.googleusercontent.com";
     const redirectUri = window.location.origin + "/conexiones";
@@ -258,7 +359,7 @@ export default function Conexiones() {
     window.location.href = url;
   }
 
-  // Iniciar flujo de inicio de sesión con Microsoft / Outlook (OAuth 2.0)
+  // Iniciar flujo OAuth Microsoft
   function iniciarMicrosoftOAuth(emailActual) {
     const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID || "00000000-0000-0000-0000-000000000000";
     const redirectUri = window.location.origin + "/conexiones";
@@ -269,7 +370,7 @@ export default function Conexiones() {
     window.location.href = url;
   }
 
-  // Abrir Modal para Agregar / Editar
+  // Abrir Modal Correo
   function abrirModalNuevo() {
     if (cuentas.length >= 4) {
       alert("Límite alcanzado: Puedes vincular un máximo de 4 cuentas de correo.");
@@ -306,6 +407,31 @@ export default function Conexiones() {
     setModalAbierto(true);
   }
 
+  // Abrir Modal Teléfono Empleado
+  function abrirModalNuevoTel() {
+    setTelEditar(null);
+    setFormTel({
+      nombre_empleado: "",
+      telefono: "",
+      rol: "Recepción",
+      activo: true
+    });
+    setErrorTel("");
+    setModalTelAbierto(true);
+  }
+
+  function abrirModalEditarTel(tel) {
+    setTelEditar(tel);
+    setFormTel({
+      nombre_empleado: tel.nombre_empleado || "",
+      telefono: tel.telefono || "",
+      rol: tel.rol || "Recepción",
+      activo: tel.activo ?? true
+    });
+    setErrorTel("");
+    setModalTelAbierto(true);
+  }
+
   // Cambiar Proveedor
   function cambiarProveedor(provId) {
     const prov = PROVEEDORES.find((p) => p.id === provId);
@@ -317,7 +443,7 @@ export default function Conexiones() {
     }));
   }
 
-  // Guardar datos de cuenta y vincular
+  // Guardar datos de correo
   async function guardarYConectarCuenta(e) {
     e.preventDefault();
     setErrorModal("");
@@ -375,7 +501,6 @@ export default function Conexiones() {
       /* fallback */
     }
 
-    // Si eligió método OAuth y no es un dominio personalizado, guardamos el estado y disparamos el login
     if (metodoAuth === "oauth") {
       localStorage.setItem("oauth_pending_account", JSON.stringify(payload));
       if (form.proveedor === "gmail" || form.proveedor === "google_workspace") {
@@ -383,6 +508,42 @@ export default function Conexiones() {
       } else if (form.proveedor === "outlook") {
         iniciarMicrosoftOAuth(emailClean);
       }
+    }
+  }
+
+  // Guardar Teléfono de Empleado
+  async function guardarTelefonoEmpleado(e) {
+    e.preventDefault();
+    setErrorTel("");
+
+    const telDigits = formTel.telefono.replace(/\D/g, "");
+    if (!telDigits || telDigits.length < 10) {
+      setErrorTel("Ingresa un número de teléfono válido (ej: 8095757986).");
+      return;
+    }
+
+    const payload = {
+      id: telEditar ? telEditar.id : crypto.randomUUID(),
+      nombre_empleado: formTel.nombre_empleado.trim() || "Empleado Taller",
+      telefono: telDigits,
+      rol: formTel.rol,
+      activo: formTel.activo
+    };
+
+    let actualizados = [...telefonos];
+    if (telEditar) {
+      actualizados = actualizados.map((t) => (t.id === telEditar.id ? payload : t));
+    } else {
+      actualizados.push(payload);
+    }
+
+    guardarTelefonosMemoria(actualizados);
+    setModalTelAbierto(false);
+
+    try {
+      await supabase.from("telefonos_notificacion").upsert(payload);
+    } catch {
+      /* fallback */
     }
   }
 
@@ -409,7 +570,7 @@ export default function Conexiones() {
             Vinculación de Cuentas de Correo y WhatsApp
           </h1>
           <p className="text-sm text-[var(--ink-soft)] mt-1">
-            Conecta hasta 4 cuentas (Gmail, Google Workspace, Outlook o Dominio) dándole acceso de lectura al bot de IA.
+            Conecta hasta 4 cuentas de correo y configura los números de teléfono de los empleados para recibir alertas automáticas.
           </p>
         </div>
 
@@ -569,7 +730,90 @@ export default function Conexiones() {
         )}
       </div>
 
-      {/* SECCIÓN 2: DISPOSITIVO WHATSAPP */}
+      {/* NUEVA SECCIÓN: TELÉFONOS DE EMPLEADOS PARA REPO/ALERTAS DE WHATSAPP */}
+      <div className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--ink)] flex items-center gap-2">
+              <Icon name="whatsapp" className="w-5 h-5 text-emerald-600" />
+              Teléfonos de Empleados para Alertas de WhatsApp
+            </h2>
+            <p className="text-xs text-[var(--ink-soft)] mt-0.5">
+              Los empleados añadidos aquí recibirán todas las notificaciones automáticas del bot cuando ingresen cotizaciones o aprueben piezas.
+            </p>
+          </div>
+
+          <button
+            onClick={abrirModalNuevoTel}
+            className="btn-primary text-xs py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shrink-0"
+          >
+            <Icon name="plus" className="w-4 h-4" /> Agregar Empleado
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {telefonos.map((t) => {
+            const probandoTel = probandoTelId === t.id;
+            const resTel = resultadoTelPrueba[t.id];
+
+            return (
+              <div key={t.id} className="card p-4 border border-[var(--line)] flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                      {t.rol || "Recepción"}
+                    </span>
+                    
+                    {/* Switch Activo Teléfono */}
+                    <label className="relative inline-flex items-center cursor-pointer" title="Activar/Desactivar alertas para este número">
+                      <input
+                        type="checkbox"
+                        checked={t.activo}
+                        onChange={() => toggleActivoTel(t)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </label>
+                  </div>
+
+                  <h3 className="font-bold text-sm text-[var(--ink)]">{t.nombre_empleado}</h3>
+                  <p className="text-xs font-mono text-[var(--ink-soft)] mt-0.5">📱 {t.telefono}</p>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-[var(--line)]">
+                  {resTel && (
+                    <div className={`mb-2 p-2 rounded text-[11px] ${resTel.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-600 border border-red-200"}`}>
+                      {resTel.msg}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-1">
+                      <button onClick={() => abrirModalEditarTel(t)} className="btn-ghost text-[11px] p-1 text-[var(--ink-soft)]">
+                        <Icon name="pencil" className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => eliminarTelefono(t.id)} className="btn-ghost text-[11px] p-1 text-[var(--brand-red)]">
+                        <Icon name="trash" className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => probarEnvioWhatsApp(t)}
+                      disabled={probandoTel}
+                      className="btn-ghost text-[11px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-1"
+                    >
+                      <Icon name="whatsapp" className="w-3 h-3" />
+                      {probandoTel ? "Enviando…" : "Probar Alerta"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* SECCIÓN 3: DISPOSITIVO WHATSAPP */}
       <div className="card p-6 border border-[var(--line)]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
@@ -752,6 +996,69 @@ export default function Conexiones() {
                     Verificar y Dar Acceso al Bot
                   </button>
                 )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA AGREGAR / EDITAR TELÉFONO DE EMPLEADO */}
+      {modalTelAbierto && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setModalTelAbierto(false)}>
+          <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[var(--line)]">
+              <h3 className="text-base font-bold text-[var(--ink)] flex items-center gap-2">
+                <Icon name="whatsapp" className="w-5 h-5 text-emerald-600" />
+                {telEditar ? "Editar Teléfono de Empleado" : "Agregar Empleado para Alertas"}
+              </h3>
+              <button onClick={() => setModalTelAbierto(false)} className="text-[var(--ink-soft)] hover:text-[var(--ink)] text-xl font-bold">✕</button>
+            </div>
+
+            {errorTel && <p className="text-xs font-bold text-red-600 bg-red-50 p-3 rounded-xl mb-4">{errorTel}</p>}
+
+            <form onSubmit={guardarTelefonoEmpleado} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[var(--ink)] mb-1">Nombre del Empleado / Departamento</label>
+                <input
+                  type="text"
+                  required
+                  value={formTel.nombre_empleado}
+                  onChange={(e) => setFormTel({ ...formTel, nombre_empleado: e.target.value })}
+                  className="input w-full text-sm"
+                  placeholder="Ej: Juan Pérez (Recepción)"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[var(--ink)] mb-1">Número de WhatsApp (con o sin código)</label>
+                <input
+                  type="text"
+                  required
+                  value={formTel.telefono}
+                  onChange={(e) => setFormTel({ ...formTel, telefono: e.target.value })}
+                  className="input w-full text-sm font-mono"
+                  placeholder="8095757986"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[var(--ink)] mb-1">Rol / Departamento</label>
+                <select
+                  value={formTel.rol}
+                  onChange={(e) => setFormTel({ ...formTel, rol: e.target.value })}
+                  className="input w-full text-xs font-semibold"
+                >
+                  {ROLES_EMPLEADO.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-[var(--line)]">
+                <button type="button" onClick={() => setModalTelAbierto(false)} className="btn-ghost text-xs">Cancelar</button>
+                <button type="submit" className="btn-primary text-xs py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white">
+                  Guardar Destinatario de Alertas
+                </button>
               </div>
             </form>
           </div>
