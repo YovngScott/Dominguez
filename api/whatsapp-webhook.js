@@ -337,7 +337,7 @@ export default async function handler(req, res) {
         };
 
         const docRes = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.6-flash",
           contents: [
             {
               role: "user",
@@ -525,7 +525,7 @@ export default async function handler(req, res) {
 
     // 9) Invocar a Gemini
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: contents,
       config: {
         systemInstruction: systemPrompt

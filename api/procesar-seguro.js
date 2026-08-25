@@ -64,8 +64,8 @@ export default async function handler(req, res) {
   // Función auxiliar de fallback para evitar errores 429 (Rate Limits) en producción
   async function ejecutarConModelosGemini(contents, responseSchema) {
     const MODEL_CANDIDATES = [
-      "gemini-2.5-flash",
       "gemini-3.6-flash",
+      "gemini-2.5-flash",
       "gemini-2.5-flash-lite",
       "gemini-3.5-flash-lite"
     ];
@@ -113,19 +113,19 @@ export default async function handler(req, res) {
           Eres un perito experto en digitalización de documentos vehiculares de la República Dominicana (Carnets de Seguros y Matrículas de la DGII).
           Analiza detenidamente la(s) imagen(es) provista(s) y extrae todos los datos legibles para precargar una cotización de taller de colisiones.
           
-          REGLAS DE EXTRACCIÓN:
-          - cliente_nombre: Nombre del propietario o asegurado.
+          REGLAS DE EXTRACCIÓN CRÍTICAS:
+          - cliente_nombre: DEBES extraer prioritariamente el nombre que aparece impreso en el CARNET DEL SEGURO (el Asegurado/Conductor). Si hay diferencias de nombre entre la matrícula y el carnet del seguro, coloca el nombre que está en el CARNET DEL SEGURO.
+          - aseguradora_nombre: Identifica y extrae con total precisión el nombre de la aseguradora del carnet del seguro (ej: "Seguros Reservas", "La Colonial de Seguros", "Atlántica de Seguros", "Coop-Seguros", "Seguros Sura", "Seguros La Internacional", "Mapfre", etc.). Observa detenidamente logotipos o marcas de agua para no dejar este campo en blanco.
           - telefono: Teléfono de contacto si está visible.
           - email: Correo electrónico si está visible.
-          - rnc_cedula: Cédula o RNC del propietario.
+          - rnc_cedula: Cédula o RNC del asegurado o propietario.
           - marca: Marca del vehículo (ej: Toyota, Honda, Hyundai, Kia, Nissan, etc.).
           - modelo: Modelo del vehículo (ej: Corolla, Civic, Tucson, Sportage, CR-V, etc.).
           - anio: Año del vehículo como texto (ej: "2020").
           - color: Color del vehículo.
           - placa: Número de placa del vehículo.
-          - chasis: Número de chasis / VIN del vehículo (17 caracteres alfanuméricos usualmente).
+          - chasis: Número de chasis / VIN del vehículo (17 caracteres alfanuméricos).
           - tipo_vehiculo: Tipo de carrocería si se deduce (ej: "Sedan", "Jeepeta / SUV", "Camioneta", etc.).
-          - aseguradora_nombre: Nombre de la aseguradora (ej: Seguros Reservas, La Colonial, Atlántica, Coop-Seguros, Sura, La Internacional, Mapfre, etc.).
           - numero_poliza: Número de póliza de seguro.
           - numero_reclamo: Número de reclamo o siniestro si aparece en el carnet o volante.
           `
@@ -238,6 +238,10 @@ export default async function handler(req, res) {
           - Si el evaluador menciona una labor a realizar (ej: "Desabollar y pintar puerta delantera derecha, cambiar y pintar guardalodo"), agrégala a la lista de "servicios".
           - Si menciona ambos (ej: "Bumper delantero nuevo y desabollar y pintar capó"), coloca "BUMPER DELT" en piezas y "DESAB Y PINT" con pieza "CAPO" en servicios.
           - Si menciona cantidades (ej: "2 amortiguadores"), asigna cantidad = 2. De lo contrario, cantidad = 1.
+
+          EXTRACCIÓN Y SEPARACIÓN POR PRECIOS:
+          - Si el evaluador dice un precio inmediatamente después de describir un trabajo o pieza (ej: "desabollar y pintar puerta trasera derecha, 5500" o "bumper delantero, 4200"), extrae ese número en el campo "precio" (ej: precio: 5500).
+          - REGLA DE ORO DE SEPARACIÓN: Un precio mencionado delimita estrictamente el final de ese item. Lo que se mencione DESPUÉS de ese precio debe ser tratado obligatoriamente como una nueva pieza o servicio independiente (ej: "desabollar y pintar puerta trasera derecha, 5500, desabollar guardalodo delantero, 3000" debe generar dos servicios diferentes: uno para la puerta de 5500 y otro para el guardalodo de 3000).
           `
         }
       ];
