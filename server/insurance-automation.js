@@ -23,18 +23,32 @@ function timingSafeEqual(left, right) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function requireIntegration(req, res) {
+async function authorizeRequest(supabase, req, res, action) {
   const configured = process.env.STAGE_INSURANCE_SHARED_SECRET;
   const supplied = req.headers["x-stage-insurance-secret"];
-  if (!configured) {
-    json(res, 503, { error: "Falta configurar STAGE_INSURANCE_SHARED_SECRET." });
-    return false;
+  if (configured && supplied && timingSafeEqual(configured, supplied)) return "integration";
+
+  // El panel puede revisar y resolver mensajes con la sesión real de Supabase.
+  // La ingestión queda reservada al secreto servidor-a-servidor.
+  if (action !== "ingest") {
+    const authorization = String(req.headers.authorization || "");
+    const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+    if (token) {
+      const { data: auth, error: authError } = await supabase.auth.getUser(token);
+      if (!authError && auth?.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from("perfiles")
+          .select("rol, activo")
+          .eq("user_id", auth.user.id)
+          .maybeSingle();
+        if (!profileError && profile?.activo && profile.rol === "administrativo_general") {
+          return "dashboard";
+        }
+      }
+    }
   }
-  if (!timingSafeEqual(configured, supplied)) {
-    json(res, 401, { error: "Integración no autorizada." });
-    return false;
-  }
-  return true;
+  json(res, 401, { error: "Integración o sesión administrativa no autorizada." });
+  return null;
 }
 
 function emailAddress(value) {
@@ -391,11 +405,11 @@ async function rejectReview(supabase, id) {
 }
 
 export default async function handler(req, res) {
-  if (!requireIntegration(req, res)) return;
   let clients;
   try {
     clients = buildClients();
     const action = String(req.query.action || req.body?.action || "list").replace(/^insurance_/, "");
+    if (!await authorizeRequest(clients.supabase, req, res, action)) return;
     if (action === "ingest" && req.method === "POST") return json(res, 200, await ingest(clients.supabase, clients.ai, req.body || {}));
     if (action === "list" && req.method === "GET") return json(res, 200, { data: await listReviews(clients.supabase, req) });
     if (action === "detail" && req.method === "GET") return json(res, 200, { data: await detailReview(clients.supabase, String(req.query.id || "")) });

@@ -7,6 +7,7 @@ import Icon from "./components/Icon";
 import WhatsappConnectModal from "./components/WhatsappConnectModal";
 import Login from "./pages/Login";
 import { aplicarTema, temaOscuroGuardado } from "./lib/theme";
+import { supabase } from "./lib/supabaseClient";
 
 // Cada página se carga bajo demanda (code-splitting): el navegador solo
 // descarga el código de la pantalla que se está abriendo, no el de toda la
@@ -44,10 +45,12 @@ const ReporteTrabajadores = lazy(() => import("./pages/ReporteTrabajadores"));
 const Usuarios = lazy(() => import("./pages/Usuarios"));
 const Llaves = lazy(() => import("./pages/Llaves"));
 const Conexiones = lazy(() => import("./pages/Conexiones"));
+const Mensajes = lazy(() => import("./pages/Mensajes"));
 
 // Orden lógico por flujo de trabajo (de lo más usado a lo menos):
 // operación diaria → almacén de piezas → agenda/cierre → directorio → análisis.
 const NAV = [
+  { to: "/mensajes", label: "Mensajes", icon: "mail", soloAdmin: true, muestraContador: true },
   { to: "/cotizaciones", label: "Cotizaciones", icon: "receipt" },
   { to: "/ordenes", label: "Recibos", icon: "clipboard" },
   { to: "/llaves", label: "Llaves", icon: "key" },
@@ -72,6 +75,7 @@ function PrivateLayout({ children }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [oscuro, setOscuro] = useState(temaOscuroGuardado);
+  const [mensajesNuevos, setMensajesNuevos] = useState(0);
   const location = useLocation();
 
   function toggleTema() {
@@ -93,6 +97,30 @@ function PrivateLayout({ children }) {
   useEffect(() => {
     if (inactivo) signOut();
   }, [inactivo, signOut]);
+
+  useEffect(() => {
+    if (!session || !esAdministrativo) {
+      setMensajesNuevos(0);
+      return undefined;
+    }
+    let activo = true;
+    const cargarContador = async () => {
+      const { count } = await supabase
+        .from("mensajes_dashboard")
+        .select("id", { count: "exact", head: true })
+        .eq("estado", "nuevo");
+      if (activo) setMensajesNuevos(count || 0);
+    };
+    cargarContador();
+    const channel = supabase
+      .channel("contador-mensajes-dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "mensajes_dashboard" }, cargarContador)
+      .subscribe();
+    return () => {
+      activo = false;
+      supabase.removeChannel(channel);
+    };
+  }, [session, esAdministrativo]);
 
   if (loading || cargandoRol) {
     return <div className="p-10 text-center text-gray-500">Cargando…</div>;
@@ -165,7 +193,12 @@ function PrivateLayout({ children }) {
                     >
                       <Icon name={n.icon} className="w-5 h-5" />
                     </span>
-                    {n.label}
+                    <span className="flex-1">{n.label}</span>
+                    {n.muestraContador && mensajesNuevos > 0 && (
+                      <span className={`min-w-6 rounded-full px-2 py-0.5 text-center text-xs font-bold ${isActive ? "bg-white text-[var(--brand-red)]" : "bg-[var(--brand-red)] text-white"}`}>
+                        {mensajesNuevos > 99 ? "99+" : mensajesNuevos}
+                      </span>
+                    )}
                   </>
                 )}
               </NavLink>
@@ -338,6 +371,14 @@ export default function App() {
           <PrivateBare>
             <CaseReport />
           </PrivateBare>
+        }
+      />
+      <Route
+        path="/mensajes"
+        element={
+          <PrivateLayout>
+            <Mensajes />
+          </PrivateLayout>
         }
       />
       <Route
