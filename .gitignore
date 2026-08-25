@@ -35,3 +35,5 @@ index.js
 
 # Archivos temporales de pruebas (PDFs generados)
 tmp/
+.vercel
+.env*

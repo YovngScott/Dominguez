@@ -8,7 +8,7 @@ import SignaturePad from "../components/SignaturePad";
 import SelectorLlave from "../components/SelectorLlave";
 import FichaTallerModal from "../components/FichaTallerModal";
 import Icon from "../components/Icon";
-import { ESTADOS } from "../lib/estados";
+import { ESTADOS, FASES_REPARACION } from "../lib/estados";
 import { rd } from "../lib/cotizacion";
 import { marcarCitasAtendidas } from "../lib/citaCaso";
 
@@ -119,6 +119,17 @@ export default function CaseDetail() {
     // Al recibir el vehículo, la cita que lo esperaba queda atendida sola.
     if (estado === "vehiculo_en_taller") {
       marcarCitasAtendidas(casoId).catch(() => {});
+    }
+  }
+
+  async function actualizarFase(fase) {
+    const { error } = await supabase
+      .from("casos")
+      .update({ fase_reparacion: fase })
+      .eq("id", casoId);
+    if (!error) {
+      setCaso((c) => ({ ...c, fase_reparacion: fase }));
+      loadHistorial();
     }
   }
 
@@ -342,6 +353,34 @@ export default function CaseDetail() {
               <Icon name="car" className="w-4 h-4" />
               <span className="font-semibold text-sm">Vehículo en el taller</span>
             </label>
+          )}
+
+          {enTaller && (
+            <div className="mt-4 p-4 border border-sky-100 bg-sky-50/30 rounded-xl space-y-3">
+              <p className="text-sky-800 font-bold inline-flex items-center gap-1.5 text-xs uppercase tracking-wider">
+                <Icon name="wrench" className="w-3.5 h-3.5" />
+                Fase de Reparación
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(FASES_REPARACION).map(([key, fase]) => {
+                  const activa = caso.fase_reparacion === key || (!caso.fase_reparacion && key === "desabolladura");
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => actualizarFase(key)}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        activa
+                          ? "bg-sky-500 border-sky-500 text-white shadow-sm"
+                          : "bg-white border-[var(--line)] text-[var(--ink-soft)] hover:border-sky-300"
+                      }`}
+                    >
+                      <Icon name={fase.icon} className="w-3.5 h-3.5" />
+                      {fase.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
 
