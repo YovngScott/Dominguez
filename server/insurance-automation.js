@@ -371,6 +371,25 @@ async function approveReview(supabase, id) {
   return { ok: true };
 }
 
+async function rejectReview(supabase, id) {
+  const review = await detailReview(supabase, id);
+  if (review.estado !== "revision") throw new Error("Esta revisión ya fue resuelta.");
+  const paths = review.archivos.map((file) => file.storage_path).filter(Boolean);
+  if (paths.length) {
+    const { error: storageError } = await supabase.storage.from(PDF_BUCKET_PENDING).remove(paths);
+    if (storageError) throw storageError;
+  }
+  const { error: filesError } = await supabase.from("revisiones_seguro_archivos").delete().eq("revision_id", id);
+  if (filesError) throw filesError;
+  const { error } = await supabase.from("revisiones_seguro").update({
+    estado: "rechazado",
+    rechazado_en: new Date().toISOString(),
+    actualizado_en: new Date().toISOString(),
+  }).eq("id", id).eq("estado", "revision");
+  if (error) throw error;
+  return { ok: true };
+}
+
 export default async function handler(req, res) {
   if (!requireIntegration(req, res)) return;
   let clients;
@@ -381,12 +400,7 @@ export default async function handler(req, res) {
     if (action === "list" && req.method === "GET") return json(res, 200, { data: await listReviews(clients.supabase, req) });
     if (action === "detail" && req.method === "GET") return json(res, 200, { data: await detailReview(clients.supabase, String(req.query.id || "")) });
     if (action === "approve" && req.method === "POST") return json(res, 200, await approveReview(clients.supabase, String(req.body?.id || "")));
-    if (action === "reject" && req.method === "POST") {
-      const id = String(req.body?.id || "");
-      const { error } = await clients.supabase.from("revisiones_seguro").update({ estado: "rechazado", rechazado_en: new Date().toISOString(), actualizado_en: new Date().toISOString() }).eq("id", id).eq("estado", "revision");
-      if (error) throw error;
-      return json(res, 200, { ok: true });
-    }
+    if (action === "reject" && req.method === "POST") return json(res, 200, await rejectReview(clients.supabase, String(req.body?.id || "")));
     return json(res, 405, { error: "Acción o método no permitido." });
   } catch (error) {
     console.error("[seguro-automatizacion]", error);

@@ -426,7 +426,7 @@ function PanelSuplidores() {
     setLoading(true);
     const { data } = await supabase
       .from("suplidores")
-      .select("id, nombre, telefono, descripcion, activo")
+      .select("id, nombre, telefono, email, descripcion, activo")
       .order("nombre");
     setSuplidores(data || []);
     setLoading(false);
@@ -438,7 +438,7 @@ function PanelSuplidores() {
 
   const term = q.trim().toLowerCase();
   const lista = suplidores.filter((s) =>
-    !term ? true : [s.nombre, s.telefono, s.descripcion].filter(Boolean).some((x) => String(x).toLowerCase().includes(term))
+    !term ? true : [s.nombre, s.telefono, s.email, s.descripcion].filter(Boolean).some((x) => String(x).toLowerCase().includes(term))
   );
 
   async function guardar(form) {
@@ -446,6 +446,7 @@ function PanelSuplidores() {
     const payload = {
       nombre: form.nombre.trim(),
       telefono: form.telefono.trim(),
+      email: form.email?.trim().toLowerCase() || null,
       descripcion: form.descripcion?.trim() || null,
     };
     const { error: e } = form.id
@@ -492,7 +493,7 @@ function PanelSuplidores() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por nombre, teléfono o descripción…"
+          placeholder="Buscar por nombre, teléfono, correo o descripción…"
           className="input w-full !pl-10"
         />
       </div>
@@ -523,6 +524,11 @@ function PanelSuplidores() {
                   <Icon name="whatsapp" className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">{s.telefono}</span>
                 </a>
+                {s.email && (
+                  <a href={`mailto:${s.email}`} className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)] truncate block mt-0.5">
+                    {s.email}
+                  </a>
+                )}
               </div>
               <div className="flex flex-col gap-1 shrink-0">
                 <button onClick={() => setModal(s)} className="btn-ghost text-sm py-1.5 px-2.5" title="Editar">
@@ -553,7 +559,7 @@ function PanelSuplidores() {
 }
 
 function SuplidorModal({ suplidor, onCancel, onSave }) {
-  const [form, setForm] = useState(suplidor || { nombre: "", telefono: "", descripcion: "" });
+  const [form, setForm] = useState(suplidor || { nombre: "", telefono: "", email: "", descripcion: "" });
   const up = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   // Al menos 10 dígitos: es lo que necesita el enlace de WhatsApp.
   const telValido = String(form.telefono || "").replace(/\D/g, "").length >= 10;
@@ -582,6 +588,16 @@ function SuplidorModal({ suplidor, onCancel, onSave }) {
               onChange={(e) => up("telefono", e.target.value)}
               className="input"
               placeholder="809-555-1234"
+            />
+          </label>
+          <label className="block">
+            <span className="field-label">Correo autorizado (opcional)</span>
+            <input
+              type="email"
+              value={form.email || ""}
+              onChange={(e) => up("email", e.target.value)}
+              className="input"
+              placeholder="ventas@suplidor.com"
             />
           </label>
           <label className="block">
