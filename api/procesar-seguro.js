@@ -344,16 +344,10 @@ export default async function handler(req, res) {
         Body: ${body || ""}
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: textSchema
-        }
-      });
-
-      const data = JSON.parse(response.text);
+      const data = await ejecutarConModelosGemini(
+        [{ role: "user", parts: [{ text: prompt }] }],
+        textSchema
+      );
       let customerDetails = "";
       
       // Try to find case if chassis or claim was found
@@ -457,9 +451,8 @@ export default async function handler(req, res) {
         - mano_de_obra_total (numeric total labor amount approved).
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: [
+      const data = await ejecutarConModelosGemini(
+        [
           {
             role: "user",
             parts: [
@@ -473,13 +466,8 @@ export default async function handler(req, res) {
             ]
           }
         ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: schema
-        }
-      });
-
-      const data = JSON.parse(response.text);
+        schema
+      );
       if (data && data.chasis) {
         extractedData = data; // Keep the parsed data
         processedAttachments.push({
