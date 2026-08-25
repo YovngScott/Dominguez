@@ -48,7 +48,7 @@ const ROLES_EMPLEADO = ["Recepción", "Encargado de Taller", "Gerencia", "Compra
 export default function Conexiones() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Cargar cuentas iniciales desde localStorage para no mostrar correos falsos/hardcodeados
+  // Cargar cuentas iniciales desde localStorage para no mostrar correos falsos
   const [cuentas, setCuentas] = useState(() => {
     try {
       const guardadas = localStorage.getItem("cuentas_correo_guardadas");
@@ -62,13 +62,9 @@ export default function Conexiones() {
   const [telefonos, setTelefonos] = useState(() => {
     try {
       const guardados = localStorage.getItem("telefonos_notificacion_guardados");
-      return guardados ? JSON.parse(guardados) : [
-        { id: "1", nombre_empleado: "Recepción Principal Taller", telefono: "8095757986", rol: "Recepción", activo: true }
-      ];
+      return guardados ? JSON.parse(guardados) : [];
     } catch {
-      return [
-        { id: "1", nombre_empleado: "Recepción Principal Taller", telefono: "8095757986", rol: "Recepción", activo: true }
-      ];
+      return [];
     }
   });
 
@@ -157,8 +153,13 @@ export default function Conexiones() {
             return actualizadas;
           });
 
-          // Intentar guardar en Supabase en segundo plano
-          supabase.from("cuentas_correo_config").upsert(pending);
+          // Guardar a través de la API Backend (Service Role)
+          fetch("/api/whatsapp-estado?action=guardar_cuenta", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(pending)
+          }).then(() => cargarDatos());
+
           localStorage.removeItem("oauth_pending_account");
         } catch (e) {
           console.error("Error procesando cuenta retornada de OAuth:", e);
@@ -175,29 +176,23 @@ export default function Conexiones() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Cargar cuentas y teléfonos desde Supabase
+  // Cargar cuentas y teléfonos desde la API backend (Service Role)
   async function cargarDatos() {
     setLoading(true);
     try {
-      const { data: dataCuentas, error: errCuentas } = await supabase
-        .from("cuentas_correo_config")
-        .select("*")
-        .order("created_at", { ascending: true });
-
-      if (!errCuentas && dataCuentas && dataCuentas.length > 0) {
-        guardarCuentasMemoria(dataCuentas);
+      const resCuentas = await fetch("/api/whatsapp-estado?action=listar_cuentas");
+      const dataCuentas = await resCuentas.json().catch(() => ({}));
+      if (dataCuentas?.data && Array.isArray(dataCuentas.data)) {
+        guardarCuentasMemoria(dataCuentas.data);
       }
 
-      const { data: dataTel, error: errTel } = await supabase
-        .from("telefonos_notificacion")
-        .select("*")
-        .order("created_at", { ascending: true });
-
-      if (!errTel && dataTel && dataTel.length > 0) {
-        guardarTelefonosMemoria(dataTel);
+      const resTel = await fetch("/api/whatsapp-estado?action=listar_telefonos");
+      const dataTel = await resTel.json().catch(() => ({}));
+      if (dataTel?.data && Array.isArray(dataTel.data)) {
+        guardarTelefonosMemoria(dataTel.data);
       }
-    } catch {
-      /* fallback a localStorage */
+    } catch (e) {
+      console.error("Error al cargar datos globales:", e);
     } finally {
       setLoading(false);
     }
@@ -225,11 +220,16 @@ export default function Conexiones() {
   // Cambiar estado activo/inactivo de correo
   async function toggleActivo(cuenta) {
     const nuevoEstado = !cuenta.activo;
-    const actualizadas = cuentas.map((c) => (c.id === cuenta.id ? { ...c, activo: nuevoEstado } : c));
+    const itemActualizado = { ...cuenta, activo: nuevoEstado };
+    const actualizadas = cuentas.map((c) => (c.id === cuenta.id ? itemActualizado : c));
     guardarCuentasMemoria(actualizadas);
 
     try {
-      await supabase.from("cuentas_correo_config").update({ activo: nuevoEstado }).eq("id", cuenta.id);
+      await fetch("/api/whatsapp-estado?action=guardar_cuenta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(itemActualizado)
+      });
     } catch {
       /* fallback */
     }
@@ -238,11 +238,16 @@ export default function Conexiones() {
   // Cambiar estado activo/inactivo de teléfono
   async function toggleActivoTel(tel) {
     const nuevoEstado = !tel.activo;
-    const actualizados = telefonos.map((t) => (t.id === tel.id ? { ...t, activo: nuevoEstado } : t));
+    const itemActualizado = { ...tel, activo: nuevoEstado };
+    const actualizados = telefonos.map((t) => (t.id === tel.id ? itemActualizado : t));
     guardarTelefonosMemoria(actualizados);
 
     try {
-      await supabase.from("telefonos_notificacion").update({ activo: nuevoEstado }).eq("id", tel.id);
+      await fetch("/api/whatsapp-estado?action=guardar_telefono", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(itemActualizado)
+      });
     } catch {
       /* fallback */
     }
@@ -257,8 +262,11 @@ export default function Conexiones() {
     guardarCuentasMemoria(actualizadas);
 
     try {
-      await supabase.from("cuentas_correo_config").update({ es_predeterminado: false }).neq("id", "0");
-      await supabase.from("cuentas_correo_config").update({ es_predeterminado: true }).eq("id", cuenta.id);
+      await fetch("/api/whatsapp-estado?action=guardar_cuenta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...cuenta, es_predeterminado: true })
+      });
     } catch {
       /* fallback */
     }
@@ -275,7 +283,11 @@ export default function Conexiones() {
     guardarCuentasMemoria(filtradas);
 
     try {
-      await supabase.from("cuentas_correo_config").delete().eq("id", id);
+      await fetch("/api/whatsapp-estado?action=eliminar_cuenta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
     } catch {
       /* fallback */
     }
@@ -289,7 +301,11 @@ export default function Conexiones() {
     guardarTelefonosMemoria(filtrados);
 
     try {
-      await supabase.from("telefonos_notificacion").delete().eq("id", id);
+      await fetch("/api/whatsapp-estado?action=eliminar_telefono", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
     } catch {
       /* fallback */
     }
@@ -493,10 +509,11 @@ export default function Conexiones() {
     setGuardandoModal(false);
 
     try {
-      if (form.es_predeterminado) {
-        await supabase.from("cuentas_correo_config").update({ es_predeterminado: false }).neq("id", "0");
-      }
-      await supabase.from("cuentas_correo_config").upsert(payload);
+      await fetch("/api/whatsapp-estado?action=guardar_cuenta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
     } catch {
       /* fallback */
     }
@@ -541,7 +558,11 @@ export default function Conexiones() {
     setModalTelAbierto(false);
 
     try {
-      await supabase.from("telefonos_notificacion").upsert(payload);
+      await fetch("/api/whatsapp-estado?action=guardar_telefono", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
     } catch {
       /* fallback */
     }
@@ -596,7 +617,7 @@ export default function Conexiones() {
         </div>
 
         {loading && cuentas.length === 0 ? (
-          <div className="p-8 text-center text-sm text-[var(--ink-soft)]">Cargando permisos y cuentas…</div>
+          <div className="p-8 text-center text-sm text-[var(--ink-soft)]">Cargando permisos y cuentas globales…</div>
         ) : cuentas.length === 0 ? (
           <div className="p-8 border-2 border-dashed border-[var(--line)] rounded-2xl text-center">
             <Icon name="mail" className="w-10 h-10 mx-auto text-[var(--ink-soft)] mb-2" />
@@ -730,7 +751,7 @@ export default function Conexiones() {
         )}
       </div>
 
-      {/* NUEVA SECCIÓN: TELÉFONOS DE EMPLEADOS PARA REPO/ALERTAS DE WHATSAPP */}
+      {/* SECCIÓN TELÉFONOS DE EMPLEADOS PARA ALERTAS DE WHATSAPP */}
       <div className="mb-10">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -751,69 +772,75 @@ export default function Conexiones() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {telefonos.map((t) => {
-            const probandoTel = probandoTelId === t.id;
-            const resTel = resultadoTelPrueba[t.id];
+        {telefonos.length === 0 ? (
+          <div className="p-6 border-2 border-dashed border-[var(--line)] rounded-2xl text-center">
+            <p className="text-xs text-[var(--ink-soft)]">No hay teléfonos de empleados registrados. Haz clic en "Agregar Empleado" para añadir el primero.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {telefonos.map((t) => {
+              const probandoTel = probandoTelId === t.id;
+              const resTel = resultadoTelPrueba[t.id];
 
-            return (
-              <div key={t.id} className="card p-4 border border-[var(--line)] flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
-                      {t.rol || "Recepción"}
-                    </span>
-                    
-                    {/* Switch Activo Teléfono */}
-                    <label className="relative inline-flex items-center cursor-pointer" title="Activar/Desactivar alertas para este número">
-                      <input
-                        type="checkbox"
-                        checked={t.activo}
-                        onChange={() => toggleActivoTel(t)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
-                    </label>
-                  </div>
-
-                  <h3 className="font-bold text-sm text-[var(--ink)]">{t.nombre_empleado}</h3>
-                  <p className="text-xs font-mono text-[var(--ink-soft)] mt-0.5">📱 {t.telefono}</p>
-                </div>
-
-                <div className="mt-3 pt-3 border-t border-[var(--line)]">
-                  {resTel && (
-                    <div className={`mb-2 p-2 rounded text-[11px] ${resTel.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-600 border border-red-200"}`}>
-                      {resTel.msg}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex gap-1">
-                      <button onClick={() => abrirModalEditarTel(t)} className="btn-ghost text-[11px] p-1 text-[var(--ink-soft)]">
-                        <Icon name="pencil" className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => eliminarTelefono(t.id)} className="btn-ghost text-[11px] p-1 text-[var(--brand-red)]">
-                        <Icon name="trash" className="w-3.5 h-3.5" />
-                      </button>
+              return (
+                <div key={t.id} className="card p-4 border border-[var(--line)] flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                        {t.rol || "Recepción"}
+                      </span>
+                      
+                      {/* Switch Activo Teléfono */}
+                      <label className="relative inline-flex items-center cursor-pointer" title="Activar/Desactivar alertas para este número">
+                        <input
+                          type="checkbox"
+                          checked={t.activo}
+                          onChange={() => toggleActivoTel(t)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                      </label>
                     </div>
 
-                    <button
-                      onClick={() => probarEnvioWhatsApp(t)}
-                      disabled={probandoTel}
-                      className="btn-ghost text-[11px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-1"
-                    >
-                      <Icon name="whatsapp" className="w-3 h-3" />
-                      {probandoTel ? "Enviando…" : "Probar Alerta"}
-                    </button>
+                    <h3 className="font-bold text-sm text-[var(--ink)]">{t.nombre_empleado}</h3>
+                    <p className="text-xs font-mono text-[var(--ink-soft)] mt-0.5">📱 {t.telefono}</p>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-[var(--line)]">
+                    {resTel && (
+                      <div className={`mb-2 p-2 rounded text-[11px] ${resTel.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-600 border border-red-200"}`}>
+                        {resTel.msg}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-1">
+                        <button onClick={() => abrirModalEditarTel(t)} className="btn-ghost text-[11px] p-1 text-[var(--ink-soft)]">
+                          <Icon name="pencil" className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => eliminarTelefono(t.id)} className="btn-ghost text-[11px] p-1 text-[var(--brand-red)]">
+                          <Icon name="trash" className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => probarEnvioWhatsApp(t)}
+                        disabled={probandoTel}
+                        className="btn-ghost text-[11px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-1"
+                      >
+                        <Icon name="whatsapp" className="w-3 h-3" />
+                        {probandoTel ? "Enviando…" : "Probar Alerta"}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* SECCIÓN 3: DISPOSITIVO WHATSAPP */}
+      {/* DISPOSITIVO WHATSAPP */}
       <div className="card p-6 border border-[var(--line)]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
