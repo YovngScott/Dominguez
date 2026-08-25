@@ -90,6 +90,72 @@ async function obtenerTelefonosNotificacion(supabase) {
   return [normalizarTelefono(process.env.SHOP_WHATSAPP || "8095757986")];
 }
 
+// Helpers para ejecución de Gemini con fallback de modelos en caso de cuota agotada
+async function ejecutarConModelosGemini(ai, contents, systemInstruction = null) {
+  const MODEL_CANDIDATES = [
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemini-3.5-flash-lite"
+  ];
+  let lastError = null;
+
+  for (const model of MODEL_CANDIDATES) {
+    try {
+      const config = {};
+      if (systemInstruction) {
+        config.systemInstruction = systemInstruction;
+      }
+      const response = await ai.models.generateContent({
+        model,
+        contents,
+        config
+      });
+      if (response && response.text) {
+        return response;
+      }
+    } catch (err) {
+      console.warn(`[Webhook Gemini Fallback] Modelo ${model} no disponible:`, err.message);
+      lastError = err;
+    }
+  }
+  throw lastError || new Error("No se pudo conectar con Gemini.");
+}
+
+async function ejecutarConModelosGeminiConSchema(ai, contents, responseSchema) {
+  const MODEL_CANDIDATES = [
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemini-3.5-flash-lite"
+  ];
+  let lastError = null;
+
+  for (const model of MODEL_CANDIDATES) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema
+        }
+      });
+      if (response && response.text) {
+        return response;
+      }
+    } catch (err) {
+      console.warn(`[Webhook Gemini Schema Fallback] Modelo ${model} no disponible:`, err.message);
+      lastError = err;
+    }
+  }
+  throw lastError || new Error("No se pudo conectar con Gemini.");
+}
+
 // Helper para buscar si el cliente ya existe registrado en la base de datos
 async function buscarClienteExistente(supabase, senderNumber, senderNorm) {
   try {
@@ -314,6 +380,10 @@ export default async function handler(req, res) {
         const docPrompt = `
           Analiza esta imagen y determina si corresponde a un CARNET DE SEGURO vehicular o a una MATRÍCULA vehicular de la República Dominicana.
           Extrae con precisión todos los datos legibles.
+
+          REGLAS CRÍTICAS:
+          - cliente_nombre: DEBES extraer prioritariamente el nombre que aparece impreso en el CARNET DEL SEGURO (el Asegurado/Conductor). Si hay diferencias de nombre entre la matrícula y el carnet del seguro, coloca el nombre que está en el CARNET DEL SEGURO.
+          - aseguradora_nombre: Identifica y extrae con total precisión el nombre de la aseguradora del carnet del seguro (ej: "Seguros Reservas", "La Colonial de Seguros", "Atlántica de Seguros", "Coop-Seguros", "Seguros Sura", "Seguros La Internacional", "Mapfre", etc.). Observa detenidamente logotipos o marcas de agua para no dejar este campo en blanco.
         `;
 
         const docSchema = {
@@ -336,22 +406,15 @@ export default async function handler(req, res) {
           required: ["es_documento_valido", "tipo_documento"]
         };
 
-        const docRes = await ai.models.generateContent({
-          model: "gemini-3.6-flash",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { text: docPrompt },
-                { inlineData: { mimeType: "image/jpeg", data: rawBase64 } }
-              ]
-            }
-          ],
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: docSchema
+        const docRes = await ejecutarConModelosGeminiConSchema(ai, [
+          {
+            role: "user",
+            parts: [
+              { text: docPrompt },
+              { inlineData: { mimeType: "image/jpeg", data: rawBase64 } }
+            ]
           }
-        });
+        ], docSchema);
 
         const docData = JSON.parse(docRes.text || "{}");
 
@@ -524,13 +587,7 @@ export default async function handler(req, res) {
     `;
 
     // 9) Invocar a Gemini
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: contents,
-      config: {
-        systemInstruction: systemPrompt
-      }
-    });
+    const response = await ejecutarConModelosGemini(ai, contents, systemPrompt);
 
     const replyText = response.text || "Disculpa, no he podido procesar tu mensaje. Por favor contáctanos al 809-575-7986.";
 
