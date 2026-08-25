@@ -46,8 +46,20 @@ export default async function handler(req, res) {
     auth: { persistSession: false }
   });
   const ai = new GoogleGenAI({ apiKey: geminiKey });
-
   const action = req.query?.action || req.body?.action;
+
+  if (action === "listar_modelos") {
+    try {
+      const list = await ai.models.list();
+      const names = [];
+      for await (const m of list) {
+        names.push({ name: m.name, displayName: m.displayName, supportedGenerationMethods: m.supportedGenerationMethods });
+      }
+      return res.status(200).json({ success: true, models: names });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
 
   // Función auxiliar de fallback para evitar errores 429 (Rate Limits) en producción
   async function ejecutarConModelosGemini(contents, responseSchema) {
