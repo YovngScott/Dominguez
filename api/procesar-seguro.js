@@ -508,23 +508,24 @@ export default async function handler(req, res) {
     if (!caseData) {
       // Search by Chassis first
       const { data: casesByChasis } = await supabase
-      .from("casos")
-      .select("id, placa, chasis, numero_reclamo, estado, cliente:clientes(nombre)")
-      .ilike("chasis", `%${normalizedChasis}%`)
-      .limit(1);
-
-    if (casesByChasis && casesByChasis.length > 0) {
-      caseData = casesByChasis[0];
-    } else if (normalizedReclamo) {
-      // Fallback: Search by Claim number
-      const { data: casesByReclamo } = await supabase
         .from("casos")
         .select("id, placa, chasis, numero_reclamo, estado, cliente:clientes(nombre)")
-        .ilike("numero_reclamo", `%${normalizedReclamo}%`)
+        .ilike("chasis", `%${normalizedChasis}%`)
         .limit(1);
 
-      if (casesByReclamo && casesByReclamo.length > 0) {
-        caseData = casesByReclamo[0];
+      if (casesByChasis && casesByChasis.length > 0) {
+        caseData = casesByChasis[0];
+      } else if (normalizedReclamo) {
+        // Fallback: Search by Claim number
+        const { data: casesByReclamo } = await supabase
+          .from("casos")
+          .select("id, placa, chasis, numero_reclamo, estado, cliente:clientes(nombre)")
+          .ilike("numero_reclamo", `%${normalizedReclamo}%`)
+          .limit(1);
+
+        if (casesByReclamo && casesByReclamo.length > 0) {
+          caseData = casesByReclamo[0];
+        }
       }
     }
 
