@@ -23,7 +23,7 @@ export default function TrabajadorDetail() {
     const [t, a, c] = await Promise.all([
       supabase.from("trabajadores_taller").select("*").eq("id", trabajadorId).maybeSingle(),
       supabase.from("casos_trabajadores").select(`id, estado, asignado_at, completado_at, caso:casos(${CASO_SELECT})`).eq("trabajador_id", trabajadorId).order("asignado_at", { ascending: false }),
-      supabase.from("casos").select(CASO_SELECT).eq("estado", "vehiculo_en_taller").order("updated_at", { ascending: false }),
+      supabase.from("casos").select(CASO_SELECT).in("estado", ["en_espera_piezas", "listo_para_trabajar", "vehiculo_en_taller"]).order("updated_at", { ascending: false }),
     ]);
     setTrabajador(t.data || null); setAsignaciones(a.data || []); setCasos(c.data || []);
   }
@@ -36,7 +36,12 @@ export default function TrabajadorDetail() {
     setGuardando(true); setError("");
     const { data: auth } = await supabase.auth.getUser();
     const { error: e } = await supabase.from("casos_trabajadores").upsert({ caso_id: casoId, trabajador_id: trabajadorId, estado: "asignado", asignado_at: new Date().toISOString(), completado_at: null, asignado_por: auth.user?.id || null }, { onConflict: "caso_id,trabajador_id" });
-    if (e) setError(e.message); else { setModal(false); setBusqueda(""); await cargar(); }
+    if (e) {
+      setError(e.message);
+    } else {
+      await supabase.from("casos").update({ estado: "vehiculo_en_taller" }).eq("id", casoId);
+      setModal(false); setBusqueda(""); await cargar();
+    }
     setGuardando(false);
   }
 
@@ -238,5 +243,51 @@ function CompletarModal({ asignacion, onClose, onConfirmar, guardando }) {
 }
 
 function AsignarModal({ busqueda, onBusqueda, resultados, onClose, onAsignar, guardando }) {
-  return <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-end sm:items-center justify-center"><div className="card w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"><div className="p-5 border-b border-[var(--line)] flex items-center justify-between"><div><h2 className="font-extrabold text-lg text-[var(--ink)]">Asignar vehículo</h2><p className="text-sm text-[var(--ink-soft)]">Solo aparecen vehículos que están en el taller.</p></div><button onClick={onClose} className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)]"><Icon name="close" /></button></div><div className="p-5"><input autoFocus value={busqueda} onChange={(e) => onBusqueda(e.target.value)} className="input w-full" placeholder="Llave, placa, reclamo, chasis o asegurado…" /></div><div className="overflow-y-auto border-t border-[var(--line)]">{resultados.map((c) => <button key={c.id} disabled={guardando} onClick={() => onAsignar(c.id)} className="w-full p-4 text-left border-b border-[var(--line)] hover:bg-[var(--paper)] disabled:opacity-50"><p className="font-bold text-[var(--ink)]">{vehiculo(c)}{c.numero_llave ? ` · Llave #${c.numero_llave}` : ""}</p><p className="text-sm text-[var(--ink-soft)]">{c.cliente?.nombre_completo || "Sin asegurado"}{c.placa ? ` · Placa ${c.placa}` : ""}{c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}</p></button>)}{resultados.length === 0 && <p className="p-7 text-center text-sm text-[var(--ink-soft)]">No hay vehículos en el taller que coincidan.</p>}</div></div></div>;
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-end sm:items-center justify-center">
+      <div className="card w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="p-5 border-b border-[var(--line)] flex items-center justify-between">
+          <div>
+            <h2 className="font-extrabold text-lg text-[var(--ink)]">Asignar vehículo</h2>
+            <p className="text-sm text-[var(--ink-soft)]">Aparecen todos los vehículos activos del taller.</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)]">
+            <Icon name="close" />
+          </button>
+        </div>
+        <div className="p-5">
+          <input
+            autoFocus
+            value={busqueda}
+            onChange={(e) => onBusqueda(e.target.value)}
+            className="input w-full"
+            placeholder="Llave, placa, reclamo, chasis o asegurado…"
+          />
+        </div>
+        <div className="overflow-y-auto border-t border-[var(--line)]">
+          {resultados.map((c) => (
+            <button
+              key={c.id}
+              disabled={guardando}
+              onClick={() => onAsignar(c.id)}
+              className="w-full p-4 text-left border-b border-[var(--line)] hover:bg-[var(--paper)] disabled:opacity-50"
+            >
+              <p className="font-bold text-[var(--ink)]">
+                {vehiculo(c)}
+                {c.numero_llave ? ` · Llave #${c.numero_llave}` : ""}
+              </p>
+              <p className="text-sm text-[var(--ink-soft)]">
+                {c.cliente?.nombre_completo || "Sin asegurado"}
+                {c.placa ? ` · Placa ${c.placa}` : ""}
+                {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
+              </p>
+            </button>
+          ))}
+          {resultados.length === 0 && (
+            <p className="p-7 text-center text-sm text-[var(--ink-soft)]">No hay vehículos que coincidan.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
