@@ -168,6 +168,31 @@ export async function conectarWhatsapp({ number } = {}) {
   }
 }
 
+// Configura automáticamente el Webhook en la instancia de Evolution API
+export async function configurarWebhookEvolution(webhookUrl = "https://dominguez.vercel.app/api/whatsapp-webhook") {
+  const { apiUrl, apiKey, instancia, ok } = evolutionConfig();
+  if (!ok) return { ok: false, error: "Evolution no configurado." };
+  try {
+    const r = await fetch(`${apiUrl}/webhook/set/${encodeURIComponent(instancia)}`, {
+      method: "POST",
+      headers: { apikey: apiKey, "content-type": "application/json" },
+      body: JSON.stringify({
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          byEvents: false,
+          base64: true,
+          events: ["MESSAGES_UPSERT"]
+        }
+      })
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, data, error: !r.ok ? (data?.message || "Error al configurar webhook") : null };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // Valida que la petición traiga una sesión válida de Supabase (usuario logueado).
 export async function validarSesionSupabase(req) {
   const token = (req.headers.authorization || "").replace("Bearer ", "").trim();

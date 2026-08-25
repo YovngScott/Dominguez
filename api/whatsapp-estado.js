@@ -1,6 +1,6 @@
 /* global process */
 // Endpoint consolidado para estado de WhatsApp, sincronización global de cuentas/teléfonos y envío de alertas de prueba.
-import { estadoWhatsapp, conectarWhatsapp, enviarTextoWhatsapp, normalizarTelefono } from "../whatsapp/evolution.js";
+import { estadoWhatsapp, conectarWhatsapp, enviarTextoWhatsapp, normalizarTelefono, configurarWebhookEvolution } from "../whatsapp/evolution.js";
 import { createClient } from "@supabase/supabase-js";
 
 const ID_FALLBACK_TELEFONOS = "00000000-0000-0000-0000-000000000099";
@@ -175,9 +175,15 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, message: "Alerta enviada por WhatsApp con éxito." });
   }
 
-  // 4. Flujo para vincular (conectar) WhatsApp
+  // 4. Flujo para vincular (conectar) WhatsApp y auto-configurar Webhook
+  if (action === "configurar_webhook") {
+    const r = await configurarWebhookEvolution();
+    return res.status(200).json({ success: r.ok, error: r.error || null, data: r.data || null });
+  }
+
   if (action === "conectar") {
     const number = req.query?.number ? String(req.query.number) : undefined;
+    await configurarWebhookEvolution();
     const r = await conectarWhatsapp({ number });
     if (!r.ok) return res.status(r.status || 500).json({ error: r.error });
     return res.status(200).json({ base64: r.base64, code: r.code, pairingCode: r.pairingCode });
