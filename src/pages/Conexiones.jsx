@@ -100,6 +100,23 @@ export default function Conexiones() {
     const code = searchParams.get("code");
     const state = searchParams.get("state");
     if (code) {
+      const pendingRaw = localStorage.getItem("oauth_pending_account");
+      if (pendingRaw) {
+        try {
+          const pending = JSON.parse(pendingRaw);
+          pending.estado_oauth = "autorizado";
+          pending.autorizado_at = new Date().toISOString();
+          
+          // Guardar en la base de datos y recargar
+          supabase.from("cuentas_correo_config").upsert(pending).then(() => {
+            cargarCuentas();
+          });
+          
+          localStorage.removeItem("oauth_pending_account");
+        } catch (e) {
+          console.error("Error al guardar cuenta tras OAuth:", e);
+        }
+      }
       setNotificacionOAuth({
         tipo: "exito",
         texto: "¡Acceso concedido con éxito! El bot de IA ha quedado autorizado para leer esta cuenta de correo."
@@ -362,8 +379,9 @@ export default function Conexiones() {
       /* fallback */
     }
 
-    // Si eligió método OAuth y no es un dominio personalizado, disparamos la ventana de inicio de sesión
+    // Si eligió método OAuth y no es un dominio personalizado, guardamos el estado y disparamos la ventana de inicio de sesión
     if (metodoAuth === "oauth") {
+      localStorage.setItem("oauth_pending_account", JSON.stringify(payload));
       if (form.proveedor === "gmail" || form.proveedor === "google_workspace") {
         iniciarGoogleOAuth(emailClean);
       } else if (form.proveedor === "outlook") {
