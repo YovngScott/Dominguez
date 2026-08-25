@@ -5,6 +5,23 @@ import { createClient } from "@supabase/supabase-js";
 
 const ID_FALLBACK_TELEFONOS = "00000000-0000-0000-0000-000000000099";
 
+function getFallbackRecord(lista) {
+  return {
+    id: ID_FALLBACK_TELEFONOS,
+    email: "telefonos@notificaciones.internal",
+    nombre_cuenta: "Configuración Teléfonos Empleados",
+    proveedor: "dominio_personalizado",
+    token_acceso: JSON.stringify(lista),
+    es_predeterminado: false,
+    activo: true,
+    frecuencia_minutos: 5,
+    imap_host: "localhost",
+    imap_port: 993,
+    estado_oauth: "autorizado",
+    autorizado_at: new Date().toISOString()
+  };
+}
+
 export default async function handler(req, res) {
   const sbUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -45,10 +62,10 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: !error, error: error?.message || null });
   }
 
-  // 2. Acciones para teléfonos de empleados (Sincronización dual garantizada)
+  // 2. Acciones para teléfonos de empleados (Sincronización dual con esquema completo)
   if (action === "listar_telefonos") {
     if (!supabase) return res.status(200).json({ data: [] });
-    
+
     let result = [];
     const { data, error } = await supabase.from("telefonos_notificacion").select("*").order("created_at", { ascending: true });
     if (!error && data && data.length > 0) {
@@ -81,7 +98,7 @@ export default async function handler(req, res) {
       /* fallback */
     }
 
-    // Sincronizar siempre en cuentas_correo_config bajo ID_FALLBACK_TELEFONOS
+    // Sincronizar siempre en cuentas_correo_config bajo ID_FALLBACK_TELEFONOS con esquema completo
     const { data: existing } = await supabase
       .from("cuentas_correo_config")
       .select("token_acceso")
@@ -100,14 +117,13 @@ export default async function handler(req, res) {
     if (idx >= 0) lista[idx] = payload;
     else lista.push(payload);
 
-    await supabase.from("cuentas_correo_config").upsert({
-      id: ID_FALLBACK_TELEFONOS,
-      email: "telefonos@notificaciones.internal",
-      nombre_cuenta: "Configuración Teléfonos Empleados",
-      token_acceso: JSON.stringify(lista),
-      es_predeterminado: false,
-      activo: true
-    });
+    const { error: errUpsert } = await supabase
+      .from("cuentas_correo_config")
+      .upsert(getFallbackRecord(lista));
+
+    if (errUpsert) {
+      console.error("Error al guardar fallback telefonos:", errUpsert);
+    }
 
     return res.status(200).json({ success: true, data: lista });
   }
@@ -135,14 +151,7 @@ export default async function handler(req, res) {
       try {
         lista = JSON.parse(existing[0].token_acceso);
         lista = lista.filter((t) => t.id !== id);
-        await supabase.from("cuentas_correo_config").upsert({
-          id: ID_FALLBACK_TELEFONOS,
-          email: "telefonos@notificaciones.internal",
-          nombre_cuenta: "Configuración Teléfonos Empleados",
-          token_acceso: JSON.stringify(lista),
-          es_predeterminado: false,
-          activo: true
-        });
+        await supabase.from("cuentas_correo_config").upsert(getFallbackRecord(lista));
       } catch {
         /* ignore */
       }
