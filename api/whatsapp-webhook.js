@@ -74,6 +74,8 @@ async function obtenerTelefonosNotificacion(supabase) {
 async function buscarClienteExistente(supabase, senderNumber, senderNorm) {
   try {
     const s10 = senderNumber.length >= 10 ? senderNumber.slice(-10) : senderNumber;
+    
+    // 1. Buscar en la tabla clientes
     const { data: listCli } = await supabase
       .from("clientes")
       .select("id, nombre_completo, telefono, email, rnc_cedula");
@@ -90,6 +92,31 @@ async function buscarClienteExistente(supabase, senderNumber, senderNorm) {
         );
       });
       if (match) return match;
+    }
+
+    // 2. Buscar en la tabla citas por teléfono
+    const { data: listCitas } = await supabase
+      .from("citas")
+      .select("id, nombre_cliente, telefono, vehiculo, cliente_id");
+
+    if (listCitas && listCitas.length > 0) {
+      const matchCita = listCitas.find((ct) => {
+        const telLimpio = (ct.telefono || "").replace(/\D/g, "");
+        return (
+          telLimpio &&
+          (telLimpio.includes(s10) ||
+            s10.includes(telLimpio) ||
+            telLimpio.endsWith(s10) ||
+            s10.endsWith(telLimpio))
+        );
+      });
+      if (matchCita) {
+        return {
+          id: matchCita.cliente_id || `cita_${matchCita.id}`,
+          nombre_completo: matchCita.nombre_cliente || "Cliente del Taller",
+          telefono: matchCita.telefono
+        };
+      }
     }
   } catch (e) {
     console.warn("Error buscando cliente existente:", e.message);
