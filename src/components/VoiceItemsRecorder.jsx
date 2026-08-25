@@ -213,11 +213,11 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
           type="button"
           onClick={iniciarGrabacion}
           disabled={procesandoIA}
-          className="btn-ghost text-xs py-1.5 px-3 bg-red-50 hover:bg-red-100 text-[var(--brand-red)] font-bold border border-red-200 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
-          title="Dictar piezas o mano de obra por voz"
+          className="btn-ghost text-xs py-1.5 px-3.5 bg-red-50 hover:bg-red-100 text-[var(--brand-red)] font-bold border border-red-200 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
+          title="Grabar dictado de piezas o mano de obra"
         >
           <span className="w-2 h-2 rounded-full bg-[var(--brand-red)] animate-ping inline-block"></span>
-          <Icon name="mic" className="w-3.5 h-3.5" />
+          <Icon name="mic" className="w-4 h-4" />
           <span>Dictar por voz</span>
         </button>
       )}
@@ -233,8 +233,8 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
           <button
             type="button"
             onClick={detenerGrabacion}
-            className="bg-white text-red-600 hover:bg-gray-100 px-2.5 py-1 rounded-lg text-xs font-extrabold shadow-sm flex items-center gap-1 ml-1"
-            title="Detener grabación"
+            className="bg-white text-red-600 hover:bg-gray-100 px-3 py-1 rounded-lg text-xs font-extrabold shadow-sm flex items-center gap-1 ml-1"
+            title="Detener grabación para revisar y guardar"
           >
             ⏹️ Detener
           </button>
@@ -243,7 +243,7 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
             type="button"
             onClick={descartarAudio}
             className="bg-red-700 hover:bg-red-800 text-white p-1 rounded-lg text-xs"
-            title="Eliminar / Cancelar"
+            title="Descartar / Cancelar audio"
           >
             <Icon name="trash" className="w-3.5 h-3.5" />
           </button>
@@ -252,7 +252,7 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
 
       {/* 3. Audio Grabado (Listo para escuchar, procesar o descartar) */}
       {!grabando && audioBlob && (
-        <div className="flex flex-wrap items-center gap-1.5 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-xl shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-xl shadow-sm">
           <span className="text-xs font-bold text-indigo-900 font-mono mr-1">
             🎙️ Audio ({formatoTiempo(tiempoGrabacion)})
           </span>
@@ -260,8 +260,8 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
           <button
             type="button"
             onClick={toggleReproduccion}
-            className="btn-ghost text-xs py-1 px-2 bg-white text-indigo-700 hover:bg-indigo-100 rounded-lg border border-indigo-200 flex items-center gap-1 font-semibold"
-            title={reproduciendo ? "Pausar" : "Escuchar"}
+            className="btn-ghost text-xs py-1 px-2.5 bg-white text-indigo-700 hover:bg-indigo-100 rounded-lg border border-indigo-200 flex items-center gap-1 font-semibold"
+            title={reproduciendo ? "Pausar" : "Escuchar audio grabado"}
           >
             {reproduciendo ? "⏸️ Pausa" : "▶️ Escuchar"}
           </button>
@@ -280,9 +280,9 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
             type="button"
             onClick={procesarAudioConIA}
             disabled={procesandoIA}
-            className="btn-primary text-xs py-1 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+            className="btn-primary text-xs py-1.5 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50"
           >
-            ✨ {procesandoIA ? "Procesando…" : "Insertar Piezas con IA"}
+            💾 {procesandoIA ? "Procesando con IA…" : "Guardar y Aplicar con IA"}
           </button>
         </div>
       )}
