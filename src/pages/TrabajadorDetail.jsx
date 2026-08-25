@@ -23,7 +23,7 @@ export default function TrabajadorDetail() {
     const [t, a, c] = await Promise.all([
       supabase.from("trabajadores_taller").select("*").eq("id", trabajadorId).maybeSingle(),
       supabase.from("casos_trabajadores").select(`id, estado, asignado_at, completado_at, caso:casos(${CASO_SELECT})`).eq("trabajador_id", trabajadorId).order("asignado_at", { ascending: false }),
-      supabase.from("casos").select(CASO_SELECT).in("estado", ["en_espera_piezas", "listo_para_trabajar", "vehiculo_en_taller"]).order("updated_at", { ascending: false }),
+      supabase.from("casos").select(CASO_SELECT).eq("estado", "vehiculo_en_taller").order("updated_at", { ascending: false }),
     ]);
     setTrabajador(t.data || null); setAsignaciones(a.data || []); setCasos(c.data || []);
   }
@@ -36,12 +36,7 @@ export default function TrabajadorDetail() {
     setGuardando(true); setError("");
     const { data: auth } = await supabase.auth.getUser();
     const { error: e } = await supabase.from("casos_trabajadores").upsert({ caso_id: casoId, trabajador_id: trabajadorId, estado: "asignado", asignado_at: new Date().toISOString(), completado_at: null, asignado_por: auth.user?.id || null }, { onConflict: "caso_id,trabajador_id" });
-    if (e) {
-      setError(e.message);
-    } else {
-      await supabase.from("casos").update({ estado: "vehiculo_en_taller" }).eq("id", casoId);
-      setModal(false); setBusqueda(""); await cargar();
-    }
+    if (e) setError(e.message); else { setModal(false); setBusqueda(""); await cargar(); }
     setGuardando(false);
   }
 
@@ -249,7 +244,7 @@ function AsignarModal({ busqueda, onBusqueda, resultados, onClose, onAsignar, gu
         <div className="p-5 border-b border-[var(--line)] flex items-center justify-between">
           <div>
             <h2 className="font-extrabold text-lg text-[var(--ink)]">Asignar vehículo</h2>
-            <p className="text-sm text-[var(--ink-soft)]">Aparecen todos los vehículos activos del taller.</p>
+            <p className="text-sm text-[var(--ink-soft)]">Solo aparecen vehículos que están en el taller.</p>
           </div>
           <button onClick={onClose} className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)]">
             <Icon name="close" />
