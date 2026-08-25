@@ -43,6 +43,7 @@ const TrabajadoresList = lazy(() => import("./pages/TrabajadoresList"));
 const ReporteTrabajadores = lazy(() => import("./pages/ReporteTrabajadores"));
 const Usuarios = lazy(() => import("./pages/Usuarios"));
 const Llaves = lazy(() => import("./pages/Llaves"));
+const Conexiones = lazy(() => import("./pages/Conexiones"));
 
 // Orden lógico por flujo de trabajo (de lo más usado a lo menos):
 // operación diaria → almacén de piezas → agenda/cierre → directorio → análisis.
@@ -59,6 +60,7 @@ const NAV = [
   { to: "/entregados", label: "Vehículos entregados", icon: "check" },
   { to: "/clientes", label: "Clientes", icon: "user" },
   { to: "/contactos", label: "Contactos", icon: "mail" },
+  { to: "/conexiones", label: "Conexiones Bot", icon: "link" },
   { to: "/reportes", label: "Reportes", icon: "file" },
   { to: "/taller/reporte", label: "Reporte de taller", icon: "wrench" },
   { to: "/usuarios", label: "Usuarios", icon: "user", soloAdmin: true },
@@ -503,6 +505,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <ContactosList />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/conexiones"
+        element={
+          <PrivateLayout>
+            <Conexiones />
           </PrivateLayout>
         }
       />
