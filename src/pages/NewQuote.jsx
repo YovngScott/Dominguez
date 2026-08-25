@@ -15,6 +15,8 @@ import {
 } from "../lib/catalogo";
 import { useFormDraft, clearFormDraft } from "../hooks/useFormDraft";
 import Icon from "../components/Icon";
+import DocumentAiUploader from "../components/DocumentAiUploader";
+import VoiceItemsRecorder from "../components/VoiceItemsRecorder";
 import {
   calcularItem,
   calcularTotales,
@@ -245,6 +247,81 @@ export default function NewQuote() {
 
     setModal(null);
   }
+
+  // ---- Procesamiento con IA: Documentos (Carnet / Matrícula) ----
+  function handleDocumentParsed(data) {
+    if (!data) return;
+    setForm((f) => {
+      let matchedAsegId = f.aseguradora_id;
+      if (data.aseguradora_nombre && aseguradoras.length > 0) {
+        const asgClean = data.aseguradora_nombre.toLowerCase();
+        const found = aseguradoras.find(
+          (a) => asgClean.includes(a.nombre.toLowerCase()) || a.nombre.toLowerCase().includes(asgClean)
+        );
+        if (found) matchedAsegId = found.id;
+      }
+
+      return {
+        ...f,
+        cliente_nombre: data.cliente_nombre || f.cliente_nombre,
+        cliente_email: data.email || f.cliente_email,
+        telefonos: data.telefono ? [data.telefono] : f.telefonos,
+        marca: data.marca || f.marca,
+        modelo: data.modelo || f.modelo,
+        anio: data.anio ? String(data.anio) : f.anio,
+        color: data.color || f.color,
+        placa: data.placa || f.placa,
+        chasis: data.chasis || f.chasis,
+        tipo_vehiculo: data.tipo_vehiculo || f.tipo_vehiculo,
+        aseguradora_id: matchedAsegId,
+        numero_reclamo: data.numero_reclamo || f.numero_reclamo,
+        numero_poliza: data.numero_poliza || f.numero_poliza,
+      };
+    });
+  }
+
+  // ---- Procesamiento con IA: Dictado de Voz (Piezas y Mano de Obra) ----
+  function handleVoiceItemsExtracted({ piezas = [], servicios = [] }) {
+    setForm((f) => {
+      const nuevasPiezas = [...f.items_piezas];
+      const nuevosServicios = [...f.items_mano_obra];
+
+      piezas.forEach((p) => {
+        const nom = normalizarNombrePieza(p.nombre);
+        if (nom) {
+          nuevasPiezas.push({
+            nombre: nom,
+            cantidad: p.cantidad || 1,
+            precio: p.precio || 0,
+            itbis_pct: p.itbis_pct ?? 18,
+            incluye_itbis: !!p.incluye_itbis,
+          });
+        }
+      });
+
+      servicios.forEach((s) => {
+        const nom = (s.nombre || "Servicio").trim();
+        const pz = s.pieza ? normalizarNombrePieza(s.pieza) : "";
+        if (nom) {
+          nuevosServicios.push({
+            nombre: nom,
+            pieza: pz,
+            cantidad: s.cantidad || 1,
+            precio: s.precio || 0,
+            itbis_pct: s.itbis_pct ?? 18,
+            incluye_itbis: !!s.incluye_itbis,
+          });
+        }
+      });
+
+      return {
+        ...f,
+        items_piezas: nuevasPiezas,
+        items_mano_obra: nuevosServicios,
+      };
+    });
+  }
+
   function borrarItem(tipo, index) {
     const key = tipo === "pieza" ? "items_piezas" : "items_mano_obra";
     setForm((f) => ({ ...f, [key]: f[key].filter((_, i) => i !== index) }));
@@ -566,6 +643,9 @@ export default function NewQuote() {
       <div className="grid lg:grid-cols-[1fr_330px] gap-6 items-start">
         {/* ===== Columna del formulario ===== */}
         <div className="space-y-5 min-w-0">
+          {/* Superpoder IA: Subida de Carnet y Matrícula */}
+          <DocumentAiUploader onParsed={handleDocumentParsed} />
+
           {/* Cliente */}
           <Section icon="user" title="Datos del cliente" desc="Quién es el dueño del vehículo">
             <div className="grid sm:grid-cols-2 gap-4">
@@ -646,11 +726,14 @@ export default function NewQuote() {
             </div>
           </Section>
 
-          {/* Piezas */}
+          {/* Piezas con Dictado de Voz */}
           <ItemsCard
             icon="layers"
             titulo="Valoración de piezas"
             boton="+ Agregar pieza"
+            voiceSlot={
+              <VoiceItemsRecorder onItemsExtracted={handleVoiceItemsExtracted} tipo="piezas" />
+            }
             onAdd={() => setModal({ tipo: "pieza", index: null })}
             items={form.items_piezas}
             columnas={["Pieza", "Cant.", "Precio", "ITBIS", "Total"]}
@@ -664,11 +747,14 @@ export default function NewQuote() {
             }
           />
 
-          {/* Mano de obra */}
+          {/* Mano de obra con Dictado de Voz */}
           <ItemsCard
             icon="wrench"
             titulo="Valoración de mano de obra"
             boton="+ Agregar servicio"
+            voiceSlot={
+              <VoiceItemsRecorder onItemsExtracted={handleVoiceItemsExtracted} tipo="servicios" />
+            }
             onAdd={() => setModal({ tipo: "servicio", index: null })}
             items={form.items_mano_obra}
             columnas={["Descripción", "Cant.", "Precio", "ITBIS", "Total"]}
@@ -794,11 +880,11 @@ function sumaNeta(items) {
   return (items || []).reduce((acc, it) => acc + calcularItem(it).neto, 0);
 }
 
-function ItemsCard({ icon, titulo, boton, onAdd, items, columnas, fila, onEdit, onDelete }) {
+function ItemsCard({ icon, titulo, boton, onAdd, items, columnas, fila, onEdit, onDelete, voiceSlot }) {
   const totalGrupo = (items || []).reduce((acc, it) => acc + calcularItem(it).total, 0);
   return (
     <div className="card overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--line)]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-4 border-b border-[var(--line)] gap-3">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-[var(--brand-red-50)] text-[var(--brand-red)] flex items-center justify-center"><Icon name={icon} className="w-5 h-5" /></span>
           <div>
@@ -806,7 +892,10 @@ function ItemsCard({ icon, titulo, boton, onAdd, items, columnas, fila, onEdit, 
             <p className="text-xs text-[var(--ink-soft)]">{items.length} item(s) · {rd(totalGrupo)}</p>
           </div>
         </div>
-        <button onClick={onAdd} className="btn-primary text-sm py-2 px-3 whitespace-nowrap">{boton}</button>
+        <div className="flex flex-wrap items-center gap-2">
+          {voiceSlot}
+          <button onClick={onAdd} className="btn-primary text-sm py-2 px-3 whitespace-nowrap">{boton}</button>
+        </div>
       </div>
 
       {items.length === 0 ? (
