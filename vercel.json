@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/api/whatsapp-conectar", "destination": "/api/whatsapp-estado?action=conectar" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
   "crons": [
     { "path": "/api/recordatorios-citas", "schedule": "0 13 * * *" },
     { "path": "/api/alerta-stock", "schedule": "30 12 * * *" }
