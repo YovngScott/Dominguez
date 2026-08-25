@@ -32,9 +32,9 @@ export default function DocumentAiUploader({ onParsed, disabled = false }) {
         const img = new Image();
         img.onload = () => {
           try {
-            const maxDim = 1500;
-            let w = img.width || 1200;
-            let h = img.height || 800;
+            const maxDim = 900;
+            let w = img.width || 1000;
+            let h = img.height || 700;
             if (w > maxDim || h > maxDim) {
               if (w > h) {
                 h = Math.round((h * maxDim) / w);
@@ -53,7 +53,7 @@ export default function DocumentAiUploader({ onParsed, disabled = false }) {
             ctx.fillRect(0, 0, w, h);
             ctx.drawImage(img, 0, 0, w, h);
 
-            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.65);
             const base64 = compressedDataUrl.split(",")[1];
 
             const item = {
