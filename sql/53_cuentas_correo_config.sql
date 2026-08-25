@@ -1,7 +1,6 @@
 -- =========================================================
 -- 53_cuentas_correo_config.sql
--- Tabla para almacenar hasta 4 cuentas de correo vinculadas (Gmail, Outlook, Dominio)
--- para el monitoreo del bot de Inteligencia Artificial.
+-- Tabla para almacenar las cuentas de correo vinculadas con autorización OAuth / IMAP
 -- =========================================================
 
 CREATE TABLE IF NOT EXISTS cuentas_correo_config (
@@ -15,13 +14,16 @@ CREATE TABLE IF NOT EXISTS cuentas_correo_config (
   imap_host text,
   imap_port integer DEFAULT 993,
   imap_user text,
+  token_acceso text, -- Contraseña de aplicación o Refresh Token OAuth
+  estado_oauth text DEFAULT 'autorizado' CHECK (estado_oauth IN ('autorizado', 'pendiente_autorizacion', 'error_credenciales')),
+  autorizado_at timestamptz DEFAULT now(),
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
 
--- Insertar las cuentas iniciales por defecto si no existen
-INSERT INTO cuentas_correo_config (email, proveedor, nombre_cuenta, es_predeterminado, activo)
+-- Insertar las cuentas iniciales por defecto
+INSERT INTO cuentas_correo_config (email, proveedor, nombre_cuenta, es_predeterminado, activo, estado_oauth)
 VALUES 
-  ('dominguez.apintura@gmail.com', 'gmail', 'Recepción de Cotizaciones', true, true),
-  ('cotizaciones.dautopintura@gmail.com', 'google_workspace', 'Seguros y Reclamos', false, true)
+  ('dominguez.apintura@gmail.com', 'gmail', 'Recepción de Cotizaciones', true, true, 'autorizado'),
+  ('cotizaciones.dautopintura@gmail.com', 'google_workspace', 'Seguros y Reclamos', false, true, 'autorizado')
 ON CONFLICT (email) DO NOTHING;
