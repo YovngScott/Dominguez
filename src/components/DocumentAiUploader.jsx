@@ -21,35 +21,77 @@ export default function DocumentAiUploader({ onParsed, disabled = false }) {
     setExito(false);
 
     try {
-      let blobToSend = file;
-      if (file.type.startsWith("image/")) {
-        try {
-          blobToSend = await compressImage(file, { maxWidth: 1600, maxHeight: 1600, quality: 0.85 });
-        } catch {
-          blobToSend = file;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const rawData = e.target?.result;
+        if (!rawData || typeof rawData !== "string") {
+          setError("No se pudo leer el archivo seleccionado.");
+          return;
         }
-      }
 
-      const preview = URL.createObjectURL(blobToSend);
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blobToSend);
-      });
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const maxDim = 1500;
+            let w = img.width || 1200;
+            let h = img.height || 800;
+            if (w > maxDim || h > maxDim) {
+              if (w > h) {
+                h = Math.round((h * maxDim) / w);
+                w = maxDim;
+              } else {
+                w = Math.round((w * maxDim) / h);
+                h = maxDim;
+              }
+            }
 
-      const item = {
-        file,
-        preview,
-        base64,
-        mimeType: blobToSend.type || "image/jpeg"
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            const base64 = compressedDataUrl.split(",")[1];
+
+            const item = {
+              file,
+              preview: compressedDataUrl,
+              base64,
+              mimeType: "image/jpeg"
+            };
+
+            if (tipo === "carnet") {
+              setCarnet(item);
+            } else {
+              setMatricula(item);
+            }
+          } catch (canvasErr) {
+            console.warn("Canvas resize warning:", canvasErr);
+            const base64 = rawData.includes(",") ? rawData.split(",")[1] : rawData;
+            const item = { file, preview: rawData, base64, mimeType: file.type || "image/jpeg" };
+            if (tipo === "carnet") setCarnet(item);
+            else setMatricula(item);
+          }
+        };
+
+        img.onerror = () => {
+          const base64 = rawData.includes(",") ? rawData.split(",")[1] : rawData;
+          const item = { file, preview: rawData, base64, mimeType: file.type || "image/jpeg" };
+          if (tipo === "carnet") setCarnet(item);
+          else setMatricula(item);
+        };
+
+        img.src = rawData;
       };
 
-      if (tipo === "carnet") {
-        setCarnet(item);
-      } else {
-        setMatricula(item);
-      }
+      reader.onerror = () => {
+        setError("Error al leer el archivo desde el dispositivo.");
+      };
+
+      reader.readAsDataURL(file);
     } catch (err) {
       console.error("Error al cargar imagen:", err);
       setError("No se pudo cargar la imagen seleccionada.");

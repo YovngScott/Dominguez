@@ -158,16 +158,18 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
         reader.readAsDataURL(audioBlob);
       });
 
+      const cleanMime = audioBlob.type || (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.("audio/webm") ? "audio/webm" : "audio/mp4");
+
       const res = await fetch("/api/procesar-seguro?action=procesar_audio_piezas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           audioBase64: base64,
-          mimeType: audioBlob.type || "audio/webm"
+          mimeType: cleanMime
         })
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.success) {
         throw new Error(json.error || "No se pudieron procesar las piezas con IA.");
       }
@@ -193,7 +195,11 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
       }, 3000);
     } catch (err) {
       console.error("Error al procesar dictado con IA:", err);
-      setError(err.message || "Error al procesar el dictado.");
+      let userMsg = err.message || "";
+      if (userMsg === "Load failed" || userMsg.includes("Failed to fetch") || userMsg.includes("NetworkError")) {
+        userMsg = "Error al enviar el audio. Revisa tu conexión a internet o intenta grabar de nuevo.";
+      }
+      setError(userMsg || "Error al procesar el dictado.");
     } finally {
       setProcesandoIA(false);
     }

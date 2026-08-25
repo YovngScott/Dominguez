@@ -10,33 +10,49 @@
  * para máxima compatibilidad fuera del navegador.
  */
 export async function compressImage(file, { maxWidth = 1600, quality = 0.8 } = {}) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, maxWidth / bitmap.width);
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
+  try {
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const scale = Math.min(1, maxWidth / (img.width || 1600));
+            const width = Math.round((img.width || 1600) * scale);
+            const height = Math.round((img.height || 1200) * scale);
 
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  // Fondo blanco por si el origen tuviera transparencia (queda igual en JPG/WebP).
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
-  ctx.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close?.();
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
 
-  let blob = await aBlob(canvas, "image/webp", quality);
-  let tipo = "image/webp";
-  if (!blob) {
-    // Navegador sin soporte de codificación WebP (raro): cae a JPEG.
-    blob = await aBlob(canvas, "image/jpeg", quality);
-    tipo = "image/jpeg";
+            canvas.toBlob(
+              (blob) => {
+                if (blob) {
+                  const ext = ".jpg";
+                  const cleanName = (file.name || "foto.jpg").replace(/\.\w+$/, ext);
+                  resolve(new File([blob], cleanName, { type: "image/jpeg" }));
+                } else {
+                  resolve(file);
+                }
+              },
+              "image/jpeg",
+              quality
+            );
+          } catch {
+            resolve(file);
+          }
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  } catch {
+    return file;
   }
-
-  const ext = tipo === "image/webp" ? ".webp" : ".jpg";
-  return new File([blob], file.name.replace(/\.\w+$/, ext), { type: tipo });
-}
-
-function aBlob(canvas, type, quality) {
-  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
