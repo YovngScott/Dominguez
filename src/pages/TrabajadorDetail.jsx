@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
+import { FASES_REPARACION } from "../lib/estados";
 
 const vehiculo = (c) => [c?.marca?.nombre, c?.modelo?.nombre, c?.anio].filter(Boolean).join(" ") || "Vehículo";
 const coincide = (c, q) => [c.numero_llave && `llave ${c.numero_llave}`, c.placa, c.chasis, c.numero_reclamo, c.cliente?.nombre_completo, vehiculo(c)].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
-const CASO_SELECT = "id, numero_llave, placa, chasis, numero_reclamo, estado, anio, cliente:clientes(nombre_completo), marca:marcas(nombre), modelo:modelos(nombre)";
+const CASO_SELECT = "id, numero_llave, placa, chasis, numero_reclamo, estado, anio, fase_reparacion, cliente:clientes(nombre_completo), marca:marcas(nombre), modelo:modelos(nombre)";
 
 export default function TrabajadorDetail() {
   const { trabajadorId } = useParams();
@@ -60,6 +61,16 @@ export default function TrabajadorDetail() {
     setGuardando(false);
   }
 
+  async function actualizarFase(casoId, fase) {
+    setGuardando(true); setError("");
+    const { error: e } = await supabase
+      .from("casos")
+      .update({ fase_reparacion: fase })
+      .eq("id", casoId);
+    if (e) setError(e.message); else await cargar();
+    setGuardando(false);
+  }
+
   if (!trabajador) return <div className="max-w-5xl mx-auto px-4 py-10 text-[var(--ink-soft)]">Cargando trabajador…</div>;
   const enTaller = asignaciones.filter((a) => a.caso?.estado === "vehiculo_en_taller");
   const activas = enTaller.filter((a) => a.estado === "asignado");
@@ -69,15 +80,108 @@ export default function TrabajadorDetail() {
     <Link to="/taller/trabajadores" className="text-sm text-[var(--ink-soft)] hover:text-[var(--brand-red)]">← Personal del taller</Link>
     <div className="card p-6 sm:p-7 mt-4 flex flex-wrap items-center justify-between gap-5"><div className="flex items-center gap-4"><span className="w-14 h-14 rounded-2xl bg-[var(--brand-red-50)] text-[var(--brand-red)] flex items-center justify-center"><Icon name="user" className="w-7 h-7" /></span><div><h1 className="text-2xl font-extrabold text-[var(--ink)]">{trabajador.nombre_completo}</h1><p className="text-[var(--ink-soft)]">Trabajador del taller</p></div></div><button onClick={() => setModal(true)} className="btn-primary"><Icon name="plus" className="w-5 h-5" /> Asignar vehículo</button></div>
     {error && <p className="mt-4 text-sm text-[var(--brand-red)]">{error}</p>}
-    <Seccion titulo={`En proceso (${activas.length})`} vacio="No tiene vehículos del taller asignados." asignaciones={activas} onCompletar={setCompletando} onQuitar={quitar} bloqueado={guardando} />
+    <Seccion titulo={`En proceso (${activas.length})`} vacio="No tiene vehículos del taller asignados." asignaciones={activas} onCompletar={setCompletando} onQuitar={quitar} bloqueado={guardando} onActualizarFase={actualizarFase} />
     {completadas.length > 0 && <Seccion titulo={`Completados (${completadas.length})`} asignaciones={completadas} tenue />}
     {modal && <AsignarModal busqueda={busqueda} onBusqueda={setBusqueda} resultados={resultados} onClose={() => { setModal(false); setBusqueda(""); }} onAsignar={asignar} guardando={guardando} />}
     {completando && <CompletarModal asignacion={completando} onClose={() => setCompletando(null)} onConfirmar={completar} guardando={guardando} />}
   </div>;
 }
 
-function Seccion({ titulo, vacio, asignaciones, tenue, onCompletar, onQuitar, bloqueado }) {
-  return <section className="mt-7"><h2 className="text-lg font-bold text-[var(--ink)] mb-3">{titulo}</h2>{asignaciones.length === 0 ? <div className="card p-7 text-center text-sm text-[var(--ink-soft)]">{vacio}</div> : <div className={`card divide-y divide-[var(--line)] overflow-hidden ${tenue ? "opacity-75" : ""}`}>{asignaciones.map((a) => { const c = a.caso; return <div key={a.id} className="flex items-center justify-between gap-3 p-4 hover:bg-[var(--paper)]"><Link to={`/casos/${c.id}`} className="min-w-0 flex-1"><p className="font-bold text-[var(--ink)] truncate">{vehiculo(c)}{c.numero_llave ? ` · Llave #${c.numero_llave}` : ""}</p><p className="text-sm text-[var(--ink-soft)] truncate">{c.cliente?.nombre_completo || "Sin asegurado"}{c.placa ? ` · ${c.placa}` : ""}{c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}</p>{a.nota && <p className="text-sm text-[var(--ink)] mt-1 flex items-start gap-1.5"><Icon name="wrench" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[var(--ink-soft)]" /><span>{a.nota}</span></p>}</Link><div className="flex items-center gap-2 shrink-0">{onCompletar && <button type="button" disabled={bloqueado} onClick={() => onCompletar(a)} className="btn-ghost text-xs py-2 px-3 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"><Icon name="check" className="w-4 h-4" /> Completar</button>}{onQuitar && <button type="button" disabled={bloqueado} onClick={() => onQuitar(a.id)} className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)] hover:bg-[var(--brand-red-50)] rounded-lg disabled:opacity-50" aria-label="Quitar asignación"><Icon name="close" className="w-4 h-4" /></button>}<span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${a.estado === "completado" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}`}>{a.estado === "completado" ? "Completado" : "En el taller"}</span></div></div>; })}</div>}</section>;
+function Seccion({ titulo, vacio, asignaciones, tenue, onCompletar, onQuitar, bloqueado, onActualizarFase }) {
+  return (
+    <section className="mt-7">
+      <h2 className="text-lg font-bold text-[var(--ink)] mb-3">{titulo}</h2>
+      {asignaciones.length === 0 ? (
+        <div className="card p-7 text-center text-sm text-[var(--ink-soft)]">{vacio}</div>
+      ) : (
+        <div className={`card divide-y divide-[var(--line)] overflow-hidden ${tenue ? "opacity-75" : ""}`}>
+          {asignaciones.map((a) => {
+            const c = a.caso;
+            return (
+              <div key={a.id} className="flex flex-col gap-3 p-4 hover:bg-[var(--paper)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-[var(--ink)]">
+                      {vehiculo(c)}
+                      {c.numero_llave ? ` · Llave #${c.numero_llave}` : ""}
+                    </p>
+                    <p className="text-sm text-[var(--ink-soft)] truncate">
+                      {c.cliente?.nombre_completo || "Sin asegurado"}
+                      {c.placa ? ` · ${c.placa}` : ""}
+                      {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
+                    </p>
+                    {a.nota && (
+                      <p className="text-sm text-[var(--ink)] mt-1 flex items-start gap-1.5">
+                        <Icon name="wrench" className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[var(--ink-soft)]" />
+                        <span>{a.nota}</span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {onCompletar && (
+                      <button
+                        type="button"
+                        disabled={bloqueado}
+                        onClick={() => onCompletar(a)}
+                        className="btn-ghost text-xs py-2 px-3 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                      >
+                        <Icon name="check" className="w-4 h-4" /> Completar
+                      </button>
+                    )}
+                    {onQuitar && (
+                      <button
+                        type="button"
+                        disabled={bloqueado}
+                        onClick={() => onQuitar(a.id)}
+                        className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)] hover:bg-[var(--brand-red-50)] rounded-lg disabled:opacity-50"
+                        aria-label="Quitar asignación"
+                      >
+                        <Icon name="close" className="w-4 h-4" />
+                      </button>
+                    )}
+                    <span
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${
+                        a.estado === "completado" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"
+                      }`}
+                    >
+                      {a.estado === "completado" ? "Completado" : "En el taller"}
+                    </span>
+                  </div>
+                </div>
+
+                {onActualizarFase && onCompletar && (
+                  <div className="mt-2 pt-2 border-t border-[var(--line)] flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-[var(--ink-soft)] uppercase tracking-wider inline-flex items-center gap-1 mr-2">
+                      <Icon name="wrench" className="w-3.5 h-3.5" /> Fase:
+                    </span>
+                    {Object.entries(FASES_REPARACION).map(([key, fase]) => {
+                      const activa = c.fase_reparacion === key || (!c.fase_reparacion && key === "desabolladura");
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          disabled={bloqueado}
+                          onClick={() => onActualizarFase(c.id, key)}
+                          className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                            activa
+                              ? "bg-sky-500 border-sky-500 text-white shadow-sm font-bold"
+                              : "bg-white border-[var(--line)] text-[var(--ink-soft)] hover:border-sky-300"
+                          }`}
+                        >
+                          <Icon name={fase.icon} className="w-3 h-3" />
+                          {fase.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
 
 // Pide qué trabajo se le hizo al vehículo antes de darlo por completado.
