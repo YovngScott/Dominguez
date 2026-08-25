@@ -49,6 +49,42 @@ export default async function handler(req, res) {
 
   const action = req.query?.action || req.body?.action;
 
+  // Función auxiliar de fallback para evitar errores 429 (Rate Limits) en producción
+  async function ejecutarConModelosGemini(contents, responseSchema) {
+    const MODEL_CANDIDATES = [
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-2.5-pro"
+    ];
+    let lastError = null;
+
+    for (const model of MODEL_CANDIDATES) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema
+          }
+        });
+        if (response && response.text) {
+          return JSON.parse(response.text);
+        }
+      } catch (err) {
+        console.warn(`[Gemini Fallback] Modelo ${model} no disponible:`, err?.message || err);
+        lastError = err;
+      }
+    }
+
+    const msg = lastError?.message || "";
+    if (msg.includes("429") || msg.includes("Quota exceeded") || msg.includes("RESOURCE_EXHAUSTED")) {
+      throw new Error("La IA está recibiendo muchas solicitudes en este instante. Por favor reintenta en 10 segundos.");
+    }
+    throw new Error("No se pudo completar el análisis con IA: " + (lastError?.message || "Error de conexión"));
+  }
+
   // --------------------------------------------------------------------------
   // ACCIÓN 1: PROCESAR DOCUMENTOS CON IA (Carnet de Seguro y/o Matrícula)
   // --------------------------------------------------------------------------
@@ -117,25 +153,15 @@ export default async function handler(req, res) {
         }
       };
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: [
-          {
-            role: "user",
-            parts
-          }
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: docSchema
-        }
-      });
+      const extracted = await ejecutarConModelosGemini(
+        [{ role: "user", parts }],
+        docSchema
+      );
 
-      const extracted = JSON.parse(response.text || "{}");
       return res.status(200).json({ success: true, data: extracted });
     } catch (err) {
       console.error("Error procesando documentos con IA:", err);
-      return res.status(500).json({ error: "Error al analizar los documentos con IA: " + err.message });
+      return res.status(500).json({ error: err.message });
     }
   }
 
@@ -260,25 +286,15 @@ export default async function handler(req, res) {
         required: ["piezas", "servicios"]
       };
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: [
-          {
-            role: "user",
-            parts
-          }
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: itemsSchema
-        }
-      });
+      const parsed = await ejecutarConModelosGemini(
+        [{ role: "user", parts }],
+        itemsSchema
+      );
 
-      const parsed = JSON.parse(response.text || "{}");
       return res.status(200).json({ success: true, data: parsed });
     } catch (err) {
       console.error("Error procesando audio con IA:", err);
-      return res.status(500).json({ error: "Error al procesar el audio con IA: " + err.message });
+      return res.status(500).json({ error: err.message });
     }
   }
 
