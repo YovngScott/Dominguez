@@ -70,6 +70,33 @@ async function obtenerTelefonosNotificacion(supabase) {
   return [normalizarTelefono(process.env.SHOP_WHATSAPP || "8095757986")];
 }
 
+// Helper para buscar si el cliente ya existe registrado en la base de datos
+async function buscarClienteExistente(supabase, senderNumber, senderNorm) {
+  try {
+    const s10 = senderNumber.length >= 10 ? senderNumber.slice(-10) : senderNumber;
+    const { data: listCli } = await supabase
+      .from("clientes")
+      .select("id, nombre_completo, telefono, email, rnc_cedula");
+
+    if (listCli && listCli.length > 0) {
+      const match = listCli.find((c) => {
+        const telLimpio = (c.telefono || "").replace(/\D/g, "");
+        return (
+          telLimpio &&
+          (telLimpio.includes(s10) ||
+            s10.includes(telLimpio) ||
+            telLimpio.endsWith(s10) ||
+            s10.endsWith(telLimpio))
+        );
+      });
+      if (match) return match;
+    }
+  } catch (e) {
+    console.warn("Error buscando cliente existente:", e.message);
+  }
+  return null;
+}
+
 // Helper para buscar o crear marcas y modelos
 async function findOrCreateMarca(supabase, nombre) {
   const n = (nombre || "").trim();
@@ -146,7 +173,7 @@ export default async function handler(req, res) {
       return res.status(200).send("Ignorado: Número excluido de respuestas del bot (Socio/Dueño)");
     }
 
-    // 4) Identificar rol del remitente (Suplidor o Contacto de Seguro)
+    // 4) Identificar rol del remitente (Suplidor, Contacto de Seguro o Cliente Registrado)
     const [{ data: listSuplidores }, { data: listContactos }] = await Promise.all([
       supabase.from("suplidores").select("id, nombre, telefono"),
       supabase.from("aseguradora_contactos").select("id, nombre, telefono, aseguradora:aseguradoras(nombre)")
@@ -161,6 +188,29 @@ export default async function handler(req, res) {
       const tel = (c.telefono || "").replace(/\D/g, "");
       return tel && (senderNumber.endsWith(tel) || tel.endsWith(senderNumber));
     });
+
+    // Búsqueda inteligente de cliente existente en la base de datos
+    const clienteExistente = !suplidor && !contactoSeguro ? await buscarClienteExistente(supabase, senderNumber, senderNorm) : null;
+    let casosCliente = [];
+    let citasCliente = [];
+
+    if (clienteExistente) {
+      const [{ data: casosData }, { data: citasData }] = await Promise.all([
+        supabase
+          .from("casos")
+          .select("id, estado, placa, chasis, anio, color, numero_reclamo, numero_poliza, aseguradora:aseguradoras(nombre), marca:marcas(nombre), modelo:modelos(nombre)")
+          .eq("cliente_id", clienteExistente.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("citas")
+          .select("id, fecha, hora, vehiculo, servicio, estado")
+          .eq("cliente_id", clienteExistente.id)
+          .order("fecha", { ascending: false })
+          .limit(3)
+      ]);
+      casosCliente = casosData || [];
+      citasCliente = citasData || [];
+    }
 
     // 5) Extraer contenido del mensaje (Texto, Imagen o Audio)
     let userText = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
@@ -210,9 +260,9 @@ export default async function handler(req, res) {
       return res.status(200).send("Ignorado: Mensaje vacío o tipo no soportado");
     }
 
-    // 6) SI SE ENVIÓ UNA IMAGEN: Evaluar si es Carnet de Seguro o Matrícula y crear el caso
+    // 6) SI ES CLIENTE NUEVO Y ENVIÓ UNA IMAGEN: Evaluar si es Carnet de Seguro o Matrícula y crear el caso
     let casoCreado = null;
-    if (imagePart && rawBase64) {
+    if (!clienteExistente && imagePart && rawBase64) {
       try {
         const docPrompt = `
           Analiza esta imagen y determina si corresponde a un CARNET DE SEGURO vehicular o a una MATRÍCULA vehicular de la República Dominicana.
@@ -286,7 +336,7 @@ export default async function handler(req, res) {
           const asgNombre = docData.aseguradora_nombre || "Personal";
           const asgId = await findOrCreateAseguradora(supabase, asgNombre);
 
-          // Crear o actualizar caso en estado 'en_espera_piezas'
+          // Crear caso en estado 'en_espera_piezas'
           const { data: newCaso, error: casoErr } = await supabase
             .from("casos")
             .insert({
@@ -360,48 +410,62 @@ export default async function handler(req, res) {
       parts: currentParts
     });
 
-    // 8) Construir el System Prompt Oficial con todas las reglas de Dominguez Auto Pintura
+    // 8) Construir el System Prompt Oficial
     const systemPrompt = `
       Eres el Asistente Inteligente de Atención al Cliente de "Dominguez Auto Pintura", taller de desabolladura, pintura automotriz y colisiones ubicado en la Av. Hatuey #16, Santiago, República Dominicana. Teléfonos principales: 809-575-7986 y 809-330-3554.
 
-      ${casoCreado ? `[AVISO INTERNO DE SISTEMA: El cliente acaba de enviar un carnet de seguro o matrícula válido. El caso ya fue CREADO con éxito en el sistema en estado "En espera de piezas" bajo el código ${casoCreado.id}. Confírmale amablemente al cliente que sus datos han quedado precargados y anímale a pasar por el taller a la evaluación física].` : ""}
+      ${clienteExistente ? `
+      ========================================================================
+      🚨 INFORMACIÓN DE CLIENTE REGISTRADO EN EL SISTEMA:
+      - Nombre del cliente: "${clienteExistente.nombre_completo}"
+      - Teléfono: "${clienteExistente.telefono}"
+      - Casos y vehículos registrados en el taller:
+      ${casosCliente.length > 0 ? casosCliente.map((c) => `  * Caso #${c.id.slice(0, 8)}: ${c.marca?.nombre || ''} ${c.modelo?.nombre || ''} ${c.anio || ''} (${c.color || 'Color S/E'}, Placa: ${c.placa || 'S/P'}), Seguro: ${c.aseguradora?.nombre || 'Particular'}, Póliza: ${c.numero_poliza || 'N/A'}, Reclamo: ${c.numero_reclamo || 'N/A'}, Estado: "${c.estado}"`).join("\n") : "  (Sin casos activos en este momento)"}
+      ${citasCliente.length > 0 ? `- Citas registradas:\n${citasCliente.map((ct) => `  * Fecha: ${ct.fecha}, Hora: ${ct.hora || 'S/H'}, Motivo: ${ct.servicio || 'Revisión'}, Estado: ${ct.estado || 'Programada'}`).join("\n")}` : ""}
 
+      REGLA SUPREMA PARA CLIENTES YA REGISTRADOS:
+      1. ESTE CLIENTE YA ESTÁ EN NUESTRA BASE DE DATOS. YA SABEMOS SU NOMBRE, SU SEGURO Y SU VEHÍCULO.
+      2. PROHIBIDO Y NUNCA PEDIRLE:
+         - ¿Cuál es su compañía de seguro? (¡PROHIBIDO PREGUNTAR ESTO! YA LO SABEMOS: ${casosCliente[0]?.aseguradora?.nombre || 'Seguro Registrado'})
+         - Fotos del carnet de seguro
+         - Fotos de la matrícula
+         - Datos de su vehículo
+      3. Trátalo con máxima familiaridad y respeto por su nombre (ej: "¡Hola ${clienteExistente.nombre_completo}!").
+      4. Si el cliente avisa que va a traer o dejar el vehículo hoy o a una hora fija (ej: "estaré dejando el carro a las 5pm"):
+         - Confírmale con gusto que le esperamos a esa hora para recibir su vehículo en el taller.
+         - NO le pidas seguro ni le hables de cotizaciones nuevas, porque ya es un cliente activo que viene a dejar su vehículo acordado.
+      5. Si pregunta por el estado de su reparación o vehículo, infórmale con amabilidad según el estado de su caso.
+      ========================================================================
+      ` : `
+      ========================================================================
+      👤 CLIENTE NUEVO (NO REGISTRADO EN EL SISTEMA):
+      ${casoCreado ? `[AVISO: El cliente envió carnet/matrícula válido y su caso ya fue creado en "En espera de piezas" bajo el ID ${casoCreado.id}. Confírmale que sus datos fueron precargados].` : ""}
+      
       SALUDO EMPÁTICO Y TONO:
-      - Responde con muchísima empatía, respeto, calidez caribeña y profesionalismo.
-      - Cuando un cliente escribe por un choque o daño, exprésale empatía con este tono:
+      - Tono empático, cálido, caribeño y profesional:
         "¡Lamentamos mucho el percance que tuvo con su vehículo! 🙏🏼 Lo más importante es que usted esté bien. Por la parte del vehículo, no se preocupe que de eso nos encargamos nosotros para dejárselo como nuevo. 🚘✨"
 
       PROCESO DE SERVICIO Y COTIZACIÓN:
-      1. Visita al taller: Puede traer el vehículo a nuestras instalaciones en la Av. Hatuey #16, Santiago. (Si el vehículo no puede rodar por el golpe, que nos deje saber para orientarle).
-      2. Evaluación física presencial: Nuestros técnicos revisan detalladamente el impacto externo y posibles daños estructurales o internos ocultos.
+      1. Visita al taller en Av. Hatuey #16, Santiago.
+      2. Evaluación física presencial de impacto externo y daños estructurales/ocultos.
       3. Presupuesto garantizado.
-      4. Aprobación y piezas: Si es con seguro, se tramita con su aseguradora y en cuanto las piezas lleguen al taller, se le coordina su cita para traer el carro a reparar.
-      5. Entrega impecable.
+      4. Aprobación y piezas: con seguro se envía a la aseguradora y cuando lleguen las piezas se le coordina cita de reparación.
 
       HORARIOS DE INSPECCIÓN / EVALUACIÓN PRESENCIAL:
-      - Lunes a Viernes: de 8:00 AM a 12:00 PM (llegar máx. 11:30 AM) y de 2:00 PM a 6:00 PM (llegar máx. 5:30 PM).
-      - Sábados: de 8:00 AM a 1:00 PM (llegar máx. 12:30 PM).
-      - REGLA DE ORO DE CITAS: NO se agendan citas por chat para venir a cotizar. Se le invita a pasar en los horarios indicados dentro del rango de llegada. Las citas reales se coordinan únicamente para cuando las piezas ya están físicas en el taller para iniciar la reparación.
+      - Lunes a Viernes: 8:00 AM a 12:00 PM (llegar máx. 11:30 AM) y 2:00 PM a 6:00 PM (llegar máx. 5:30 PM).
+      - Sábados: 8:00 AM a 1:00 PM (llegar máx. 12:30 PM).
+      - REGLA DE CITAS: NO se agendan citas por chat para cotizar. Se le invita a pasar en los horarios indicados.
 
       REGLAS CRÍTICAS DE ASEGURADORAS:
-      - SIEMPRE PREGUNTA AL CLIENTE CUÁL ES SU COMPAÑÍA DE SEGURO.
-      - Aseguradoras con las que SÍ trabajamos directamente:
-        1. SEGUROS RESERVAS
-        2. LA COLONIAL DE SEGUROS
-        3. ATLÁNTICA DE SEGUROS
-        4. COOP-SEGUROS
-        5. SEGUROS SURA
-        6. SEGUROS LA INTERNACIONAL
-      
-      - SI EL CLIENTE TIENE UNO DE ESTOS 6 SEGUROS:
-        Pídele amablemente una foto del CARNET DEL SEGURO y una foto de la MATRÍCULA del vehículo para precargar su caso de inmediato. Explícale que al visitarnos le preparamos la cotización, la enviamos a su aseguradora y cuando el seguro apruebe y lleguen las piezas, le coordinamos su cita para recibir el vehículo.
-      
-      - SI EL CLIENTE NO TIENE NINGUNO DE ESOS 6 SEGUROS (O ES PARTICULAR):
-        Dile de manera muy amable y comprensiva que no trabajamos directamente con esa aseguradora. Explícale que con gusto le preparamos su presupuesto y se le entrega inmediatamente al terminar la inspección física.
-        * IMPORTANTE: La cotización particular tiene un costo de RD$ 2,000 pesos, pero si decide realizar la reparación con nosotros en el taller, esos RD$ 2,000 pesos se le descuentan íntegramente del total final del trabajo.
+      - PREGUNTAR AL CLIENTE CUÁL ES SU COMPAÑÍA DE SEGURO.
+      - Aseguradoras autorizadas: SEGUROS RESERVAS, LA COLONIAL DE SEGUROS, ATLÁNTICA DE SEGUROS, COOP-SEGUROS, SEGUROS SURA, SEGUROS LA INTERNACIONAL.
+      - Si tiene una de estas 6: pedir foto del CARNET DE SEGURO y MATRÍCULA para precargar su caso.
+      - Si NO tiene una de estas 6 (o es particular): explicar amablemente que la cotización se le entrega de inmediato en el taller, con costo de RD$ 2,000 descontables si repara con nosotros.
+      ========================================================================
+      `}
 
       REGLAS DE PRECIOS POR FOTO:
-      - NUNCA des precios o presupuestos por foto o WhatsApp. Explica siempre que por foto no es posible ver descuadres de chasis ni piezas internas afectadas.
+      - NUNCA des precios o presupuestos por foto o WhatsApp. Explica siempre que por foto no es posible ver descuadres de chasis ni daños ocultos.
 
       Formato: Mensajes claros, con negritas (*texto*), saltos de línea ordenados y emojis profesionales.
     `;
@@ -426,7 +490,7 @@ export default async function handler(req, res) {
         {
           jid: remoteJid,
           sender_name: pushName,
-          role: suplidor ? "suplidor" : (contactoSeguro ? "seguro" : "cliente"),
+          role: suplidor ? "suplidor" : (contactoSeguro ? "seguro" : (clienteExistente ? "cliente_registrado" : "cliente_nuevo")),
           content: userText
         },
         {
