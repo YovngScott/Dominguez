@@ -53,7 +53,7 @@ export default function DocumentAiUploader({ onParsed, disabled = false }) {
 
       setArchivosCargados(nombres);
 
-      const res = await fetch("/api/ia-cotizacion?action=procesar_documentos", {
+      const res = await fetch("/api/procesar-seguro?action=procesar_documentos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imagenes: imagenesBase64 })

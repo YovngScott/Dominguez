@@ -158,7 +158,7 @@ export default function VoiceItemsRecorder({ onItemsExtracted, tipo = "ambos", c
         reader.readAsDataURL(audioBlob);
       });
 
-      const res = await fetch("/api/ia-cotizacion?action=procesar_audio_piezas", {
+      const res = await fetch("/api/procesar-seguro?action=procesar_audio_piezas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
