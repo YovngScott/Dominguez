@@ -80,6 +80,37 @@ export default function DocumentManager({ casoId }) {
         uploaded_by: userData?.user?.id,
       });
 
+      // Si el tipo de documento es "Cotización del seguro", invocamos a la IA en segundo plano
+      const tipoSeleccionado = tipos.find((t) => t.id === tipoSubida);
+      if (tipoSeleccionado?.nombre === "Cotización del seguro") {
+        try {
+          const reader = new FileReader();
+          const base64Promise = new Promise((resolve) => {
+            reader.onload = () => resolve(reader.result.split(",")[1]);
+          });
+          reader.readAsDataURL(file);
+          const base64Data = await base64Promise;
+
+          // Enviar a procesar con IA
+          await fetch("/api/procesar-seguro", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              casoId,
+              attachments: [
+                {
+                  name: file.name,
+                  data: base64Data,
+                  contentType: "application/pdf"
+                }
+              ]
+            })
+          });
+        } catch (iaErr) {
+          console.warn("Error al procesar la cotización con IA:", iaErr);
+        }
+      }
+
       loadDocumentos();
     } catch (err) {
       setError(err.message || "Error subiendo el documento.");

@@ -487,8 +487,22 @@ export default async function handler(req, res) {
 
     let caseData = null;
 
-    // Search by Chassis first
-    const { data: casesByChasis } = await supabase
+    // Check if caseId is passed in the request (e.g. from the manual page upload)
+    const casoIdParam = req.body?.casoId || req.query?.casoId;
+    if (casoIdParam) {
+      const { data: directCase } = await supabase
+        .from("casos")
+        .select("id, placa, chasis, numero_reclamo, estado, cliente:clientes(nombre)")
+        .eq("id", casoIdParam)
+        .limit(1);
+      if (directCase && directCase.length > 0) {
+        caseData = directCase[0];
+      }
+    }
+
+    if (!caseData) {
+      // Search by Chassis first
+      const { data: casesByChasis } = await supabase
       .from("casos")
       .select("id, placa, chasis, numero_reclamo, estado, cliente:clientes(nombre)")
       .ilike("chasis", `%${normalizedChasis}%`)
@@ -527,34 +541,36 @@ export default async function handler(req, res) {
 
     const casoId = caseData.id;
 
-    // Upload PDFs to Storage & Save to documentos_caso
-    const { data: docTypes } = await supabase
-      .from("tipos_documento")
-      .select("id")
-      .eq("nombre", "Cotización del seguro")
-      .limit(1);
+    // Upload PDFs to Storage & Save to documentos_caso (Only for automatic email webhook flow)
+    if (!casoIdParam) {
+      const { data: docTypes } = await supabase
+        .from("tipos_documento")
+        .select("id")
+        .eq("nombre", "Cotización del seguro")
+        .limit(1);
 
-    const tipoId = docTypes && docTypes.length > 0 ? docTypes[0].id : null;
+      const tipoId = docTypes && docTypes.length > 0 ? docTypes[0].id : null;
 
-    for (const file of processedAttachments) {
-      const buffer = Buffer.from(file.base64, "base64");
-      const storagePath = `${casoId}/${generateUUID()}.pdf`;
+      for (const file of processedAttachments) {
+        const buffer = Buffer.from(file.base64, "base64");
+        const storagePath = `${casoId}/${generateUUID()}.pdf`;
 
-      // Upload to storage bucket
-      const { error: uploadErr } = await supabase.storage
-        .from("documentos-casos")
-        .upload(storagePath, buffer, { contentType: "application/pdf" });
+        // Upload to storage bucket
+        const { error: uploadErr } = await supabase.storage
+          .from("documentos-casos")
+          .upload(storagePath, buffer, { contentType: "application/pdf" });
 
-      if (uploadErr) throw uploadErr;
+        if (uploadErr) throw uploadErr;
 
-      // Save document record
-      await supabase.from("documentos_caso").insert({
-        caso_id: casoId,
-        tipo_id: tipoId,
-        nombre_archivo: file.name,
-        storage_path: storagePath,
-        url: ""
-      });
+        // Save document record
+        await supabase.from("documentos_caso").insert({
+          caso_id: casoId,
+          tipo_id: tipoId,
+          nombre_archivo: file.name,
+          storage_path: storagePath,
+          url: ""
+        });
+      }
     }
 
     // Compare prices with local active quotation
