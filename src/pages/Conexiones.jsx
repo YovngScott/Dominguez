@@ -343,16 +343,17 @@ export default function Conexiones() {
     setProbandoTelId(tel.id);
     setResultadoTelPrueba((prev) => ({ ...prev, [tel.id]: null }));
     try {
-      const r = await fetch("/api/whatsapp-webhook", {
+      const r = await fetch("/api/whatsapp-estado?action=probar_telefono", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          test_number: tel.telefono,
-          message: `🤖 *Prueba de Alerta de WhatsApp*\n\nHola *${tel.nombre_empleado}* (${tel.rol}). Tu número ha sido configurado para recibir alertas automáticas del bot de IA en Dominguez Auto Pintura.`
+          telefono: tel.telefono,
+          nombre: tel.nombre_empleado,
+          rol: tel.rol
         })
       });
       const d = await r.json().catch(() => ({}));
-      if (r.ok || d.success) {
+      if (r.ok && d.success) {
         setResultadoTelPrueba((prev) => ({ ...prev, [tel.id]: { ok: true, msg: "Mensaje de prueba enviado por WhatsApp con éxito." } }));
       } else {
         setResultadoTelPrueba((prev) => ({ ...prev, [tel.id]: { ok: false, msg: d.error || "Error al enviar WhatsApp." } }));
