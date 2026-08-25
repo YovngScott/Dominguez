@@ -44,11 +44,12 @@ const PROVEEDORES = [
 ];
 
 const ROLES_EMPLEADO = ["Recepción", "Encargado de Taller", "Gerencia", "Compras / Repuestos", "Seguros"];
+const TIPOS_EXCLUIDO = ["Socio / Dueño", "Familiar / Personal", "Proveedor No Automotriz", "Otro"];
 
 export default function Conexiones() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Cargar cuentas iniciales desde localStorage para no mostrar correos falsos
+  // Cuentas de correo
   const [cuentas, setCuentas] = useState(() => {
     try {
       const guardadas = localStorage.getItem("cuentas_correo_guardadas");
@@ -58,10 +59,20 @@ export default function Conexiones() {
     }
   });
 
-  // Cargar teléfonos de notificación de empleados
+  // Teléfonos de notificación de empleados
   const [telefonos, setTelefonos] = useState(() => {
     try {
       const guardados = localStorage.getItem("telefonos_notificacion_guardados");
+      return guardados ? JSON.parse(guardados) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Números excluidos del bot (socios, etc.)
+  const [excluidos, setExcluidos] = useState(() => {
+    try {
+      const guardados = localStorage.getItem("numeros_excluidos_guardados");
       return guardados ? JSON.parse(guardados) : [];
     } catch {
       return [];
@@ -104,24 +115,31 @@ export default function Conexiones() {
   const [probandoTelId, setProbandoTelId] = useState(null);
   const [resultadoTelPrueba, setResultadoTelPrueba] = useState({});
 
-  // Helper para sincronizar estado y localStorage de correos
-  function guardarCuentasMemoria(nuevasCuentas) {
-    setCuentas(nuevasCuentas);
-    try {
-      localStorage.setItem("cuentas_correo_guardadas", JSON.stringify(nuevasCuentas));
-    } catch {
-      /* ignore */
-    }
+  // Formulario Modal Número Excluido (Socio)
+  const [modalExcAbierto, setModalExcAbierto] = useState(false);
+  const [excEditar, setExcEditar] = useState(null);
+  const [formExc, setFormExc] = useState({
+    nombre: "",
+    telefono: "",
+    tipo: "Socio / Dueño",
+    notas: ""
+  });
+  const [errorExc, setErrorExc] = useState("");
+
+  // Helpers de sincronización local
+  function guardarCuentasMemoria(nuevas) {
+    setCuentas(nuevas);
+    try { localStorage.setItem("cuentas_correo_guardadas", JSON.stringify(nuevas)); } catch { /* ignore */ }
   }
 
-  // Helper para sincronizar estado y localStorage de teléfonos
-  function guardarTelefonosMemoria(nuevosTelefonos) {
-    setTelefonos(nuevosTelefonos);
-    try {
-      localStorage.setItem("telefonos_notificacion_guardados", JSON.stringify(nuevosTelefonos));
-    } catch {
-      /* ignore */
-    }
+  function guardarTelefonosMemoria(nuevos) {
+    setTelefonos(nuevos);
+    try { localStorage.setItem("telefonos_notificacion_guardados", JSON.stringify(nuevos)); } catch { /* ignore */ }
+  }
+
+  function guardarExcluidosMemoria(nuevos) {
+    setExcluidos(nuevos);
+    try { localStorage.setItem("numeros_excluidos_guardados", JSON.stringify(nuevos)); } catch { /* ignore */ }
   }
 
   // Detectar retorno de autorización OAuth (code en la URL)
@@ -135,25 +153,14 @@ export default function Conexiones() {
           pending.estado_oauth = "autorizado";
           pending.autorizado_at = new Date().toISOString();
 
-          // Actualizar estado local inmediatamente
           setCuentas((prev) => {
             const index = prev.findIndex((c) => c.id === pending.id || c.email === pending.email);
-            let actualizadas;
-            if (index >= 0) {
-              actualizadas = [...prev];
-              actualizadas[index] = pending;
-            } else {
-              actualizadas = [...prev, pending];
-            }
-            try {
-              localStorage.setItem("cuentas_correo_guardadas", JSON.stringify(actualizadas));
-            } catch {
-              /* ignore */
-            }
+            const actualizadas = index >= 0 ? [...prev] : [...prev, pending];
+            if (index >= 0) actualizadas[index] = pending;
+            guardarCuentasMemoria(actualizadas);
             return actualizadas;
           });
 
-          // Guardar a través de la API Backend (Service Role)
           fetch("/api/whatsapp-estado?action=guardar_cuenta", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -176,7 +183,7 @@ export default function Conexiones() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Cargar cuentas y teléfonos desde la API backend (Service Role)
+  // Cargar datos globales desde el backend
   async function cargarDatos() {
     setLoading(true);
     try {
@@ -190,6 +197,12 @@ export default function Conexiones() {
       const dataTel = await resTel.json().catch(() => ({}));
       if (dataTel?.data && Array.isArray(dataTel.data)) {
         guardarTelefonosMemoria(dataTel.data);
+      }
+
+      const resExc = await fetch("/api/whatsapp-estado?action=listar_excluidos");
+      const dataExc = await resExc.json().catch(() => ({}));
+      if (dataExc?.data && Array.isArray(dataExc.data)) {
+        guardarExcluidosMemoria(dataExc.data);
       }
     } catch (e) {
       console.error("Error al cargar datos globales:", e);
@@ -217,10 +230,9 @@ export default function Conexiones() {
     cargarEstadoWhatsApp();
   }, []);
 
-  // Cambiar estado activo/inactivo de correo
+  // Toggle activo correo
   async function toggleActivo(cuenta) {
-    const nuevoEstado = !cuenta.activo;
-    const itemActualizado = { ...cuenta, activo: nuevoEstado };
+    const itemActualizado = { ...cuenta, activo: !cuenta.activo };
     const actualizadas = cuentas.map((c) => (c.id === cuenta.id ? itemActualizado : c));
     guardarCuentasMemoria(actualizadas);
 
@@ -230,15 +242,12 @@ export default function Conexiones() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(itemActualizado)
       });
-    } catch {
-      /* fallback */
-    }
+    } catch { /* fallback */ }
   }
 
-  // Cambiar estado activo/inactivo de teléfono
+  // Toggle activo teléfono
   async function toggleActivoTel(tel) {
-    const nuevoEstado = !tel.activo;
-    const itemActualizado = { ...tel, activo: nuevoEstado };
+    const itemActualizado = { ...tel, activo: !tel.activo };
     const actualizados = telefonos.map((t) => (t.id === tel.id ? itemActualizado : t));
     guardarTelefonosMemoria(actualizados);
 
@@ -248,12 +257,10 @@ export default function Conexiones() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(itemActualizado)
       });
-    } catch {
-      /* fallback */
-    }
+    } catch { /* fallback */ }
   }
 
-  // Establecer correo como predeterminado
+  // Establecer correo como principal
   async function marcarPredeterminado(cuenta) {
     const actualizadas = cuentas.map((c) => ({
       ...c,
@@ -267,9 +274,7 @@ export default function Conexiones() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...cuenta, es_predeterminado: true })
       });
-    } catch {
-      /* fallback */
-    }
+    } catch { /* fallback */ }
   }
 
   // Eliminar correo
@@ -288,9 +293,7 @@ export default function Conexiones() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id })
       });
-    } catch {
-      /* fallback */
-    }
+    } catch { /* fallback */ }
   }
 
   // Eliminar teléfono de empleado
@@ -306,9 +309,23 @@ export default function Conexiones() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id })
       });
-    } catch {
-      /* fallback */
-    }
+    } catch { /* fallback */ }
+  }
+
+  // Eliminar número excluido
+  async function eliminarExcluido(id) {
+    if (!confirm("¿Seguro que deseas quitar este número de la lista de exclusión del bot?")) return;
+
+    const filtrados = excluidos.filter((e) => e.id !== id);
+    guardarExcluidosMemoria(filtrados);
+
+    try {
+      await fetch("/api/whatsapp-estado?action=eliminar_excluido", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+    } catch { /* fallback */ }
   }
 
   // Probar lectura de correo
@@ -338,7 +355,7 @@ export default function Conexiones() {
     }
   }
 
-  // Probar envío de alerta por WhatsApp a teléfono de empleado
+  // Probar envío de alerta por WhatsApp a empleado
   async function probarEnvioWhatsApp(tel) {
     setProbandoTelId(tel.id);
     setResultadoTelPrueba((prev) => ({ ...prev, [tel.id]: null }));
@@ -365,29 +382,26 @@ export default function Conexiones() {
     }
   }
 
-  // Iniciar flujo OAuth Google
+  // Flujos OAuth
   function iniciarGoogleOAuth(emailActual) {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "1086486162907-61uap64mm6hv8rtfqo0mf2l4apkqs776.apps.googleusercontent.com";
     const redirectUri = window.location.origin + "/conexiones";
     const scope = encodeURIComponent("https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify");
     const loginHint = emailActual ? `&login_hint=${encodeURIComponent(emailActual)}` : "";
     const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent${loginHint}`;
-    
     window.location.href = url;
   }
 
-  // Iniciar flujo OAuth Microsoft
   function iniciarMicrosoftOAuth(emailActual) {
     const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID || "00000000-0000-0000-0000-000000000000";
     const redirectUri = window.location.origin + "/conexiones";
     const scope = encodeURIComponent("offline_access https://graph.microsoft.com/Mail.Read");
     const loginHint = emailActual ? `&login_hint=${encodeURIComponent(emailActual)}` : "";
     const url = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&response_mode=query&scope=${scope}&prompt=consent${loginHint}`;
-    
     window.location.href = url;
   }
 
-  // Abrir Modal Correo
+  // Modales Correo
   function abrirModalNuevo() {
     if (cuentas.length >= 4) {
       alert("Límite alcanzado: Puedes vincular un máximo de 4 cuentas de correo.");
@@ -424,7 +438,7 @@ export default function Conexiones() {
     setModalAbierto(true);
   }
 
-  // Abrir Modal Teléfono Empleado
+  // Modales Teléfono Empleado
   function abrirModalNuevoTel() {
     setTelEditar(null);
     setFormTel({
@@ -449,7 +463,31 @@ export default function Conexiones() {
     setModalTelAbierto(true);
   }
 
-  // Cambiar Proveedor
+  // Modales Número Excluido (Socio)
+  function abrirModalNuevoExc() {
+    setExcEditar(null);
+    setFormExc({
+      nombre: "",
+      telefono: "",
+      tipo: "Socio / Dueño",
+      notas: ""
+    });
+    setErrorExc("");
+    setModalExcAbierto(true);
+  }
+
+  function abrirModalEditarExc(exc) {
+    setExcEditar(exc);
+    setFormExc({
+      nombre: exc.nombre || "",
+      telefono: exc.telefono || "",
+      tipo: exc.tipo || "Socio / Dueño",
+      notas: exc.notas || ""
+    });
+    setErrorExc("");
+    setModalExcAbierto(true);
+  }
+
   function cambiarProveedor(provId) {
     const prov = PROVEEDORES.find((p) => p.id === provId);
     setForm((f) => ({
@@ -460,7 +498,7 @@ export default function Conexiones() {
     }));
   }
 
-  // Guardar datos de correo
+  // Guardar Correo
   async function guardarYConectarCuenta(e) {
     e.preventDefault();
     setErrorModal("");
@@ -515,9 +553,7 @@ export default function Conexiones() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-    } catch {
-      /* fallback */
-    }
+    } catch { /* fallback */ }
 
     if (metodoAuth === "oauth") {
       localStorage.setItem("oauth_pending_account", JSON.stringify(payload));
@@ -529,7 +565,7 @@ export default function Conexiones() {
     }
   }
 
-  // Guardar Teléfono de Empleado
+  // Guardar Teléfono Empleado
   async function guardarTelefonoEmpleado(e) {
     e.preventDefault();
     setErrorTel("");
@@ -564,9 +600,45 @@ export default function Conexiones() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-    } catch {
-      /* fallback */
+    } catch { /* fallback */ }
+  }
+
+  // Guardar Número Excluido (Socio)
+  async function guardarNumeroExcluido(e) {
+    e.preventDefault();
+    setErrorExc("");
+
+    const telDigits = formExc.telefono.replace(/\D/g, "");
+    if (!telDigits || telDigits.length < 10) {
+      setErrorExc("Ingresa un número de teléfono válido (ej: 8095757986).");
+      return;
     }
+
+    const payload = {
+      id: excEditar ? excEditar.id : crypto.randomUUID(),
+      nombre: formExc.nombre.trim() || "Socio / Excluido",
+      telefono: telDigits,
+      tipo: formExc.tipo,
+      notas: formExc.notas.trim() || ""
+    };
+
+    let actualizados = [...excluidos];
+    if (excEditar) {
+      actualizados = actualizados.map((item) => (item.id === excEditar.id ? payload : item));
+    } else {
+      actualizados.push(payload);
+    }
+
+    guardarExcluidosMemoria(actualizados);
+    setModalExcAbierto(false);
+
+    try {
+      await fetch("/api/whatsapp-estado?action=guardar_excluido", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } catch { /* fallback */ }
   }
 
   return (
@@ -586,13 +658,13 @@ export default function Conexiones() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 border-b border-[var(--line)] pb-6">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[var(--brand-red)] uppercase tracking-wider mb-1">
-            <Icon name="link" className="w-4 h-4" /> Autorización de Accesos · Stage AI Labs
+            <Icon name="link" className="w-4 h-4" /> Conexiones y Automatizaciones · Dominguez Auto Pintura
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">
-            Vinculación de Cuentas de Correo y WhatsApp
+            Vinculación de Cuentas, Alertas y Exclusiones
           </h1>
           <p className="text-sm text-[var(--ink-soft)] mt-1">
-            Conecta hasta 4 cuentas de correo y configura los números de teléfono de los empleados para recibir alertas automáticas.
+            Gestiona correos monitoreados, destinatarios de alertas de WhatsApp y números excluidos de las respuestas del bot.
           </p>
         </div>
 
@@ -601,7 +673,7 @@ export default function Conexiones() {
           disabled={cuentas.length >= 4}
           className="btn-primary text-xs py-2.5 px-4 flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
         >
-          <Icon name="plus" className="w-4 h-4" /> Conectar Cuenta ({cuentas.length}/4)
+          <Icon name="plus" className="w-4 h-4" /> Conectar Correo ({cuentas.length}/4)
         </button>
       </div>
 
@@ -644,7 +716,6 @@ export default function Conexiones() {
                   }`}
                 >
                   <div>
-                    {/* Encabezado de Tarjeta */}
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <span className={`w-3 h-3 rounded-full ${prov.color}`}></span>
@@ -658,7 +729,6 @@ export default function Conexiones() {
                         )}
                       </div>
 
-                      {/* Switch Activo */}
                       <label className="relative inline-flex items-center cursor-pointer" title="Activar/Pausar lectura de la IA">
                         <input
                           type="checkbox"
@@ -673,7 +743,6 @@ export default function Conexiones() {
                     <h3 className="font-bold text-base text-[var(--ink)] leading-tight">{c.nombre_cuenta}</h3>
                     <p className="text-sm font-semibold text-[var(--ink)] mt-0.5 truncate">{c.email}</p>
 
-                    {/* Estado de Autorización de la IA */}
                     <div className="mt-3 p-3 rounded-xl bg-[var(--paper)] border border-[var(--line)] space-y-1.5 text-xs">
                       <div className="flex items-center justify-between">
                         <span className="text-[var(--ink-soft)]">Acceso del Bot:</span>
@@ -682,14 +751,9 @@ export default function Conexiones() {
                           {autorizado ? "Permiso Concedido (OAuth)" : "Pendiente de Autorización"}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-[var(--ink-soft)]">
-                        <span>Permisos:</span>
-                        <span className="font-mono">Lectura + Extracción de adjuntos</span>
-                      </div>
                     </div>
                   </div>
 
-                  {/* Acciones de la Tarjeta */}
                   <div className="mt-4 pt-3 border-t border-[var(--line)]">
                     {resPrueba && (
                       <div className={`mb-3 p-2.5 rounded-xl text-xs font-medium ${resPrueba.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-600 border border-red-200"}`}>
@@ -710,14 +774,14 @@ export default function Conexiones() {
                         <button
                           onClick={() => abrirModalEditar(c)}
                           className="btn-ghost text-[11px] py-1 px-2 text-[var(--ink-soft)]"
-                          title="Editar permisos o credenciales"
+                          title="Editar"
                         >
                           <Icon name="pencil" className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => eliminarCuenta(c.id)}
                           className="btn-ghost text-[11px] py-1 px-2 text-[var(--brand-red)]"
-                          title="Revocar acceso al bot"
+                          title="Eliminar"
                         >
                           <Icon name="trash" className="w-3.5 h-3.5" />
                         </button>
@@ -791,7 +855,6 @@ export default function Conexiones() {
                         {t.rol || "Recepción"}
                       </span>
                       
-                      {/* Switch Activo Teléfono */}
                       <label className="relative inline-flex items-center cursor-pointer" title="Activar/Desactivar alertas para este número">
                         <input
                           type="checkbox"
@@ -841,6 +904,64 @@ export default function Conexiones() {
         )}
       </div>
 
+      {/* SECCIÓN NÚMEROS EXCLUIDOS DEL BOT (SOCIOS / DUEÑOS / IGNORAR) */}
+      <div className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--ink)] flex items-center gap-2">
+              <Icon name="shield" className="w-5 h-5 text-indigo-600" />
+              Números Excluidos del Bot (Socios / Dueños / Ignorar)
+            </h2>
+            <p className="text-xs text-[var(--ink-soft)] mt-0.5">
+              El bot de IA **NO responderá** de forma automática a los números agregados aquí (para conversaciones privadas de socios o familiares).
+            </p>
+          </div>
+
+          <button
+            onClick={abrirModalNuevoExc}
+            className="btn-primary text-xs py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 shrink-0"
+          >
+            <Icon name="plus" className="w-4 h-4" /> Agregar Excluido
+          </button>
+        </div>
+
+        {excluidos.length === 0 ? (
+          <div className="p-6 border-2 border-dashed border-[var(--line)] rounded-2xl text-center">
+            <p className="text-xs text-[var(--ink-soft)]">No hay números excluidos configurados. El bot responderá a todos los mensajes entrantes de clientes.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {excluidos.map((exc) => (
+              <div key={exc.id} className="card p-4 border border-[var(--line)] flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 uppercase tracking-wider">
+                      {exc.tipo || "Socio / Dueño"}
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                      🚫 Bot Silenciado
+                    </span>
+                  </div>
+
+                  <h3 className="font-bold text-sm text-[var(--ink)]">{exc.nombre}</h3>
+                  <p className="text-xs font-mono text-[var(--ink-soft)] mt-0.5">📱 {exc.telefono}</p>
+                  {exc.notas && <p className="text-[11px] text-[var(--ink-soft)] mt-1 italic">{exc.notas}</p>}
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-[var(--line)] flex justify-end gap-1">
+                  <button onClick={() => abrirModalEditarExc(exc)} className="btn-ghost text-[11px] p-1 text-[var(--ink-soft)]">
+                    <Icon name="pencil" className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => eliminarExcluido(exc.id)} className="btn-ghost text-[11px] p-1 text-[var(--brand-red)]">
+                    <Icon name="trash" className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* DISPOSITIVO WHATSAPP */}
       <div className="card p-6 border border-[var(--line)]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -873,7 +994,7 @@ export default function Conexiones() {
         </div>
       </div>
 
-      {/* MODAL PARA CONECTAR / AUTORIZAR CUENTA DE CORREO */}
+      {/* MODAL CORREO */}
       {modalAbierto && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setModalAbierto(false)}>
           <div className="card w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -931,7 +1052,6 @@ export default function Conexiones() {
                 />
               </div>
 
-              {/* Selector de Método de Autorización */}
               <div className="p-3.5 rounded-xl bg-[var(--paper)] border border-[var(--line)] space-y-3">
                 <label className="block font-bold text-[var(--ink)]">Método de autorización de lectura para la IA:</label>
                 
@@ -957,46 +1077,6 @@ export default function Conexiones() {
                     Contraseña de Aplicación / IMAP
                   </label>
                 </div>
-
-                {metodoAuth === "oauth" ? (
-                  <p className="text-[11px] text-[var(--ink-soft)] leading-relaxed">
-                    Al guardar, se abrirá la ventana oficial de inicio de sesión de{" "}
-                    <strong>{form.proveedor.includes("outlook") ? "Microsoft Outlook" : "Google / Gmail"}</strong> para autorizar al bot de Stage a leer las cotizaciones entrantes.
-                  </p>
-                ) : (
-                  <div className="space-y-2 pt-2">
-                    <div>
-                      <label className="block font-bold text-[var(--ink)] mb-1">Contraseña de Aplicación / Clave IMAP</label>
-                      <input
-                        type="password"
-                        value={form.password_app}
-                        onChange={(e) => setForm({ ...form, password_app: e.target.value })}
-                        className="input w-full text-xs font-mono"
-                        placeholder="•••• •••• •••• ••••"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-2">
-                        <label className="block font-bold text-[var(--ink)] mb-1">Host IMAP</label>
-                        <input
-                          type="text"
-                          value={form.imap_host}
-                          onChange={(e) => setForm({ ...form, imap_host: e.target.value })}
-                          className="input w-full text-xs font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-bold text-[var(--ink)] mb-1">Puerto</label>
-                        <input
-                          type="number"
-                          value={form.imap_port}
-                          onChange={(e) => setForm({ ...form, imap_port: e.target.value })}
-                          className="input w-full text-xs font-mono"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="pt-1">
@@ -1013,24 +1093,17 @@ export default function Conexiones() {
 
               <div className="flex justify-end gap-2 pt-4 border-t border-[var(--line)]">
                 <button type="button" onClick={() => setModalAbierto(false)} className="btn-ghost text-xs">Cancelar</button>
-                
-                {metodoAuth === "oauth" ? (
-                  <button type="submit" disabled={guardandoModal} className="btn-primary text-xs py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2">
-                    <Icon name="mail" className="w-4 h-4" />
-                    {form.proveedor === "outlook" ? "Iniciar sesión con Microsoft" : "Iniciar sesión con Google"}
-                  </button>
-                ) : (
-                  <button type="submit" disabled={guardandoModal} className="btn-primary text-xs py-2.5 px-4">
-                    Verificar y Dar Acceso al Bot
-                  </button>
-                )}
+                <button type="submit" disabled={guardandoModal} className="btn-primary text-xs py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2">
+                  <Icon name="mail" className="w-4 h-4" />
+                  {form.proveedor === "outlook" ? "Iniciar sesión con Microsoft" : "Iniciar sesión con Google"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL PARA AGREGAR / EDITAR TELÉFONO DE EMPLEADO */}
+      {/* MODAL TELÉFONO EMPLEADO */}
       {modalTelAbierto && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setModalTelAbierto(false)}>
           <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
@@ -1086,6 +1159,80 @@ export default function Conexiones() {
                 <button type="button" onClick={() => setModalTelAbierto(false)} className="btn-ghost text-xs">Cancelar</button>
                 <button type="submit" className="btn-primary text-xs py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white">
                   Guardar Destinatario de Alertas
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NÚMERO EXCLUIDO (SOCIO) */}
+      {modalExcAbierto && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setModalExcAbierto(false)}>
+          <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-[var(--line)]">
+              <h3 className="text-base font-bold text-[var(--ink)] flex items-center gap-2">
+                <Icon name="shield" className="w-5 h-5 text-indigo-600" />
+                {excEditar ? "Editar Número Excluido" : "Agregar Número Excluido del Bot"}
+              </h3>
+              <button onClick={() => setModalExcAbierto(false)} className="text-[var(--ink-soft)] hover:text-[var(--ink)] text-xl font-bold">✕</button>
+            </div>
+
+            {errorExc && <p className="text-xs font-bold text-red-600 bg-red-50 p-3 rounded-xl mb-4">{errorExc}</p>}
+
+            <form onSubmit={guardarNumeroExcluido} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[var(--ink)] mb-1">Nombre / Identificación</label>
+                <input
+                  type="text"
+                  required
+                  value={formExc.nombre}
+                  onChange={(e) => setFormExc({ ...formExc, nombre: e.target.value })}
+                  className="input w-full text-sm"
+                  placeholder="Ej: Lic. Carlos Domínguez (Socio)"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[var(--ink)] mb-1">Número de Teléfono / WhatsApp</label>
+                <input
+                  type="text"
+                  required
+                  value={formExc.telefono}
+                  onChange={(e) => setFormExc({ ...formExc, telefono: e.target.value })}
+                  className="input w-full text-sm font-mono"
+                  placeholder="8095757986"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[var(--ink)] mb-1">Tipo de Exclusión</label>
+                <select
+                  value={formExc.tipo}
+                  onChange={(e) => setFormExc({ ...formExc, tipo: e.target.value })}
+                  className="input w-full text-xs font-semibold"
+                >
+                  {TIPOS_EXCLUIDO.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[var(--ink)] mb-1">Notas / Motivo (Opcional)</label>
+                <input
+                  type="text"
+                  value={formExc.notas}
+                  onChange={(e) => setFormExc({ ...formExc, notas: e.target.value })}
+                  className="input w-full text-xs"
+                  placeholder="Ej: Conversaciones de gerencia no deben ser respondidas por la IA"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-[var(--line)]">
+                <button type="button" onClick={() => setModalExcAbierto(false)} className="btn-ghost text-xs">Cancelar</button>
+                <button type="submit" className="btn-primary text-xs py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white">
+                  Guardar Número Excluido
                 </button>
               </div>
             </form>

@@ -1,15 +1,22 @@
 /* global process */
-// Endpoint consolidado para estado de WhatsApp, sincronización global de cuentas/teléfonos y envío de alertas de prueba.
-import { estadoWhatsapp, conectarWhatsapp, enviarTextoWhatsapp, normalizarTelefono, configurarWebhookEvolution } from "../whatsapp/evolution.js";
+// Endpoint consolidado para estado de WhatsApp, sincronización global de cuentas/teléfonos/excluidos y envío de alertas de prueba.
+import {
+  estadoWhatsapp,
+  conectarWhatsapp,
+  enviarTextoWhatsapp,
+  normalizarTelefono,
+  configurarWebhookEvolution
+} from "../whatsapp/evolution.js";
 import { createClient } from "@supabase/supabase-js";
 
 const ID_FALLBACK_TELEFONOS = "00000000-0000-0000-0000-000000000099";
+const ID_FALLBACK_EXCLUIDOS = "00000000-0000-0000-0000-000000000098";
 
-function getFallbackRecord(lista) {
+function getFallbackRecord(id, email, nombre, lista) {
   return {
-    id: ID_FALLBACK_TELEFONOS,
-    email: "telefonos@notificaciones.internal",
-    nombre_cuenta: "Configuración Teléfonos Empleados",
+    id,
+    email,
+    nombre_cuenta: nombre,
     proveedor: "dominio_personalizado",
     token_acceso: JSON.stringify(lista),
     es_predeterminado: false,
@@ -25,17 +32,19 @@ function getFallbackRecord(lista) {
 export default async function handler(req, res) {
   const sbUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const supabase = (sbUrl && serviceKey) ? createClient(sbUrl, serviceKey, { auth: { persistSession: false } }) : null;
+  const supabase = sbUrl && serviceKey ? createClient(sbUrl, serviceKey, { auth: { persistSession: false } }) : null;
 
   const action = req.query?.action;
 
-  // 1. Acciones para cuentas de correo
+  // --------------------------------------------------------------------------
+  // 1. ACCIONES PARA CUENTAS DE CORREO
+  // --------------------------------------------------------------------------
   if (action === "listar_cuentas") {
     if (!supabase) return res.status(200).json({ data: [] });
     const { data, error } = await supabase
       .from("cuentas_correo_config")
       .select("*")
-      .neq("id", ID_FALLBACK_TELEFONOS)
+      .not("id", "in", `("${ID_FALLBACK_TELEFONOS}","${ID_FALLBACK_EXCLUIDOS}")`)
       .order("created_at", { ascending: true });
     return res.status(200).json({ data: data || [], error: error?.message || null });
   }
@@ -62,7 +71,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: !error, error: error?.message || null });
   }
 
-  // 2. Acciones para teléfonos de empleados (Sincronización dual con esquema completo)
+  // --------------------------------------------------------------------------
+  // 2. ACCIONES PARA TELÉFONOS DE EMPLEADOS (Alertas)
+  // --------------------------------------------------------------------------
   if (action === "listar_telefonos") {
     if (!supabase) return res.status(200).json({ data: [] });
 
@@ -98,7 +109,6 @@ export default async function handler(req, res) {
       /* fallback */
     }
 
-    // Sincronizar siempre en cuentas_correo_config bajo ID_FALLBACK_TELEFONOS con esquema completo
     const { data: existing } = await supabase
       .from("cuentas_correo_config")
       .select("token_acceso")
@@ -117,13 +127,9 @@ export default async function handler(req, res) {
     if (idx >= 0) lista[idx] = payload;
     else lista.push(payload);
 
-    const { error: errUpsert } = await supabase
+    await supabase
       .from("cuentas_correo_config")
-      .upsert(getFallbackRecord(lista));
-
-    if (errUpsert) {
-      console.error("Error al guardar fallback telefonos:", errUpsert);
-    }
+      .upsert(getFallbackRecord(ID_FALLBACK_TELEFONOS, "telefonos@notificaciones.internal", "Configuración Teléfonos Empleados", lista));
 
     return res.status(200).json({ success: true, data: lista });
   }
@@ -139,7 +145,6 @@ export default async function handler(req, res) {
       /* fallback */
     }
 
-    // Actualizar en cuentas_correo_config
     const { data: existing } = await supabase
       .from("cuentas_correo_config")
       .select("token_acceso")
@@ -151,7 +156,9 @@ export default async function handler(req, res) {
       try {
         lista = JSON.parse(existing[0].token_acceso);
         lista = lista.filter((t) => t.id !== id);
-        await supabase.from("cuentas_correo_config").upsert(getFallbackRecord(lista));
+        await supabase
+          .from("cuentas_correo_config")
+          .upsert(getFallbackRecord(ID_FALLBACK_TELEFONOS, "telefonos@notificaciones.internal", "Configuración Teléfonos Empleados", lista));
       } catch {
         /* ignore */
       }
@@ -160,7 +167,105 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, data: lista });
   }
 
-  // 3. Probar envío de alerta por WhatsApp a un empleado
+  // --------------------------------------------------------------------------
+  // 3. ACCIONES PARA NÚMEROS EXCLUIDOS (Socios / Números que el bot no responde)
+  // --------------------------------------------------------------------------
+  if (action === "listar_excluidos") {
+    if (!supabase) return res.status(200).json({ data: [] });
+
+    let result = [];
+    const { data, error } = await supabase.from("numeros_excluidos").select("*").order("created_at", { ascending: true });
+    if (!error && data && data.length > 0) {
+      result = data;
+    } else {
+      const { data: fallbackData } = await supabase
+        .from("cuentas_correo_config")
+        .select("token_acceso")
+        .eq("id", ID_FALLBACK_EXCLUIDOS)
+        .limit(1);
+
+      if (fallbackData && fallbackData.length > 0 && fallbackData[0].token_acceso) {
+        try {
+          result = JSON.parse(fallbackData[0].token_acceso);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return res.status(200).json({ data: result, error: null });
+  }
+
+  if (action === "guardar_excluido" && req.method === "POST") {
+    if (!supabase) return res.status(500).json({ error: "Missing Supabase service key" });
+    const payload = req.body;
+
+    try {
+      await supabase.from("numeros_excluidos").upsert(payload);
+    } catch {
+      /* fallback */
+    }
+
+    const { data: existing } = await supabase
+      .from("cuentas_correo_config")
+      .select("token_acceso")
+      .eq("id", ID_FALLBACK_EXCLUIDOS)
+      .limit(1);
+
+    let lista = [];
+    if (existing && existing.length > 0 && existing[0].token_acceso) {
+      try {
+        lista = JSON.parse(existing[0].token_acceso);
+      } catch {
+        /* ignore */
+      }
+    }
+    const idx = lista.findIndex((t) => t.id === payload.id);
+    if (idx >= 0) lista[idx] = payload;
+    else lista.push(payload);
+
+    await supabase
+      .from("cuentas_correo_config")
+      .upsert(getFallbackRecord(ID_FALLBACK_EXCLUIDOS, "excluidos@bot.internal", "Configuración Números Excluidos Bot", lista));
+
+    return res.status(200).json({ success: true, data: lista });
+  }
+
+  if (action === "eliminar_excluido" && req.method === "POST") {
+    if (!supabase) return res.status(500).json({ error: "Missing Supabase service key" });
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ error: "Missing ID" });
+
+    try {
+      await supabase.from("numeros_excluidos").delete().eq("id", id);
+    } catch {
+      /* fallback */
+    }
+
+    const { data: existing } = await supabase
+      .from("cuentas_correo_config")
+      .select("token_acceso")
+      .eq("id", ID_FALLBACK_EXCLUIDOS)
+      .limit(1);
+
+    let lista = [];
+    if (existing && existing.length > 0 && existing[0].token_acceso) {
+      try {
+        lista = JSON.parse(existing[0].token_acceso);
+        lista = lista.filter((t) => t.id !== id);
+        await supabase
+          .from("cuentas_correo_config")
+          .upsert(getFallbackRecord(ID_FALLBACK_EXCLUIDOS, "excluidos@bot.internal", "Configuración Números Excluidos Bot", lista));
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return res.status(200).json({ success: true, data: lista });
+  }
+
+  // --------------------------------------------------------------------------
+  // 4. PROBAR ENVÍO DE ALERTA POR WHATSAPP A UN EMPLEADO
+  // --------------------------------------------------------------------------
   if (action === "probar_telefono" && req.method === "POST") {
     const { telefono, nombre, rol } = req.body || {};
     if (!telefono) return res.status(400).json({ error: "Falta el número de teléfono" });
@@ -175,7 +280,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, message: "Alerta enviada por WhatsApp con éxito." });
   }
 
-  // 4. Flujo para vincular (conectar) WhatsApp y auto-configurar Webhook
+  // --------------------------------------------------------------------------
+  // 5. FLUJO PARA VINCULAR WHATSAPP Y AUTO-CONFIGURAR WEBHOOK
+  // --------------------------------------------------------------------------
   if (action === "configurar_webhook") {
     const r = await configurarWebhookEvolution();
     return res.status(200).json({ success: r.ok, error: r.error || null, data: r.data || null });
