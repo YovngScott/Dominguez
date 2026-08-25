@@ -3,6 +3,8 @@
 import { estadoWhatsapp, conectarWhatsapp, enviarTextoWhatsapp, normalizarTelefono } from "../whatsapp/evolution.js";
 import { createClient } from "@supabase/supabase-js";
 
+const ID_FALLBACK_TELEFONOS = "00000000-0000-0000-0000-000000000099";
+
 export default async function handler(req, res) {
   const sbUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -16,7 +18,7 @@ export default async function handler(req, res) {
     const { data, error } = await supabase
       .from("cuentas_correo_config")
       .select("*")
-      .neq("id", "config_telefonos_empleados")
+      .neq("id", ID_FALLBACK_TELEFONOS)
       .order("created_at", { ascending: true });
     return res.status(200).json({ data: data || [], error: error?.message || null });
   }
@@ -43,7 +45,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: !error, error: error?.message || null });
   }
 
-  // 2. Acciones para teléfonos de empleados (con fallback automático si la tabla no existe)
+  // 2. Acciones para teléfonos de empleados (con fallback automático a UUID válido)
   if (action === "listar_telefonos") {
     if (!supabase) return res.status(200).json({ data: [] });
     // Intentar leer de la tabla telefonos_notificacion
@@ -51,11 +53,11 @@ export default async function handler(req, res) {
     if (!error && data) {
       return res.status(200).json({ data: data || [], error: null });
     }
-    // Fallback: Leer de cuentas_correo_config bajo id "config_telefonos_empleados"
+    // Fallback: Leer de cuentas_correo_config bajo ID_FALLBACK_TELEFONOS
     const { data: fallbackData } = await supabase
       .from("cuentas_correo_config")
       .select("token_acceso")
-      .eq("id", "config_telefonos_empleados")
+      .eq("id", ID_FALLBACK_TELEFONOS)
       .limit(1);
 
     if (fallbackData && fallbackData.length > 0 && fallbackData[0].token_acceso) {
@@ -79,11 +81,11 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, data });
     }
 
-    // Fallback: Guardar la lista acumulada en cuentas_correo_config
+    // Fallback: Guardar la lista acumulada en cuentas_correo_config con UUID válido
     const { data: existing } = await supabase
       .from("cuentas_correo_config")
       .select("token_acceso")
-      .eq("id", "config_telefonos_empleados")
+      .eq("id", ID_FALLBACK_TELEFONOS)
       .limit(1);
 
     let lista = [];
@@ -99,7 +101,7 @@ export default async function handler(req, res) {
     else lista.push(payload);
 
     await supabase.from("cuentas_correo_config").upsert({
-      id: "config_telefonos_empleados",
+      id: ID_FALLBACK_TELEFONOS,
       email: "telefonos@notificaciones.internal",
       nombre_cuenta: "Configuración Teléfonos Empleados",
       token_acceso: JSON.stringify(lista),
@@ -122,7 +124,7 @@ export default async function handler(req, res) {
     const { data: existing } = await supabase
       .from("cuentas_correo_config")
       .select("token_acceso")
-      .eq("id", "config_telefonos_empleados")
+      .eq("id", ID_FALLBACK_TELEFONOS)
       .limit(1);
 
     if (existing && existing.length > 0 && existing[0].token_acceso) {
@@ -130,7 +132,7 @@ export default async function handler(req, res) {
         let lista = JSON.parse(existing[0].token_acceso);
         lista = lista.filter((t) => t.id !== id);
         await supabase.from("cuentas_correo_config").upsert({
-          id: "config_telefonos_empleados",
+          id: ID_FALLBACK_TELEFONOS,
           email: "telefonos@notificaciones.internal",
           nombre_cuenta: "Configuración Teléfonos Empleados",
           token_acceso: JSON.stringify(lista),
