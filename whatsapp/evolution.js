@@ -219,3 +219,26 @@ export function textoCita({ nombre, fecha, hora, vehiculo, servicio, esHoy = fal
   lineas.push("", "Si necesita reprogramar, respóndanos por aquí. ¡Le esperamos!");
   return lineas.join("\n");
 }
+
+// Obtiene el archivo en base64 de un mensaje con media (fotos, audio, etc.)
+export async function obtenerBase64Mensaje(messageId) {
+  const { apiUrl, apiKey, instancia, ok } = evolutionConfig();
+  if (!ok) return null;
+  try {
+    const r = await fetch(`${apiUrl}/chat/getBase64FromMediaMessage/${encodeURIComponent(instancia)}`, {
+      method: "POST",
+      headers: { apikey: apiKey, "content-type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          key: { id: messageId }
+        },
+        convertToMp4: false
+      })
+    });
+    if (!r.ok) return null;
+    const data = await r.json().catch(() => ({}));
+    return data?.base64 || null;
+  } catch {
+    return null;
+  }
+}
