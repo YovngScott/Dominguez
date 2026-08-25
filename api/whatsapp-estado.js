@@ -45,43 +45,43 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: !error, error: error?.message || null });
   }
 
-  // 2. Acciones para teléfonos de empleados (con fallback automático a UUID válido)
+  // 2. Acciones para teléfonos de empleados (Sincronización dual garantizada)
   if (action === "listar_telefonos") {
     if (!supabase) return res.status(200).json({ data: [] });
-    // Intentar leer de la tabla telefonos_notificacion
+    
+    let result = [];
     const { data, error } = await supabase.from("telefonos_notificacion").select("*").order("created_at", { ascending: true });
-    if (!error && data) {
-      return res.status(200).json({ data: data || [], error: null });
-    }
-    // Fallback: Leer de cuentas_correo_config bajo ID_FALLBACK_TELEFONOS
-    const { data: fallbackData } = await supabase
-      .from("cuentas_correo_config")
-      .select("token_acceso")
-      .eq("id", ID_FALLBACK_TELEFONOS)
-      .limit(1);
+    if (!error && data && data.length > 0) {
+      result = data;
+    } else {
+      const { data: fallbackData } = await supabase
+        .from("cuentas_correo_config")
+        .select("token_acceso")
+        .eq("id", ID_FALLBACK_TELEFONOS)
+        .limit(1);
 
-    if (fallbackData && fallbackData.length > 0 && fallbackData[0].token_acceso) {
-      try {
-        const parsed = JSON.parse(fallbackData[0].token_acceso);
-        return res.status(200).json({ data: parsed, error: null });
-      } catch {
-        /* ignore */
+      if (fallbackData && fallbackData.length > 0 && fallbackData[0].token_acceso) {
+        try {
+          result = JSON.parse(fallbackData[0].token_acceso);
+        } catch {
+          /* ignore */
+        }
       }
     }
-    return res.status(200).json({ data: [], error: null });
+    return res.status(200).json({ data: result, error: null });
   }
 
   if (action === "guardar_telefono" && req.method === "POST") {
     if (!supabase) return res.status(500).json({ error: "Missing Supabase service key" });
     const payload = req.body;
 
-    // Intentar guardar en la tabla telefonos_notificacion
-    const { data, error } = await supabase.from("telefonos_notificacion").upsert(payload).select();
-    if (!error) {
-      return res.status(200).json({ success: true, data });
+    try {
+      await supabase.from("telefonos_notificacion").upsert(payload);
+    } catch {
+      /* fallback */
     }
 
-    // Fallback: Guardar la lista acumulada en cuentas_correo_config con UUID válido
+    // Sincronizar siempre en cuentas_correo_config bajo ID_FALLBACK_TELEFONOS
     const { data: existing } = await supabase
       .from("cuentas_correo_config")
       .select("token_acceso")
@@ -117,19 +117,23 @@ export default async function handler(req, res) {
     const { id } = req.body || {};
     if (!id) return res.status(400).json({ error: "Missing ID" });
 
-    // Intentar eliminar de la tabla telefonos_notificacion
-    await supabase.from("telefonos_notificacion").delete().eq("id", id);
+    try {
+      await supabase.from("telefonos_notificacion").delete().eq("id", id);
+    } catch {
+      /* fallback */
+    }
 
-    // Actualizar fallback en cuentas_correo_config
+    // Actualizar en cuentas_correo_config
     const { data: existing } = await supabase
       .from("cuentas_correo_config")
       .select("token_acceso")
       .eq("id", ID_FALLBACK_TELEFONOS)
       .limit(1);
 
+    let lista = [];
     if (existing && existing.length > 0 && existing[0].token_acceso) {
       try {
-        let lista = JSON.parse(existing[0].token_acceso);
+        lista = JSON.parse(existing[0].token_acceso);
         lista = lista.filter((t) => t.id !== id);
         await supabase.from("cuentas_correo_config").upsert({
           id: ID_FALLBACK_TELEFONOS,
@@ -144,7 +148,7 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, data: lista });
   }
 
   // 3. Probar envío de alerta por WhatsApp a un empleado
