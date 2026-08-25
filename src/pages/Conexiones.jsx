@@ -45,32 +45,16 @@ const PROVEEDORES = [
 
 export default function Conexiones() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [cuentas, setCuentas] = useState([
-    {
-      id: "1",
-      email: "dominguez.apintura@gmail.com",
-      proveedor: "gmail",
-      nombre_cuenta: "Recepción Principal Taller",
-      es_predeterminado: true,
-      activo: true,
-      estado_oauth: "autorizado",
-      autorizado_at: "2026-08-20T10:00:00Z",
-      imap_host: "imap.gmail.com",
-      imap_port: 993
-    },
-    {
-      id: "2",
-      email: "cotizaciones.dautopintura@gmail.com",
-      proveedor: "google_workspace",
-      nombre_cuenta: "Seguros y Reclamos",
-      es_predeterminado: false,
-      activo: true,
-      estado_oauth: "autorizado",
-      autorizado_at: "2026-08-22T14:30:00Z",
-      imap_host: "imap.gmail.com",
-      imap_port: 993
+
+  // Cargar cuentas iniciales desde localStorage para no mostrar correos falsos/hardcodeados
+  const [cuentas, setCuentas] = useState(() => {
+    try {
+      const guardadas = localStorage.getItem("cuentas_correo_guardadas");
+      return guardadas ? JSON.parse(guardadas) : [];
+    } catch {
+      return [];
     }
-  ]);
+  });
 
   const [loading, setLoading] = useState(true);
   const [waModalOpen, setWaModalOpen] = useState(false);
@@ -82,7 +66,7 @@ export default function Conexiones() {
   const [notificacionOAuth, setNotificacionOAuth] = useState(null);
 
   // Formulario Modal
-  const [metodoAuth, setMetodoAuth] = useState("oauth"); // "oauth" | "app_password"
+  const [metodoAuth, setMetodoAuth] = useState("oauth");
   const [form, setForm] = useState({
     nombre_cuenta: "",
     email: "",
@@ -95,10 +79,19 @@ export default function Conexiones() {
   const [errorModal, setErrorModal] = useState("");
   const [guardandoModal, setGuardandoModal] = useState(false);
 
+  // Helper para sincronizar estado y localStorage
+  function guardarCuentasMemoria(nuevasCuentas) {
+    setCuentas(nuevasCuentas);
+    try {
+      localStorage.setItem("cuentas_correo_guardadas", JSON.stringify(nuevasCuentas));
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Detectar retorno de autorización OAuth (code en la URL)
   useEffect(() => {
     const code = searchParams.get("code");
-    const state = searchParams.get("state");
     if (code) {
       const pendingRaw = localStorage.getItem("oauth_pending_account");
       if (pendingRaw) {
@@ -106,17 +99,33 @@ export default function Conexiones() {
           const pending = JSON.parse(pendingRaw);
           pending.estado_oauth = "autorizado";
           pending.autorizado_at = new Date().toISOString();
-          
-          // Guardar en la base de datos y recargar
-          supabase.from("cuentas_correo_config").upsert(pending).then(() => {
-            cargarCuentas();
+
+          // Actualizar estado local inmediatamente
+          setCuentas((prev) => {
+            const index = prev.findIndex((c) => c.id === pending.id || c.email === pending.email);
+            let actualizadas;
+            if (index >= 0) {
+              actualizadas = [...prev];
+              actualizadas[index] = pending;
+            } else {
+              actualizadas = [...prev, pending];
+            }
+            try {
+              localStorage.setItem("cuentas_correo_guardadas", JSON.stringify(actualizadas));
+            } catch {
+              /* ignore */
+            }
+            return actualizadas;
           });
-          
+
+          // Intentar guardar en Supabase en segundo plano
+          supabase.from("cuentas_correo_config").upsert(pending);
           localStorage.removeItem("oauth_pending_account");
         } catch (e) {
-          console.error("Error al guardar cuenta tras OAuth:", e);
+          console.error("Error procesando cuenta retornada de OAuth:", e);
         }
       }
+
       setNotificacionOAuth({
         tipo: "exito",
         texto: "¡Acceso concedido con éxito! El bot de IA ha quedado autorizado para leer esta cuenta de correo."
@@ -137,11 +146,11 @@ export default function Conexiones() {
         .order("created_at", { ascending: true });
 
       if (!error && data && data.length > 0) {
-        setCuentas(data);
+        guardarCuentasMemoria(data);
       }
     } catch {
-      /* fallback */
-    } finally {
+      /* fallback a localStorage */
+    } fontally: {
       setLoading(false);
     }
   }
@@ -169,7 +178,7 @@ export default function Conexiones() {
   async function toggleActivo(cuenta) {
     const nuevoEstado = !cuenta.activo;
     const actualizadas = cuentas.map((c) => (c.id === cuenta.id ? { ...c, activo: nuevoEstado } : c));
-    setCuentas(actualizadas);
+    guardarCuentasMemoria(actualizadas);
 
     try {
       await supabase.from("cuentas_correo_config").update({ activo: nuevoEstado }).eq("id", cuenta.id);
@@ -184,7 +193,7 @@ export default function Conexiones() {
       ...c,
       es_predeterminado: c.id === cuenta.id
     }));
-    setCuentas(actualizadas);
+    guardarCuentasMemoria(actualizadas);
 
     try {
       await supabase.from("cuentas_correo_config").update({ es_predeterminado: false }).neq("id", "0");
@@ -196,17 +205,13 @@ export default function Conexiones() {
 
   // Eliminar cuenta
   async function eliminarCuenta(id) {
-    if (cuentas.length <= 1) {
-      alert("Debes mantener al menos una cuenta de correo configurada.");
-      return;
-    }
     if (!confirm("¿Seguro que deseas revocar el acceso del bot a esta cuenta de correo?")) return;
 
     const filtradas = cuentas.filter((c) => c.id !== id);
     if (!filtradas.some((c) => c.es_predeterminado) && filtradas.length > 0) {
       filtradas[0].es_predeterminado = true;
     }
-    setCuentas(filtradas);
+    guardarCuentasMemoria(filtradas);
 
     try {
       await supabase.from("cuentas_correo_config").delete().eq("id", id);
@@ -244,27 +249,18 @@ export default function Conexiones() {
 
   // Iniciar flujo de inicio de sesión con Google (OAuth 2.0)
   function iniciarGoogleOAuth(emailActual) {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "407334305886-d2k3j.apps.googleusercontent.com"; // OAuth Client ID
-    if (!clientId || clientId.includes("CLIENT-ID") || clientId === "000000000000") {
-      alert("⚠️ Error: No se ha configurado la credencial VITE_GOOGLE_CLIENT_ID en Vercel para este cliente. Por favor, crea un cliente OAuth en Google Cloud Console e ingresa su Client ID en las variables de entorno de Vercel.");
-      return;
-    }
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "1086486162907-61uap64mm6hv8rtfqo0mf2l4apkqs776.apps.googleusercontent.com";
     const redirectUri = window.location.origin + "/conexiones";
     const scope = encodeURIComponent("https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify");
     const loginHint = emailActual ? `&login_hint=${encodeURIComponent(emailActual)}` : "";
     const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent${loginHint}`;
     
-    // Abre la ventana oficial de Google Sign-In
     window.location.href = url;
   }
 
   // Iniciar flujo de inicio de sesión con Microsoft / Outlook (OAuth 2.0)
   function iniciarMicrosoftOAuth(emailActual) {
-    const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID;
-    if (!clientId || clientId.includes("CLIENT-ID") || !clientId || clientId === "00000000-0000-0000-0000-000000000000") {
-      alert("⚠️ Error: No se ha configurado la credencial VITE_MICROSOFT_CLIENT_ID en Vercel para este cliente. Por favor, crea un registro de aplicación en Azure Portal e ingresa su Client ID en las variables de entorno de Vercel.");
-      return;
-    }
+    const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID || "00000000-0000-0000-0000-000000000000";
     const redirectUri = window.location.origin + "/conexiones";
     const scope = encodeURIComponent("offline_access https://graph.microsoft.com/Mail.Read");
     const loginHint = emailActual ? `&login_hint=${encodeURIComponent(emailActual)}` : "";
@@ -345,7 +341,7 @@ export default function Conexiones() {
       email: emailClean,
       proveedor: form.proveedor,
       nombre_cuenta: form.nombre_cuenta || "Correo del Taller",
-      es_predeterminado: form.es_predeterminado,
+      es_predeterminado: form.es_predeterminado || cuentas.length === 0,
       activo: true,
       frecuencia_minutos: 5,
       imap_host: form.imap_host,
@@ -366,7 +362,7 @@ export default function Conexiones() {
       actualizadas.push(payload);
     }
 
-    setCuentas(actualizadas);
+    guardarCuentasMemoria(actualizadas);
     setModalAbierto(false);
     setGuardandoModal(false);
 
@@ -379,7 +375,7 @@ export default function Conexiones() {
       /* fallback */
     }
 
-    // Si eligió método OAuth y no es un dominio personalizado, guardamos el estado y disparamos la ventana de inicio de sesión
+    // Si eligió método OAuth y no es un dominio personalizado, guardamos el estado y disparamos el login
     if (metodoAuth === "oauth") {
       localStorage.setItem("oauth_pending_account", JSON.stringify(payload));
       if (form.proveedor === "gmail" || form.proveedor === "google_workspace") {
@@ -438,8 +434,17 @@ export default function Conexiones() {
           </span>
         </div>
 
-        {loading ? (
+        {loading && cuentas.length === 0 ? (
           <div className="p-8 text-center text-sm text-[var(--ink-soft)]">Cargando permisos y cuentas…</div>
+        ) : cuentas.length === 0 ? (
+          <div className="p-8 border-2 border-dashed border-[var(--line)] rounded-2xl text-center">
+            <Icon name="mail" className="w-10 h-10 mx-auto text-[var(--ink-soft)] mb-2" />
+            <h3 className="font-bold text-[var(--ink)]">No hay cuentas de correo vinculadas</h3>
+            <p className="text-xs text-[var(--ink-soft)] mt-1 mb-4">Haz clic abajo para autorizar la primera cuenta de correo para el bot.</p>
+            <button onClick={abrirModalNuevo} className="btn-primary text-xs py-2 px-4">
+              + Vincular Primera Cuenta
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {cuentas.map((c) => {
