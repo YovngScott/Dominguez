@@ -5,6 +5,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import { enviarTextoWhatsapp, normalizarTelefono, evolutionConfig } from "../whatsapp/evolution.js";
+import insuranceAutomationHandler from "../server/insurance-automation.js";
 
 // Helper to generate UUID
 function generateUUID() {
@@ -25,6 +26,10 @@ async function obtenerTelefonosNotificacion(supabase) {
 }
 
 export default async function handler(req, res) {
+  const requestedAction = String(req.query?.action || req.body?.action || "");
+  if (requestedAction.startsWith("insurance_")) {
+    return insuranceAutomationHandler(req, res);
+  }
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed. Use POST." });
   }

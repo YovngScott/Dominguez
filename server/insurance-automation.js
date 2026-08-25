@@ -7,7 +7,7 @@ import {
   extractIdentifiers,
   formatReviewAlert,
   normalizeIdentifier,
-} from "./_insurance-core.js";
+} from "./insurance-core.js";
 
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
 const PDF_BUCKET_PENDING = "seguros-pendientes";
@@ -376,7 +376,7 @@ export default async function handler(req, res) {
   let clients;
   try {
     clients = buildClients();
-    const action = String(req.query.action || req.body?.action || "list");
+    const action = String(req.query.action || req.body?.action || "list").replace(/^insurance_/, "");
     if (action === "ingest" && req.method === "POST") return json(res, 200, await ingest(clients.supabase, clients.ai, req.body || {}));
     if (action === "list" && req.method === "GET") return json(res, 200, { data: await listReviews(clients.supabase, req) });
     if (action === "detail" && req.method === "GET") return json(res, 200, { data: await detailReview(clients.supabase, String(req.query.id || "")) });

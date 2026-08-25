@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compareQuoteLines, descriptionSimilarity, extractIdentifiers } from "../api/_insurance-core.js";
+import { compareQuoteLines, descriptionSimilarity, extractIdentifiers } from "../server/insurance-core.js";
 
 test("extrae chasis y placa del asunto", () => {
   assert.deepEqual(extractIdentifiers("Kia placa G624728, chasis MZBEP814BPN407288"), {

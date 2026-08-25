@@ -1,3 +1,4 @@
+// Funciones puras compartidas por la API y las pruebas; no crea otra Serverless Function.
 const STOP_WORDS = new Set([
   "de", "del", "la", "el", "los", "las", "y", "o", "para", "con", "sin",
   "pieza", "servicio", "reparacion", "reparar", "reemplazo", "reemplazar",
