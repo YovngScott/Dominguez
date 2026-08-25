@@ -9,6 +9,26 @@ import {
 
 const ID_FALLBACK_EXCLUIDOS = "00000000-0000-0000-0000-000000000098";
 const ID_FALLBACK_TELEFONOS = "00000000-0000-0000-0000-000000000099";
+const ID_FALLBACK_PROMPTS = "00000000-0000-0000-0000-000000000097";
+
+// Helper para obtener el prompt personalizado del bot configurado por el usuario
+async function obtenerPromptWhatsappPersonalizado(supabase) {
+  try {
+    const { data } = await supabase
+      .from("cuentas_correo_config")
+      .select("token_acceso")
+      .eq("id", ID_FALLBACK_PROMPTS)
+      .limit(1);
+
+    if (data?.[0]?.token_acceso) {
+      const parsed = JSON.parse(data[0].token_acceso);
+      if (parsed.prompt_whatsapp && parsed.prompt_whatsapp.trim()) {
+        return parsed.prompt_whatsapp.trim();
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
 
 // Aseguradoras oficiales autorizadas
 const ASEGURADORAS_AUTORIZADAS = [
@@ -437,37 +457,18 @@ export default async function handler(req, res) {
       parts: currentParts
     });
 
-    // 8) Construir el System Prompt Oficial
+    // 8) Cargar Prompt Personalizado o usar el oficial por defecto
+    const promptPersonalizado = await obtenerPromptWhatsappPersonalizado(supabase);
+
     const systemPrompt = `
-      Eres el Asistente Inteligente de Atención al Cliente de "Dominguez Auto Pintura", taller de desabolladura, pintura automotriz y colisiones ubicado en la Av. Hatuey #16, Santiago, República Dominicana. Teléfonos principales: 809-575-7986 y 809-330-3554.
-
-      ${clienteExistente ? `
+      ${promptPersonalizado ? `
       ========================================================================
-      🚨 INFORMACIÓN DE CLIENTE REGISTRADO EN EL SISTEMA:
-      - Nombre del cliente: "${clienteExistente.nombre_completo}"
-      - Teléfono: "${clienteExistente.telefono}"
-      - Casos y vehículos registrados en el taller:
-      ${casosCliente.length > 0 ? casosCliente.map((c) => `  * Caso #${c.id.slice(0, 8)}: ${c.marca?.nombre || ''} ${c.modelo?.nombre || ''} ${c.anio || ''} (${c.color || 'Color S/E'}, Placa: ${c.placa || 'S/P'}), Seguro: ${c.aseguradora?.nombre || 'Particular'}, Póliza: ${c.numero_poliza || 'N/A'}, Reclamo: ${c.numero_reclamo || 'N/A'}, Estado: "${c.estado}"`).join("\n") : "  (Sin casos activos en este momento)"}
-      ${citasCliente.length > 0 ? `- Citas registradas:\n${citasCliente.map((ct) => `  * Fecha: ${ct.fecha}, Hora: ${ct.hora || 'S/H'}, Motivo: ${ct.servicio || 'Revisión'}, Estado: ${ct.estado || 'Programada'}`).join("\n")}` : ""}
-
-      REGLA SUPREMA PARA CLIENTES YA REGISTRADOS:
-      1. ESTE CLIENTE YA ESTÁ EN NUESTRA BASE DE DATOS. YA SABEMOS SU NOMBRE, SU SEGURO Y SU VEHÍCULO.
-      2. PROHIBIDO Y NUNCA PEDIRLE:
-         - ¿Cuál es su compañía de seguro? (¡PROHIBIDO PREGUNTAR ESTO! YA LO SABEMOS: ${casosCliente[0]?.aseguradora?.nombre || 'Seguro Registrado'})
-         - Fotos del carnet de seguro
-         - Fotos de la matrícula
-         - Datos de su vehículo
-      3. Trátalo con máxima familiaridad y respeto por su nombre (ej: "¡Hola ${clienteExistente.nombre_completo}!").
-      4. Si el cliente avisa que va a traer o dejar el vehículo hoy o a una hora fija (ej: "estaré dejando el carro a las 5pm"):
-         - Confírmale con gusto que le esperamos a esa hora para recibir su vehículo en el taller.
-         - NO le pidas seguro ni le hables de cotizaciones nuevas, porque ya es un cliente activo que viene a dejar su vehículo acordado.
-      5. Si pregunta por el estado de su reparación o vehículo, infórmale con amabilidad según el estado de su caso.
+      📋 INSTRUCCIONES OFICIALES DE ATENCIÓN CONFIGURADAS POR ADMINISTRACIÓN:
+      ${promptPersonalizado}
       ========================================================================
       ` : `
-      ========================================================================
-      👤 CLIENTE NUEVO (NO REGISTRADO EN EL SISTEMA):
-      ${casoCreado ? `[AVISO: El cliente envió carnet/matrícula válido y su caso ya fue creado en "En espera de piezas" bajo el ID ${casoCreado.id}. Confírmale que sus datos fueron precargados].` : ""}
-      
+      Eres el Asistente Inteligente de Atención al Cliente de "Dominguez Auto Pintura", taller de desabolladura, pintura automotriz y colisiones ubicado en la Av. Hatuey #16, Santiago, República Dominicana. Teléfonos principales: 809-575-7986 y 809-330-3554.
+
       SALUDO EMPÁTICO Y TONO:
       - Tono empático, cálido, caribeño y profesional:
         "¡Lamentamos mucho el percance que tuvo con su vehículo! 🙏🏼 Lo más importante es que usted esté bien. Por la parte del vehículo, no se preocupe que de eso nos encargamos nosotros para dejárselo como nuevo. 🚘✨"
@@ -488,7 +489,32 @@ export default async function handler(req, res) {
       - Aseguradoras autorizadas: SEGUROS RESERVAS, LA COLONIAL DE SEGUROS, ATLÁNTICA DE SEGUROS, COOP-SEGUROS, SEGUROS SURA, SEGUROS LA INTERNACIONAL.
       - Si tiene una de estas 6: pedir foto del CARNET DE SEGURO y MATRÍCULA para precargar su caso.
       - Si NO tiene una de estas 6 (o es particular): explicar amablemente que la cotización se le entrega de inmediato en el taller, con costo de RD$ 2,000 descontables si repara con nosotros.
+      `}
+
+      ${clienteExistente ? `
       ========================================================================
+      🚨 REGLA SUPREMA PARA CLIENTES YA REGISTRADOS EN EL SISTEMA (PRIORIDAD MÁXIMA):
+      - Nombre del cliente: "${clienteExistente.nombre_completo}"
+      - Teléfono: "${clienteExistente.telefono}"
+      - Casos y vehículos registrados en el taller:
+      ${casosCliente.length > 0 ? casosCliente.map((c) => `  * Caso #${c.id.slice(0, 8)}: ${c.marca?.nombre || ''} ${c.modelo?.nombre || ''} ${c.anio || ''} (${c.color || 'Color S/E'}, Placa: ${c.placa || 'S/P'}), Seguro: ${c.aseguradora?.nombre || 'Particular'}, Póliza: ${c.numero_poliza || 'N/A'}, Reclamo: ${c.numero_reclamo || 'N/A'}, Estado: "${c.estado}"`).join("\n") : "  (Sin casos activos en este momento)"}
+      ${citasCliente.length > 0 ? `- Citas registradas:\n${citasCliente.map((ct) => `  * Fecha: ${ct.fecha}, Hora: ${ct.hora || 'S/H'}, Motivo: ${ct.servicio || 'Revisión'}, Estado: ${ct.estado || 'Programada'}`).join("\n")}` : ""}
+
+      REGLA:
+      1. ESTE CLIENTE YA ESTÁ EN NUESTRA BASE DE DATOS. YA SABEMOS SU NOMBRE, SU SEGURO Y SU VEHÍCULO.
+      2. PROHIBIDO Y NUNCA PEDIRLE:
+         - ¿Cuál es su compañía de seguro? (¡PROHIBIDO PREGUNTAR ESTO! YA LO SABEMOS: ${casosCliente[0]?.aseguradora?.nombre || 'Seguro Registrado'})
+         - Fotos del carnet de seguro
+         - Fotos de la matrícula
+         - Datos de su vehículo
+      3. Trátalo con máxima familiaridad y respeto por su nombre (ej: "¡Hola ${clienteExistente.nombre_completo}!").
+      4. Si el cliente avisa que va a traer o dejar el vehículo hoy o a una hora fija (ej: "estaré dejando el carro a las 5pm"):
+         - Confírmale con gusto que le esperamos a esa hora para recibir su vehículo en el taller.
+         - NO le pidas seguro ni le hables de cotizaciones nuevas, porque ya es un cliente activo que viene a dejar su vehículo acordado.
+      5. Si pregunta por el estado de su reparación o vehículo, infórmale con amabilidad según el estado de su caso.
+      ========================================================================
+      ` : `
+      ${casoCreado ? `[AVISO: El cliente envió carnet/matrícula válido y su caso ya fue creado en "En espera de piezas" bajo el ID ${casoCreado.id}. Confírmale que sus datos fueron precargados].` : ""}
       `}
 
       REGLAS DE PRECIOS POR FOTO:

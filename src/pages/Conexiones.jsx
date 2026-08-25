@@ -79,6 +79,15 @@ export default function Conexiones() {
     }
   });
 
+  // Prompts personalizados de la IA
+  const [promptWhatsapp, setPromptWhatsapp] = useState("");
+  const [promptCorreos, setPromptCorreos] = useState("");
+  const [defaultPromptWhatsapp, setDefaultPromptWhatsapp] = useState("");
+  const [defaultPromptCorreos, setDefaultPromptCorreos] = useState("");
+  const [guardandoPrompts, setGuardandoPrompts] = useState(false);
+  const [notificacionPrompts, setNotificacionPrompts] = useState(null);
+  const [tabPrompt, setTabPrompt] = useState("whatsapp");
+
   const [loading, setLoading] = useState(true);
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [waEstado, setWaEstado] = useState("loading");
@@ -204,6 +213,15 @@ export default function Conexiones() {
       if (dataExc?.data && Array.isArray(dataExc.data)) {
         guardarExcluidosMemoria(dataExc.data);
       }
+
+      const resPrompts = await fetch("/api/whatsapp-estado?action=obtener_prompts");
+      const dataPrompts = await resPrompts.json().catch(() => ({}));
+      if (dataPrompts?.success) {
+        setPromptWhatsapp(dataPrompts.prompt_whatsapp || "");
+        setPromptCorreos(dataPrompts.prompt_correos || "");
+        setDefaultPromptWhatsapp(dataPrompts.default_prompt_whatsapp || "");
+        setDefaultPromptCorreos(dataPrompts.default_prompt_correos || "");
+      }
     } catch (e) {
       console.error("Error al cargar datos globales:", e);
     } finally {
@@ -229,6 +247,53 @@ export default function Conexiones() {
     cargarDatos();
     cargarEstadoWhatsApp();
   }, []);
+
+  // Guardar Prompts de IA
+  async function guardarPrompts(e) {
+    if (e) e.preventDefault();
+    setGuardandoPrompts(true);
+    setNotificacionPrompts(null);
+    try {
+      const res = await fetch("/api/whatsapp-estado?action=guardar_prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt_whatsapp: promptWhatsapp,
+          prompt_correos: promptCorreos
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNotificacionPrompts({
+          tipo: "exito",
+          texto: "✅ ¡Prompts de la IA guardados y actualizados en tiempo real!"
+        });
+      } else {
+        setNotificacionPrompts({
+          tipo: "error",
+          texto: data.error || "Error al guardar los prompts en el servidor."
+        });
+      }
+    } catch (err) {
+      setNotificacionPrompts({
+        tipo: "error",
+        texto: err.message
+      });
+    } finally {
+      setGuardandoPrompts(false);
+      setTimeout(() => setNotificacionPrompts(null), 5000);
+    }
+  }
+
+  // Restablecer Prompt a valor por defecto
+  function restablecerPromptPorDefecto() {
+    if (!confirm("¿Deseas restablecer el prompt seleccionado a sus valores originales por defecto?")) return;
+    if (tabPrompt === "whatsapp") {
+      setPromptWhatsapp(defaultPromptWhatsapp);
+    } else {
+      setPromptCorreos(defaultPromptCorreos);
+    }
+  }
 
   // Toggle activo correo
   async function toggleActivo(cuenta) {
@@ -658,13 +723,13 @@ export default function Conexiones() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 border-b border-[var(--line)] pb-6">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[var(--brand-red)] uppercase tracking-wider mb-1">
-            <Icon name="link" className="w-4 h-4" /> Conexiones y Automatizaciones · Dominguez Auto Pintura
+            <Icon name="link" className="w-4 h-4" /> Conexiones, Prompts y Automatizaciones · Dominguez Auto Pintura
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">
-            Vinculación de Cuentas, Alertas y Exclusiones
+            Vinculación de Cuentas, Alertas y Personalización de IA
           </h1>
           <p className="text-sm text-[var(--ink-soft)] mt-1">
-            Gestiona correos monitoreados, destinatarios de alertas de WhatsApp y números excluidos de las respuestas del bot.
+            Modifica los prompts de la IA en tiempo real, administra números excluidos, correos y alertas de WhatsApp.
           </p>
         </div>
 
@@ -677,12 +742,111 @@ export default function Conexiones() {
         </button>
       </div>
 
+      {/* SECCIÓN NUEVA: EDITOR DE PROMPTS DE LA IA (DIRECTO) */}
+      <div className="mb-10 card p-6 border-2 border-indigo-200 shadow-sm bg-gradient-to-br from-indigo-50/30 to-white">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-[var(--line)]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-sm">
+              ✨
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-[var(--ink)] flex items-center gap-2">
+                Personalización de Prompts e Instrucciones de la IA
+              </h2>
+              <p className="text-xs text-[var(--ink-soft)] mt-0.5">
+                Edita las directrices del bot de WhatsApp o del lector de correos directamente. Los cambios aplican de inmediato en vivo.
+              </p>
+            </div>
+          </div>
+
+          {/* Selector de Pestaña de Prompt */}
+          <div className="flex bg-[var(--paper)] p-1 rounded-xl border border-[var(--line)] text-xs font-bold">
+            <button
+              onClick={() => setTabPrompt("whatsapp")}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                tabPrompt === "whatsapp" ? "bg-indigo-600 text-white shadow-sm" : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
+              }`}
+            >
+              <Icon name="whatsapp" className="w-3.5 h-3.5" /> Prompt de WhatsApp
+            </button>
+            <button
+              onClick={() => setTabPrompt("correos")}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                tabPrompt === "correos" ? "bg-indigo-600 text-white shadow-sm" : "text-[var(--ink-soft)] hover:text-[var(--ink)]"
+              }`}
+            >
+              <Icon name="mail" className="w-3.5 h-3.5" /> Prompt de Correos / PDFs
+            </button>
+          </div>
+        </div>
+
+        {/* Notificación de Guardado de Prompts */}
+        {notificacionPrompts && (
+          <div className={`mb-4 p-3 rounded-xl text-xs font-semibold flex items-center justify-between ${
+            notificacionPrompts.tipo === "exito" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"
+          }`}>
+            <span>{notificacionPrompts.texto}</span>
+            <button onClick={() => setNotificacionPrompts(null)} className="font-bold">✕</button>
+          </div>
+        )}
+
+        {/* Editor de Texto del Prompt Activo */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-[var(--ink)] flex items-center gap-1.5">
+              <span>{tabPrompt === "whatsapp" ? "Instrucciones del Sistema para el Bot de WhatsApp (Atención al Cliente):" : "Instrucciones para el Análisis de Correos y Órdenes de Aseguradoras:"}</span>
+            </label>
+            <button
+              type="button"
+              onClick={restablecerPromptPorDefecto}
+              className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 underline flex items-center gap-1"
+            >
+              <Icon name="refresh" className="w-3 h-3" /> Restablecer a Valores por Defecto
+            </button>
+          </div>
+
+          {tabPrompt === "whatsapp" ? (
+            <textarea
+              rows={14}
+              value={promptWhatsapp}
+              onChange={(e) => setPromptWhatsapp(e.target.value)}
+              className="input w-full font-mono text-xs leading-relaxed p-3.5 bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl border border-indigo-200 shadow-inner resize-y"
+              placeholder="Escribe aquí las instrucciones de tono, horarios, aseguradoras, precios o respuestas para el bot de WhatsApp..."
+            />
+          ) : (
+            <textarea
+              rows={14}
+              value={promptCorreos}
+              onChange={(e) => setPromptCorreos(e.target.value)}
+              className="input w-full font-mono text-xs leading-relaxed p-3.5 bg-white focus:ring-2 focus:ring-indigo-500 rounded-xl border border-indigo-200 shadow-inner resize-y"
+              placeholder="Escribe aquí las instrucciones para la extracción de cotizaciones y análisis de PDFs de seguros..."
+            />
+          )}
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+            <p className="text-[11px] text-[var(--ink-soft)] italic">
+              💡 Tip: Puedes cambiar horarios, agregar reglas nuevas o modificar el guión cuando quieras sin necesidad de reiniciar nada.
+            </p>
+
+            <button
+              type="button"
+              disabled={guardandoPrompts}
+              onClick={guardarPrompts}
+              className="btn-primary text-xs py-2.5 px-6 bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2 shrink-0 shadow-md font-bold"
+            >
+              <Icon name="check" className="w-4 h-4" />
+              {guardandoPrompts ? "Guardando en Servidor…" : "Guardar Instrucciones de IA"}
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* LISTA DE CUENTAS DE CORREO */}
       <div className="mb-10">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-[var(--ink)] flex items-center gap-2">
             <Icon name="mail" className="w-5 h-5 text-[var(--brand-red)]" />
-            Cuentas Conectadas y Autorizadas
+            Cuentas de Correo Conectadas
           </h2>
           <span className="text-xs font-semibold text-[var(--ink-soft)] bg-[var(--paper)] border border-[var(--line)] px-3 py-1 rounded-full">
             {cuentas.length} de 4 cuentas con acceso
