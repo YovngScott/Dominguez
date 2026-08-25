@@ -227,7 +227,11 @@ export default function Conexiones() {
 
   // Iniciar flujo de inicio de sesión con Google (OAuth 2.0)
   function iniciarGoogleOAuth(emailActual) {
-    const clientId = "407334305886-d2k3j.apps.googleusercontent.com"; // OAuth Client ID
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "407334305886-d2k3j.apps.googleusercontent.com"; // OAuth Client ID
+    if (!clientId || clientId.includes("CLIENT-ID") || clientId === "000000000000") {
+      alert("⚠️ Error: No se ha configurado la credencial VITE_GOOGLE_CLIENT_ID en Vercel para este cliente. Por favor, crea un cliente OAuth en Google Cloud Console e ingresa su Client ID en las variables de entorno de Vercel.");
+      return;
+    }
     const redirectUri = window.location.origin + "/conexiones";
     const scope = encodeURIComponent("https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify");
     const loginHint = emailActual ? `&login_hint=${encodeURIComponent(emailActual)}` : "";
@@ -239,7 +243,11 @@ export default function Conexiones() {
 
   // Iniciar flujo de inicio de sesión con Microsoft / Outlook (OAuth 2.0)
   function iniciarMicrosoftOAuth(emailActual) {
-    const clientId = "00000000-0000-0000-0000-000000000000";
+    const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID;
+    if (!clientId || clientId.includes("CLIENT-ID") || !clientId || clientId === "00000000-0000-0000-0000-000000000000") {
+      alert("⚠️ Error: No se ha configurado la credencial VITE_MICROSOFT_CLIENT_ID en Vercel para este cliente. Por favor, crea un registro de aplicación en Azure Portal e ingresa su Client ID en las variables de entorno de Vercel.");
+      return;
+    }
     const redirectUri = window.location.origin + "/conexiones";
     const scope = encodeURIComponent("offline_access https://graph.microsoft.com/Mail.Read");
     const loginHint = emailActual ? `&login_hint=${encodeURIComponent(emailActual)}` : "";
