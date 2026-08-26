@@ -183,7 +183,7 @@ export default function Dashboard() {
                   : waEstado === "sin_servidor"
                   ? "La dirección del servidor ya no responde; no sirve escanear el QR hasta volver a desplegarlo."
                   : waEstado === "sesion_muerta"
-                  ? "Alguien quitó el dispositivo desde WhatsApp del taller. Vuelve a vincularlo con “Conectar WhatsApp” en el menú."
+                  ? "Alguien quitó el dispositivo desde WhatsApp del taller. Vuelve a vincularlo desde Mensajes → Conectar WhatsApp."
                   : "No se enviarán las confirmaciones de citas hasta volver a vincular el teléfono."}
               </p>
               {waError && (

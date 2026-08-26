@@ -44,39 +44,71 @@ const TrabajadoresList = lazy(() => import("./pages/TrabajadoresList"));
 const ReporteTrabajadores = lazy(() => import("./pages/ReporteTrabajadores"));
 const Usuarios = lazy(() => import("./pages/Usuarios"));
 const Llaves = lazy(() => import("./pages/Llaves"));
-const Conexiones = lazy(() => import("./pages/Conexiones"));
 const Mensajes = lazy(() => import("./pages/Mensajes"));
 
-// Orden lógico por flujo de trabajo (de lo más usado a lo menos):
-// operación diaria → almacén de piezas → agenda/cierre → directorio → análisis.
-const NAV = [
-  { to: "/mensajes", label: "Mensajes", icon: "mail", soloAdmin: true, muestraContador: true },
-  { to: "/cotizaciones", label: "Cotizaciones", icon: "receipt" },
-  { to: "/ordenes", label: "Recibos", icon: "clipboard" },
-  { to: "/llaves", label: "Llaves", icon: "key" },
-  { to: "/piezas", label: "Piezas", icon: "layers" },
-  { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
-  { to: "/tramos", label: "Tramos", icon: "grid" },
-  { to: "/suministros", label: "Almacén", icon: "package" },
-  { to: "/nevera", label: "Nevera", icon: "coins" },
-  { to: "/citas", label: "Citas", icon: "clock" },
-  { to: "/entregados", label: "Vehículos entregados", icon: "check" },
-  { to: "/clientes", label: "Clientes", icon: "user" },
-  { to: "/contactos", label: "Contactos", icon: "mail" },
-  { to: "/conexiones", label: "Conexiones Bot", icon: "link" },
-  { to: "/reportes", label: "Reportes", icon: "file" },
-  { to: "/taller/reporte", label: "Reporte de taller", icon: "wrench" },
-  { to: "/usuarios", label: "Usuarios", icon: "user", soloAdmin: true },
+// El menú muestra áreas de trabajo. Las pantallas específicas viven dentro de
+// cada área para evitar una lista larga de funciones sin jerarquía.
+const NAV_GROUPS = [
+  {
+    id: "mensajes", label: "Mensajes", icon: "mail", soloAdmin: true, muestraContador: true,
+    items: [
+      { to: "/mensajes", label: "Centro de mensajes", icon: "mail" },
+      { action: "whatsapp", label: "Conectar WhatsApp", icon: "whatsapp" },
+    ],
+  },
+  {
+    id: "operacion", label: "Operación", icon: "clipboard",
+    items: [
+      { to: "/cotizaciones", label: "Cotizaciones", icon: "receipt" },
+      { to: "/ordenes", label: "Recibos", icon: "clipboard" },
+      { to: "/llaves", label: "Llaves", icon: "key" },
+      { to: "/citas", label: "Citas", icon: "clock" },
+      { to: "/entregados", label: "Vehículos entregados", icon: "check" },
+    ],
+  },
+  {
+    id: "inventario", label: "Inventario y taller", icon: "package",
+    items: [
+      { to: "/piezas", label: "Piezas", icon: "layers" },
+      { to: "/etiquetas", label: "Etiquetas", icon: "tag" },
+      { to: "/tramos", label: "Tramos", icon: "grid" },
+      { to: "/suministros", label: "Almacén", icon: "package" },
+      { to: "/nevera", label: "Nevera", icon: "coins" },
+    ],
+  },
+  {
+    id: "contactos", label: "Contactos", icon: "user",
+    items: [
+      { to: "/clientes", label: "Clientes", icon: "user" },
+      { to: "/contactos", label: "Aseguradoras y suplidores", icon: "mail" },
+    ],
+  },
+  {
+    id: "reportes", label: "Reportes", icon: "file",
+    items: [
+      { to: "/reportes", label: "Reportes generales", icon: "file" },
+      { to: "/taller/reporte", label: "Reporte de taller", icon: "wrench" },
+    ],
+  },
+  {
+    id: "administracion", label: "Administración", icon: "cog", soloAdmin: true,
+    items: [{ to: "/usuarios", label: "Usuarios", icon: "user" }],
+  },
 ];
+
+function groupForPath(pathname) {
+  return NAV_GROUPS.find((group) => group.items.some((item) => item.to && (pathname === item.to || pathname.startsWith(`${item.to}/`))))?.id || "";
+}
 
 function PrivateLayout({ children }) {
   const { session, loading, signOut } = useAuth();
   const { cargandoRol, esSuministros, esTaller, esAdministrativo, inactivo } = useRol();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [seccionAbierta, setSeccionAbierta] = useState(() => groupForPath(location.pathname));
   const [waModalOpen, setWaModalOpen] = useState(false);
   const [oscuro, setOscuro] = useState(temaOscuroGuardado);
   const [mensajesNuevos, setMensajesNuevos] = useState(0);
-  const location = useLocation();
 
   function toggleTema() {
     setOscuro((v) => {
@@ -92,6 +124,8 @@ function PrivateLayout({ children }) {
   // Cierra el menú móvil al navegar a otra página
   useEffect(() => {
     setMenuOpen(false);
+    const activa = groupForPath(location.pathname);
+    if (activa) setSeccionAbierta(activa);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -136,7 +170,7 @@ function PrivateLayout({ children }) {
   }
   const rutaTallerPermitida = location.pathname === "/" || location.pathname.startsWith("/taller/") || /^\/casos\/[^/]+$/.test(location.pathname);
   if (esTaller && !rutaTallerPermitida) return <Navigate to="/" replace />;
-  const navegacion = NAV.filter((n) => !esTaller && (!n.soloAdmin || esAdministrativo));
+  const navegacion = esTaller ? [] : NAV_GROUPS.filter((group) => !group.soloAdmin || esAdministrativo);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -172,50 +206,55 @@ function PrivateLayout({ children }) {
         {/* Menú desplegable (escritorio y móvil) */}
         {menuOpen && (
           <nav className="absolute right-4 sm:right-6 top-full mt-1 z-40 w-[min(20rem,calc(100vw-2rem))] bg-white rounded-2xl shadow-xl border border-[var(--line)] p-2 flex flex-col gap-1 max-h-[80vh] overflow-y-auto">
-            {navegacion.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-3 rounded-xl font-semibold transition-colors ${
-                    isActive
-                      ? "bg-[var(--brand-red)] text-white shadow-sm"
-                      : "text-[var(--ink)] hover:bg-[var(--paper)]"
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <span
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                        isActive ? "bg-white/20 text-white" : "bg-[var(--brand-red-50)] text-[var(--brand-red)]"
-                      }`}
-                    >
-                      <Icon name={n.icon} className="w-5 h-5" />
+            {navegacion.map((group) => {
+              const abierta = seccionAbierta === group.id;
+              const activa = groupForPath(location.pathname) === group.id;
+              return (
+                <div key={group.id} className={`rounded-xl ${abierta ? "bg-[var(--paper)]" : ""}`}>
+                  <button
+                    type="button"
+                    onClick={() => setSeccionAbierta((actual) => actual === group.id ? "" : group.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl font-semibold transition-colors ${activa ? "text-[var(--brand-red)]" : "text-[var(--ink)] hover:bg-[var(--paper)]"}`}
+                    aria-expanded={abierta}
+                  >
+                    <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${activa ? "bg-[var(--brand-red)] text-white" : "bg-[var(--brand-red-50)] text-[var(--brand-red)]"}`}>
+                      <Icon name={group.icon} className="w-5 h-5" />
                     </span>
-                    <span className="flex-1">{n.label}</span>
-                    {n.muestraContador && mensajesNuevos > 0 && (
-                      <span className={`min-w-6 rounded-full px-2 py-0.5 text-center text-xs font-bold ${isActive ? "bg-white text-[var(--brand-red)]" : "bg-[var(--brand-red)] text-white"}`}>
+                    <span className="flex-1 text-left">{group.label}</span>
+                    {group.muestraContador && mensajesNuevos > 0 && (
+                      <span className="min-w-6 rounded-full bg-[var(--brand-red)] px-2 py-0.5 text-center text-xs font-bold text-white">
                         {mensajesNuevos > 99 ? "99+" : mensajesNuevos}
                       </span>
                     )}
-                  </>
-                )}
-              </NavLink>
-            ))}
-            {esAdministrativo && <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                setWaModalOpen(true);
-              }}
-              className="w-full flex items-center gap-3 px-3 py-3 rounded-xl font-semibold text-[var(--ink)] hover:bg-[var(--paper)] transition-colors"
-            >
-              <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[var(--brand-red-50)] text-[var(--brand-red)]">
-                <Icon name="whatsapp" className="w-5 h-5" />
-              </span>
-              Conectar WhatsApp
-            </button>}
+                    <Icon name="chevronDown" className={`w-4 h-4 transition-transform ${abierta ? "rotate-180" : ""}`} />
+                  </button>
+                  {abierta && (
+                    <div className="px-2 pb-2 pl-7 space-y-1">
+                      {group.items.map((item) => item.action === "whatsapp" ? (
+                        <button
+                          key={item.action}
+                          type="button"
+                          onClick={() => { setMenuOpen(false); setWaModalOpen(true); }}
+                          className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-[var(--ink)] hover:bg-white"
+                        >
+                          <Icon name={item.icon} className="w-4 h-4 shrink-0 text-[var(--brand-red)]" />
+                          {item.label}
+                        </button>
+                      ) : (
+                        <NavLink
+                          key={item.to}
+                          to={item.to}
+                          className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${isActive ? "bg-[var(--brand-red)] text-white shadow-sm" : "text-[var(--ink)] hover:bg-white"}`}
+                        >
+                          <Icon name={item.icon} className="w-4 h-4 shrink-0" />
+                          <span className="flex-1">{item.label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <div className="h-px bg-[var(--line)] my-1" />
             <button
               type="button"
@@ -546,14 +585,6 @@ export default function App() {
         element={
           <PrivateLayout>
             <ContactosList />
-          </PrivateLayout>
-        }
-      />
-      <Route
-        path="/conexiones"
-        element={
-          <PrivateLayout>
-            <Conexiones />
           </PrivateLayout>
         }
       />
