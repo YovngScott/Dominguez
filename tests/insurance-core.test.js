@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessPdfPackage, compareQuoteLines, descriptionSimilarity, extractIdentifiers } from "../server/insurance-core.js";
+import { assessPdfPackage, compareQuoteLines, descriptionSimilarity, extractIdentifiers, isDominguezSupplier } from "../server/insurance-core.js";
 
 test("extrae chasis y placa del asunto", () => {
   assert.deepEqual(extractIdentifiers("Kia placa G624728, chasis MZBEP814BPN407288"), {
@@ -40,6 +40,21 @@ test("no marca diferencias cuando las líneas equivalentes coinciden", () => {
     [{ tipo: "pieza", descripcion: "PARACHOQUE TRASERO", cantidad: 1, monto: 3000 }],
   );
   assert.equal(result.hasDifferences, false);
+});
+
+test("un PDF solo de piezas no marca la mano de obra como eliminada", () => {
+  const result = compareQuoteLines(
+    { items_piezas: [{ nombre: "BUMPER", cantidad: 1, precio: 3000 }], items_mano_obra: [{ nombre: "PINTAR BUMPER", precio: 5000 }] },
+    [{ tipo: "pieza", descripcion: "PARACHOQUE", cantidad: 1, monto: 3000, proveedor: "Dominguez Auto Pintura" }],
+    { sectionsPresent: { pieza: true, mano_obra: false } },
+  );
+  assert.equal(result.removed.length, 0);
+  assert.deepEqual(result.omittedTypes, ["mano_obra"]);
+});
+
+test("reconoce proveedor Dominguez con acentos y razón social", () => {
+  assert.equal(isDominguezSupplier("DOMÍNGUEZ AUTO PINTURA, SRL"), true);
+  assert.equal(isDominguezSupplier("Otro suplidor"), false);
 });
 
 test("bloquea los tres PDF si cualquiera tiene diferencias", () => {

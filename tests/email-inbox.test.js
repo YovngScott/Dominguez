@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { dedupeDashboardMessages } from "../src/lib/emailInbox.js";
-import { gmailMessageKey, ignoredGmailLabels } from "../server/insurance-automation.js";
+import { gmailMessageKey, ignoredGmailLabels, isOwnGmailSender } from "../server/insurance-automation.js";
 
 test("usa el Message-ID global cuando Gmail entrega una copia a dos cuentas", () => {
   const message = { payload: { headers: [{ name: "Message-ID", value: "<CASO-123@SEGURO.COM>" }] } };
@@ -12,6 +12,11 @@ test("usa el Message-ID global cuando Gmail entrega una copia a dos cuentas", ()
 test("solo descarta categorías de Gmail sin valor operativo", () => {
   assert.equal(ignoredGmailLabels(["INBOX", "CATEGORY_PROMOTIONS"]), true);
   assert.equal(ignoredGmailLabels(["INBOX", "CATEGORY_UPDATES"]), false);
+});
+
+test("ignora copias enviadas por la propia cuenta", () => {
+  assert.equal(isOwnGmailSender("Taller <servicio@dominguezautopintura.com>", "servicio@dominguezautopintura.com"), true);
+  assert.equal(isOwnGmailSender("Sura <ajustes@sura.com.do>", "servicio@dominguezautopintura.com"), false);
 });
 
 test("oculta una copia del mismo correo recibida por dos cuentas", () => {

@@ -7,6 +7,7 @@ import {
   compareQuoteLines,
   extractIdentifiers,
   formatReviewAlert,
+  isDominguezSupplier,
   normalizeIdentifier,
 } from "./insurance-core.js";
 
@@ -256,6 +257,8 @@ const EXTRACTION_SCHEMA = {
           legible: { type: "boolean" },
           confidence: { type: "number" },
           summary: { type: "string" },
+          sections_present: { type: "array", items: { type: "string", enum: ["pieza", "mano_obra"] } },
+          supplier: { type: "string" },
         },
         required: ["name", "legible", "confidence", "summary"],
       },
@@ -273,8 +276,10 @@ const EXTRACTION_SCHEMA = {
           effective_subtotal: { type: "number" },
           tax: { type: "number" },
           total: { type: "number" },
+          supplier: { type: "string" },
+          section: { type: "string", enum: ["pieza", "mano_obra", "otro"] },
         },
-        required: ["type", "description", "quantity", "effective_subtotal"],
+        required: ["type", "description", "quantity", "effective_subtotal", "supplier", "section"],
       },
     },
   },
@@ -287,11 +292,15 @@ async function extractInsurance(ai, payload, pdfs, configuration) {
 Eres un perito de Domínguez Auto Pintura. Extrae fielmente órdenes/cotizaciones de aseguradoras dominicanas.
 No inventes líneas ni montos. El siniestro/reclamo NO se usa para vincular el caso.
 Busca chasis y placa primero en el asunto/cuerpo y, si faltan, en los PDF.
-Cada renglón debe clasificarse como pieza o mano_obra. Para cada uno conserva cantidad, precio unitario,
+Cada renglón debe clasificarse como pieza o mano_obra y debe incluir el proveedor que aparece en esa línea o sección.
+Detecta si cada PDF contiene sección de piezas, mano de obra, ambas o ninguna. Para cada uno conserva cantidad, precio unitario,
 descuento, subtotal efectivo que realmente paga el seguro antes de ITBIS, ITBIS y total con ITBIS.
 Si el documento muestra "Valor", "Monto" o "Precio total" después de descuento/cobertura, ese es effective_subtotal.
 No conviertas un total general de mano de obra en una línea si existen renglones individuales.
 Analiza los ${pdfs.length} PDF como UN SOLO PAQUETE, pero devuelve una entrada en documents para cada archivo y no omitas ninguno.
+Si un PDF solo contiene piezas, NO declares eliminada ninguna línea de mano de obra de nuestra cotización: esa sección queda como no incluida/no evaluable.
+Si un PDF solo contiene mano de obra, aplica la misma regla para piezas. Solo marca una línea como eliminada cuando la sección correspondiente sí está presente y la línea no aparece.
+No mezcles piezas o mano de obra cuyo proveedor no sea Domínguez Auto Pintura; conserva esas líneas con su proveedor para clasificarlas como otro proveedor.
 Si un solo PDF no es legible o genera duda, baja su confidence: el paquete completo quedará bloqueado.
 Si algo no es legible, usa cadena vacía/0 y baja confidence; nunca adivines.
 
@@ -314,6 +323,33 @@ Placa detectada en encabezado: ${ids.plate || "no"}
   extracted.chassis = ids.chassis || normalizeIdentifier(extracted.chassis) || "";
   extracted.plate = ids.plate || normalizeIdentifier(extracted.plate) || "";
   return extracted;
+}
+
+function insuranceScope(extraction) {
+  const aliases = String(process.env.DOMINGUEZ_SUPPLIER_ALIASES || "")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  const lines = Array.isArray(extraction?.lines) ? extraction.lines : [];
+  const dominguezLines = lines.filter((line) => isDominguezSupplier(line.supplier, aliases));
+  const sections = new Set();
+  for (const document of extraction?.documents || []) {
+    for (const section of document.sections_present || []) sections.add(section);
+  }
+  // Compatibilidad con modelos antiguos que no devuelvan sections_present.
+  if (!sections.size) for (const line of lines) if (line.section !== "otro") sections.add(line.type);
+  const sectionsPresent = { pieza: sections.has("pieza"), mano_obra: sections.has("mano_obra") };
+  const hasPartsForUs = dominguezLines.some((line) => (line.section || line.type) === "pieza");
+  const hasLaborForUs = dominguezLines.some((line) => (line.section || line.type) === "mano_obra");
+  const unknownSupplier = lines.some((line) => !String(line.supplier || "").trim());
+  return {
+    aliases,
+    dominguezLines,
+    sectionsPresent,
+    hasPartsForUs,
+    hasLaborForUs,
+    orderClosed: hasPartsForUs,
+    otherSupplierOnly: lines.length > 0 && !dominguezLines.length && !unknownSupplier,
+    supplierUnknown: unknownSupplier,
+  };
 }
 
 async function insertReview(supabase, payload, values, pdfs) {
@@ -434,7 +470,12 @@ async function ingest(supabase, ai, payload) {
   const extraction = await extractInsurance(ai, payload, pdfs, configuration);
   const caseData = await findCase(supabase, extraction.chassis, extraction.plate, payload.caseId || null);
   const quote = caseData ? await latestQuote(supabase, caseData.id) : null;
-  const comparison = quote ? compareQuoteLines(quote, extraction.lines) : null;
+  const scope = insuranceScope(extraction);
+  // Solo comparamos las líneas cuyo proveedor es Dominguez. Las de terceros
+  // quedan visibles en la extracción, pero nunca generan diferencias nuestras.
+  const comparison = quote
+    ? compareQuoteLines(quote, scope.dominguezLines, { sectionsPresent: scope.sectionsPresent })
+    : null;
   const packageStatus = assessPdfPackage(pdfs.length, extraction.documents, comparison);
   const lowConfidence = Number(extraction.confidence || 0) < 0.8 || packageStatus.incomplete || packageStatus.uncertain;
   const reasons = [
@@ -443,6 +484,8 @@ async function ingest(supabase, ai, payload) {
     caseData && !quote && "caso_sin_cotizacion",
     lowConfidence && "extraccion_baja_confianza",
     comparison?.hasDifferences && "diferencias_detectadas",
+    scope.otherSupplierOnly && "pdf_otro_proveedor",
+    scope.supplierUnknown && "proveedor_no_identificado",
   ].filter(Boolean);
   const reviewValues = {
     caso_id: caseData?.id || null,
@@ -454,15 +497,19 @@ async function ingest(supabase, ai, payload) {
     confianza: Math.max(0, Math.min(1, Number(extraction.confidence || 0))),
     estado: "revision",
     motivo_revision: reasons.join(",") || "aprobacion_obligatoria",
-    resumen: comparison?.hasDifferences
-      ? `${extraction.summary} Se detectaron diferencias en al menos uno de los ${pdfs.length} PDF; todo el paquete requiere revisión.`
-      : extraction.summary,
+    resumen: scope.orderClosed
+      ? `🔒 Orden cerrada: ${extraction.summary} Hay piezas asignadas a Dominguez Auto Pintura; verificar compra y recepción.`
+      : comparison?.hasDifferences
+        ? `${extraction.summary} Se detectaron diferencias en al menos uno de los ${pdfs.length} PDF; todo el paquete requiere revisión.`
+        : extraction.summary,
     categoria_correo: "seguro",
-    prioridad_correo: reasons.length ? "alta" : classification.priority,
-    accion_sugerida: comparison?.hasDifferences
+    prioridad_correo: scope.otherSupplierOnly ? "baja" : (reasons.length ? "alta" : classification.priority),
+    accion_sugerida: scope.otherSupplierOnly
+      ? "Conservar como referencia; no requiere acción de Dominguez."
+      : comparison?.hasDifferences
       ? "Revisar todas las diferencias antes de aceptar cualquier PDF de este correo."
       : classification.suggested_action,
-    extraccion: { ...extraction, clasificacion: classification, pdf_count: pdfs.length },
+    extraccion: { ...extraction, clasificacion: classification, pdf_count: pdfs.length, alcance: scope },
     comparacion: comparison,
   };
   const reviewId = await insertReview(supabase, payload, reviewValues, pdfs);
@@ -576,12 +623,17 @@ function gmailMessageKey(message, accountId, providerMessageId) {
   return internetId ? `gmail:rfc822:${internetId}` : `gmail:account:${accountId}:${providerMessageId}`;
 }
 
+function isOwnGmailSender(sender, accountEmail) {
+  const from = emailAddress(sender);
+  return Boolean(from && accountEmail && from === String(accountEmail).trim().toLowerCase());
+}
+
 function ignoredGmailLabels(labelIds) {
   const labels = new Set(labelIds || []);
   return ["SPAM", "TRASH", "CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"].some((label) => labels.has(label));
 }
 
-export { gmailMessageKey, ignoredGmailLabels };
+export { gmailMessageKey, ignoredGmailLabels, isOwnGmailSender };
 
 function gmailBody(part) {
   if (!part) return "";
@@ -648,6 +700,12 @@ async function processGmailAccount(supabase, ai, account, seenMessageKeys) {
         receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : new Date().toISOString(),
         attachments,
       };
+      // No mostrar copias de correos enviados por el propio taller, aunque
+      // Gmail las haya dejado en Recibidos o en una etiqueta compartida.
+      if (isOwnGmailSender(messagePayload.sender, account.email)) {
+        ignored += 1;
+        continue;
+      }
       const result = await ingest(supabase, ai, messagePayload);
       if (result?.ignored) ignored += 1;
       else if (result?.duplicate) duplicates += 1;

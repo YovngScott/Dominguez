@@ -48,6 +48,20 @@ export function normalizeDescription(value) {
     .join(" ");
 }
 
+export function normalizeSupplier(value) {
+  return String(value ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export function isDominguezSupplier(value, aliases = []) {
+  const normalized = normalizeSupplier(value);
+  if (!normalized) return false;
+  const configured = ["dominguez auto pintura", "dominguez auto pintura srl", ...aliases]
+    .map(normalizeSupplier).filter(Boolean);
+  return configured.some((alias) => normalized === alias || normalized.includes(alias));
+}
+
 function tokens(value) {
   return new Set(normalizeDescription(value).split(" ").filter(Boolean));
 }
@@ -81,6 +95,7 @@ export function normalizeLocalQuote(quote) {
       unitPrice: asNumber(item.precio),
       subtotal: asNumber(item.precio) * (asNumber(item.cantidad, 1) || 1),
       raw: item,
+      supplier: item.proveedor || item.suplidor || item.supplier || "",
     })),
     ...labor.map((item, index) => ({
       id: `mano-${index}`,
@@ -90,6 +105,7 @@ export function normalizeLocalQuote(quote) {
       unitPrice: asNumber(item.precio),
       subtotal: asNumber(item.precio) * (asNumber(item.cantidad, 1) || 1),
       raw: item,
+      supplier: item.proveedor || item.suplidor || item.supplier || "",
     })),
   ];
 }
@@ -110,6 +126,8 @@ export function normalizeInsurerLines(lines) {
       subtotal: explicitSubtotal || Math.max(0, unitPrice * quantity - discount),
       tax: asNumber(item.tax ?? item.itbis),
       total: asNumber(item.total),
+      supplier: item.supplier || item.proveedor || item.suplidor || item.vendor || "",
+      section: item.section || item.seccion || item.document_section || "",
       raw: item,
     };
   });
@@ -124,8 +142,13 @@ export function compareQuoteLines(localQuote, insurerLines, options = {}) {
   const threshold = asNumber(options.similarityThreshold, 0.58);
   const moneyTolerance = asNumber(options.moneyTolerance, 1);
   const quantityTolerance = asNumber(options.quantityTolerance, 0.001);
-  const local = normalizeLocalQuote(localQuote);
-  const insurer = normalizeInsurerLines(insurerLines);
+  const localAll = normalizeLocalQuote(localQuote);
+  const insurerAll = normalizeInsurerLines(insurerLines);
+  const sections = options.sectionsPresent || {};
+  // Un PDF que solo trae piezas no autoriza a declarar la mano de obra eliminada.
+  const includeType = (type) => sections[type] !== false;
+  const local = localAll.filter((line) => includeType(line.type));
+  const insurer = insurerAll.filter((line) => includeType(line.type));
   const candidates = [];
 
   for (let li = 0; li < local.length; li += 1) {
@@ -160,9 +183,12 @@ export function compareQuoteLines(localQuote, insurerLines, options = {}) {
     removed,
     added,
     hasDifferences: Boolean(changed.length || removed.length || added.length),
+    omittedTypes: Object.keys(sections).filter((type) => sections[type] === false),
     summary: {
       localLines: local.length,
+      localLinesTotal: localAll.length,
       insurerLines: insurer.length,
+      insurerLinesTotal: insurerAll.length,
       matched: matches.length,
       changed: changed.length,
       removed: removed.length,
