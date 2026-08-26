@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compareQuoteLines, descriptionSimilarity, extractIdentifiers } from "../server/insurance-core.js";
+import { assessPdfPackage, compareQuoteLines, descriptionSimilarity, extractIdentifiers } from "../server/insurance-core.js";
 
 test("extrae chasis y placa del asunto", () => {
   assert.deepEqual(extractIdentifiers("Kia placa G624728, chasis MZBEP814BPN407288"), {
@@ -40,4 +40,18 @@ test("no marca diferencias cuando las líneas equivalentes coinciden", () => {
     [{ tipo: "pieza", descripcion: "PARACHOQUE TRASERO", cantidad: 1, monto: 3000 }],
   );
   assert.equal(result.hasDifferences, false);
+});
+
+test("bloquea los tres PDF si cualquiera tiene diferencias", () => {
+  const status = assessPdfPackage(3, [
+    { legible: true, confidence: 0.99 },
+    { legible: true, confidence: 0.95 },
+    { legible: true, confidence: 0.98 },
+  ], { hasDifferences: true });
+  assert.equal(status.blocked, true);
+  assert.equal(status.hasDifferences, true);
+});
+
+test("bloquea el paquete si falta o no se entiende un PDF", () => {
+  assert.equal(assessPdfPackage(3, [{ legible: true, confidence: 1 }, { legible: false, confidence: 0.3 }], { hasDifferences: false }).blocked, true);
 });

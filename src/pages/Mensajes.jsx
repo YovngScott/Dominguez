@@ -11,6 +11,13 @@ const TIPO_LABEL = {
   baja_confianza: "Revisión manual",
   aprobacion_pendiente: "Aprobación pendiente",
   error: "Error",
+  correo_cliente: "Cliente",
+  correo_suplidor: "Suplidor",
+  factura: "Factura",
+  cita: "Cita",
+  correo_interno: "Interno",
+  publicidad: "Publicidad",
+  correo_general: "Correo general",
 };
 
 function fecha(valor) {
@@ -45,6 +52,7 @@ export default function Mensajes() {
   const [error, setError] = useState("");
   const [detalle, setDetalle] = useState(null);
   const [busy, setBusy] = useState("");
+  const [configurador, setConfigurador] = useState(null);
 
   const cargar = useCallback(async () => {
     setError("");
@@ -126,7 +134,11 @@ export default function Mensajes() {
           <h1 className="mt-1 text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Centro de mensajes</h1>
           <p className="mt-1 text-sm text-[var(--ink-soft)]">Avisos persistentes de los correos y documentos que necesitan tu atención.</p>
         </div>
-        <button onClick={cargar} className="btn-ghost self-start sm:self-auto"><Icon name="clock" className="w-4 h-4" /> Actualizar</button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          <button onClick={() => setConfigurador("prompt")} className="btn-ghost"><Icon name="pencil" className="w-4 h-4" /> Prompt y comportamiento</button>
+          <button onClick={() => setConfigurador("acciones")} className="btn-primary"><span className="text-lg leading-none">+</span> Agregar acciones</button>
+          <button onClick={cargar} className="btn-ghost"><Icon name="clock" className="w-4 h-4" /> Actualizar</button>
+        </div>
       </div>
 
       {error && <div role="alert" className="mt-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -163,6 +175,7 @@ export default function Mensajes() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2"><h2 className="font-bold text-[var(--ink)]">{mensaje.titulo}</h2><span className="rounded-full bg-[var(--paper)] px-2 py-0.5 text-[11px] font-semibold text-[var(--ink-soft)]">{TIPO_LABEL[mensaje.tipo] || mensaje.tipo}</span>{mensaje.estado === "nuevo" && <span className="rounded-full bg-[var(--brand-red)] px-2 py-0.5 text-[11px] font-bold text-white">Nuevo</span>}</div>
                 <p className="mt-1 line-clamp-2 text-sm text-[var(--ink-soft)]">{mensaje.cuerpo}</p>
+                {mensaje.metadata?.accion_sugerida && <p className="mt-2 text-xs font-semibold text-[var(--ink)]">Siguiente acción: {mensaje.metadata.accion_sugerida}</p>}
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--ink-soft)]"><span>{mensaje.metadata?.remitente || "Remitente no identificado"}</span>{mensaje.metadata?.placa && <span>Placa: <b>{mensaje.metadata.placa}</b></span>}<span>{fecha(mensaje.creado_en)}</span></div>
               </div>
               <span className="shrink-0 text-sm font-bold text-[var(--brand-red)]">Abrir</span>
@@ -172,6 +185,7 @@ export default function Mensajes() {
       </div>
 
       {detalle && <DetalleModal data={detalle} busy={busy} onClose={() => setDetalle(null)} onResolve={resolver} />}
+      {configurador && <AssistantConfigModal initialTab={configurador} onClose={() => setConfigurador(null)} />}
     </div>
   );
 }
@@ -184,18 +198,99 @@ function Metrica({ label, value, tone = "blue" }) {
 function DetalleModal({ data, busy, onClose, onResolve }) {
   const r = data.revision;
   const c = r.comparacion;
+  const esSeguro = r.categoria_correo === "seguro";
   const noAprobable = !r.caso_id || !r.cotizacion_id || !r.autorizado_remitente || Number(r.confianza || 0) < 0.8 || c?.hasDifferences || !r.archivos?.length;
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}><div className="card max-h-[92vh] w-full max-w-4xl overflow-y-auto p-5 sm:p-7" onClick={(e) => e.stopPropagation()}>
     <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--brand-red)]">Revisión del seguro</p><h2 className="mt-1 text-xl font-extrabold text-[var(--ink)]">{r.asunto || data.mensaje.titulo}</h2><p className="mt-1 text-xs text-[var(--ink-soft)]">{r.remitente} · {fecha(r.recibido_en)}</p></div><button onClick={onClose} aria-label="Cerrar" className="btn-ghost !p-2"><Icon name="close" className="w-5 h-5" /></button></div>
     <div className="mt-5 grid gap-3 sm:grid-cols-3"><Dato label="Placa" value={r.placa_detectada} /><Dato label="Chasis" value={r.chasis_detectado} /><Dato label="Confianza" value={`${Math.round(Number(r.confianza || 0) * 100)}%`} /></div>
-    {r.resumen && <p className="mt-4 rounded-xl bg-[var(--paper)] p-4 text-sm text-[var(--ink-soft)]">{r.resumen}</p>}
+    {r.resumen && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700">Resumen del asistente</p><p className="mt-1 text-sm text-gray-700">{r.resumen}</p>{r.accion_sugerida && <p className="mt-3 text-sm font-bold text-gray-900">Acción sugerida: {r.accion_sugerida}</p>}</div>}
     {c && <div className="mt-5 space-y-2"><h3 className="font-bold text-[var(--ink)]">Comparación con la última cotización</h3>{c.changed?.map((x, i) => <Cambio key={`c${i}`} title={x.ours.description} text={`Taller RD$${Number(x.ours.subtotal || 0).toLocaleString()} → Seguro RD$${Number(x.theirs.subtotal || 0).toLocaleString()}`} tone="amber" />)}{c.removed?.map((x, i) => <Cambio key={`r${i}`} title={`Eliminada: ${x.description}`} text={`Cotizada en RD$${Number(x.subtotal || 0).toLocaleString()}`} tone="red" />)}{c.added?.map((x, i) => <Cambio key={`a${i}`} title={`Agregada: ${x.description}`} text={`Seguro RD$${Number(x.subtotal || 0).toLocaleString()}`} />)}{!c.hasDifferences && <Cambio title="Todas las líneas coinciden" text="El PDF permanece pendiente hasta tu aprobación." tone="green" />}</div>}
     <div className="mt-5 flex flex-wrap gap-2">{r.archivos?.map((f) => <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="btn-ghost"><Icon name="file" className="w-4 h-4" />{f.nombre_archivo}</a>)}</div>
     {r.caso_id && <Link to={`/casos/${r.caso_id}`} className="mt-4 inline-flex text-sm font-bold text-[var(--brand-red)] hover:underline">Abrir caso relacionado</Link>}
-    <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-[var(--line)] pt-5"><button disabled={Boolean(busy)} onClick={() => onResolve("reject")} className="btn-ghost !text-red-600">Rechazar</button><button disabled={Boolean(busy) || noAprobable} onClick={() => onResolve("approve")} className="btn-primary disabled:opacity-40">Aprobar y guardar PDF</button></div>
-    {noAprobable && r.estado === "revision" && <p className="mt-3 text-right text-xs text-[var(--ink-soft)]">La aprobación se habilita únicamente cuando el caso, remitente, cotización, confianza y comparación están correctos.</p>}
+    <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-[var(--line)] pt-5"><button disabled={Boolean(busy)} onClick={() => onResolve("reject")} className="btn-ghost !text-red-600">Marcar resuelto</button>{esSeguro && <button disabled={Boolean(busy) || noAprobable} onClick={() => onResolve("approve")} className="btn-primary disabled:opacity-40">Aprobar y guardar PDF</button>}</div>
+    {esSeguro && noAprobable && r.estado === "revision" && <p className="mt-3 text-right text-xs text-[var(--ink-soft)]">Si uno de los PDF tiene diferencias o controles pendientes, se bloquea el paquete completo.</p>}
   </div></div>;
 }
 
 function Dato({ label, value }) { return <div className="rounded-xl border border-[var(--line)] p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink-soft)]">{label}</p><p className="mt-1 truncate font-bold text-[var(--ink)]">{value || "—"}</p></div>; }
 function Cambio({ title, text, tone = "blue" }) { const style = tone === "red" ? "border-red-200 bg-red-50" : tone === "amber" ? "border-amber-200 bg-amber-50" : tone === "green" ? "border-green-200 bg-green-50" : "border-blue-200 bg-blue-50"; return <div className={`rounded-xl border p-3 ${style}`}><p className="text-sm font-bold text-gray-900">{title}</p><p className="mt-0.5 text-xs text-gray-600">{text}</p></div>; }
+
+function AssistantConfigModal({ initialTab, onClose }) {
+  const [tab, setTab] = useState(initialTab);
+  const [config, setConfig] = useState(null);
+  const [actions, setActions] = useState([]);
+  const [form, setForm] = useState({ nombre: "", condicion: "", instruccion: "", prioridad: "normal" });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setError("");
+    const [{ data: configData, error: configError }, { data: actionData, error: actionsError }] = await Promise.all([
+      supabase.from("asistente_correo_config").select("*").eq("id", "principal").single(),
+      supabase.from("asistente_correo_acciones").select("*").order("orden"),
+    ]);
+    if (configError || actionsError) return setError("No se pudo cargar la configuración del asistente.");
+    setConfig(configData);
+    setActions(actionData || []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function savePrompt() {
+    setSaving(true); setError("");
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error: updateError } = await supabase.from("asistente_correo_config").update({
+      nombre: config.nombre.trim(), prompt_personalizado: config.prompt_personalizado.trim(),
+      version: Number(config.version || 0) + 1, actualizado_por: user?.id || null,
+      actualizado_en: new Date().toISOString(),
+    }).eq("id", "principal");
+    setSaving(false);
+    if (updateError) return setError("No se pudo guardar el comportamiento.");
+    await load();
+  }
+
+  async function addAction(event) {
+    event.preventDefault();
+    if (!form.nombre.trim() || !form.condicion.trim() || !form.instruccion.trim()) return setError("Completa el nombre, la condición y la acción.");
+    setSaving(true); setError("");
+    const { error: insertError } = await supabase.from("asistente_correo_acciones").insert({
+      ...form, nombre: form.nombre.trim(), condicion: form.condicion.trim(), instruccion: form.instruccion.trim(),
+      orden: (actions.at(-1)?.orden || 0) + 10,
+    });
+    setSaving(false);
+    if (insertError) return setError("No se pudo agregar la acción.");
+    setForm({ nombre: "", condicion: "", instruccion: "", prioridad: "normal" });
+    await load();
+  }
+
+  async function toggleAction(action) {
+    const { error: updateError } = await supabase.from("asistente_correo_acciones").update({ activa: !action.activa, actualizado_en: new Date().toISOString() }).eq("id", action.id);
+    if (updateError) return setError("No se pudo cambiar la acción.");
+    await load();
+  }
+
+  async function removeAction(action) {
+    if (!confirm(`¿Eliminar la acción “${action.nombre}”?`)) return;
+    const { error: deleteError } = await supabase.from("asistente_correo_acciones").delete().eq("id", action.id);
+    if (deleteError) return setError("No se pudo eliminar la acción.");
+    await load();
+  }
+
+  const effectivePrompt = config ? `${config.prompt_protegido}\n\nCOMPORTAMIENTO DEL PROPIETARIO:\n${config.prompt_personalizado || "Sin instrucciones adicionales."}\n\nACCIONES ACTIVAS:\n${actions.filter((action) => action.activa).map((action) => `- ${action.nombre}: SI ${action.condicion}, ENTONCES ${action.instruccion}`).join("\n") || "Sin acciones adicionales."}` : "";
+
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="card max-h-[94vh] w-full max-w-5xl overflow-y-auto p-5 sm:p-7" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--brand-red)]">Asistente de bandeja</p><h2 className="mt-1 text-xl font-extrabold text-[var(--ink)]">Prompt y acciones</h2><p className="mt-1 text-sm text-[var(--ink-soft)]">Controla qué debe detectar y cómo debe avisarte. El asistente nunca responderá correos por sí solo.</p></div><button onClick={onClose} className="btn-ghost !p-2"><Icon name="close" className="w-5 h-5" /></button></div>
+      <div className="mt-5 flex flex-wrap gap-2 border-b border-[var(--line)] pb-3">{[["prompt","Comportamiento"],["acciones","Acciones"],["completo","Prompt completo"]].map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={tab === value ? "btn-primary" : "btn-ghost"}>{label}</button>)}</div>
+      {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {!config ? <div className="py-12 text-center text-[var(--ink-soft)]">Cargando configuración…</div> : tab === "prompt" ? <div className="mt-5 space-y-5">
+        <label className="block"><span className="text-sm font-bold text-[var(--ink)]">Nombre del asistente</span><input className="input mt-2" value={config.nombre} onChange={(e) => setConfig({ ...config, nombre: e.target.value })} /></label>
+        <div className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-4"><p className="text-sm font-bold text-[var(--ink)]">Reglas protegidas</p><p className="mt-1 text-xs text-[var(--ink-soft)]">Son visibles, pero no se pueden desactivar para evitar respuestas, pérdidas o guardados incorrectos.</p><p className="mt-3 whitespace-pre-wrap text-sm text-[var(--ink-soft)]">{config.prompt_protegido}</p></div>
+        <label className="block"><span className="text-sm font-bold text-[var(--ink)]">Comportamiento personalizado</span><span className="mt-1 block text-xs text-[var(--ink-soft)]">Añade tono, prioridades, nombres internos y criterios particulares del taller.</span><textarea rows="8" className="input mt-2 resize-y" value={config.prompt_personalizado} onChange={(e) => setConfig({ ...config, prompt_personalizado: e.target.value })} /></label>
+        <div className="flex justify-end"><button disabled={saving} onClick={savePrompt} className="btn-primary">{saving ? "Guardando…" : "Guardar nueva versión"}</button></div>
+      </div> : tab === "acciones" ? <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr]">
+        <form onSubmit={addAction} className="rounded-xl border border-[var(--line)] p-4"><h3 className="font-extrabold text-[var(--ink)]">Agregar acción</h3><p className="mt-1 text-xs text-[var(--ink-soft)]">Define una condición clara y qué debe mostrar o priorizar el asistente.</p><input className="input mt-4" placeholder="Nombre de la acción" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} /><textarea rows="3" className="input mt-3 resize-y" placeholder="Cuando ocurra…" value={form.condicion} onChange={(e) => setForm({ ...form, condicion: e.target.value })} /><textarea rows="4" className="input mt-3 resize-y" placeholder="El asistente debe…" value={form.instruccion} onChange={(e) => setForm({ ...form, instruccion: e.target.value })} /><select className="input mt-3" value={form.prioridad} onChange={(e) => setForm({ ...form, prioridad: e.target.value })}><option value="baja">Baja</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="critica">Crítica</option></select><button disabled={saving} className="btn-primary mt-4 w-full">Agregar acción</button></form>
+        <div className="space-y-3"><h3 className="font-extrabold text-[var(--ink)]">Acciones configuradas</h3>{actions.map((action) => <div key={action.id} className={`rounded-xl border border-[var(--line)] p-4 ${action.activa ? "" : "opacity-55"}`}><div className="flex items-start justify-between gap-3"><div><p className="font-bold text-[var(--ink)]">{action.nombre}</p><p className="mt-1 text-xs text-[var(--ink-soft)]">Si {action.condicion}</p><p className="mt-2 text-sm text-[var(--ink)]">Entonces: {action.instruccion}</p></div><span className="rounded-full bg-[var(--paper)] px-2 py-1 text-[10px] font-bold uppercase text-[var(--ink-soft)]">{action.prioridad}</span></div><div className="mt-3 flex gap-2"><button type="button" onClick={() => toggleAction(action)} className="btn-ghost !px-3 !py-1.5 text-xs">{action.activa ? "Desactivar" : "Activar"}</button><button type="button" onClick={() => removeAction(action)} className="btn-ghost !px-3 !py-1.5 text-xs !text-red-600">Eliminar</button></div></div>)}</div>
+      </div> : <div className="mt-5"><div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-sm font-bold text-blue-900">Prompt efectivo · versión {config.version}</p><p className="mt-1 text-xs text-blue-700">Esta es exactamente la combinación que recibe el analizador.</p></div><pre className="mt-4 max-h-[58vh] overflow-auto whitespace-pre-wrap rounded-xl bg-gray-950 p-5 text-sm leading-6 text-gray-100">{effectivePrompt}</pre></div>}
+    </div>
+  </div>;
+}

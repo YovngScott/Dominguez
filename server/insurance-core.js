@@ -171,6 +171,20 @@ export function compareQuoteLines(localQuote, insurerLines, options = {}) {
   };
 }
 
+/** Un correo con varios PDF se aprueba o se bloquea como un único paquete. */
+export function assessPdfPackage(expectedCount, documents, comparison, threshold = 0.8) {
+  const list = Array.isArray(documents) ? documents : [];
+  const incomplete = list.length !== Number(expectedCount || 0);
+  const uncertain = list.some((document) => !document?.legible || Number(document?.confidence || 0) < threshold);
+  const hasDifferences = Boolean(comparison?.hasDifferences);
+  return {
+    blocked: incomplete || uncertain || hasDifferences,
+    incomplete,
+    uncertain,
+    hasDifferences,
+  };
+}
+
 export function formatReviewAlert(review) {
   const title = review.caseMatched
     ? review.comparison?.hasDifferences ? "⚠️ Cotización con diferencias" : "✅ Cotización sin diferencias"

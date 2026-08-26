@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import {
+  assessPdfPackage,
   compareQuoteLines,
   extractIdentifiers,
   formatReviewAlert,
@@ -110,9 +111,42 @@ async function authorizedSender(supabase, sender) {
       .limit(1),
     supabase.from("suplidores").select("email, nombre").ilike("email", email).eq("activo", true).limit(1),
   ]);
-  if (contacts?.[0]) return { ok: true, insurer: contacts[0].aseguradora?.nombre || null };
-  if (suppliers?.[0]) return { ok: true, insurer: suppliers[0].nombre || null };
-  return { ok: false, insurer: null };
+  if (contacts?.[0]) return { ok: true, kind: "insurance", insurer: contacts[0].aseguradora?.nombre || null };
+  if (suppliers?.[0]) return { ok: true, kind: "supplier", insurer: suppliers[0].nombre || null };
+  return { ok: false, kind: "unknown", insurer: null };
+}
+
+async function assistantConfiguration(supabase) {
+  const [{ data: config }, { data: actions }] = await Promise.all([
+    supabase.from("asistente_correo_config").select("nombre, prompt_protegido, prompt_personalizado, version").eq("id", "principal").maybeSingle(),
+    supabase.from("asistente_correo_acciones").select("nombre, condicion, instruccion, prioridad").eq("activa", true).order("orden"),
+  ]);
+  return {
+    protectedPrompt: config?.prompt_protegido || "Analiza todos los correos. Nunca respondas ni inventes datos.",
+    customPrompt: config?.prompt_personalizado || "",
+    actions: actions || [],
+  };
+}
+
+const EMAIL_CLASSIFICATION_SCHEMA = {
+  type: "object",
+  properties: {
+    category: { type: "string", enum: ["seguro", "suplidor", "cliente", "factura", "cita", "interno", "publicidad", "otro"] },
+    priority: { type: "string", enum: ["baja", "normal", "alta", "critica"] },
+    summary: { type: "string" },
+    suggested_action: { type: "string" },
+    requires_review: { type: "boolean" },
+  },
+  required: ["category", "priority", "summary", "suggested_action", "requires_review"],
+};
+
+async function classifyEmail(ai, payload, pdfs, configuration) {
+  const actions = configuration.actions.map((action) =>
+    `- ${action.nombre} [${action.prioridad}]: si ${action.condicion}, entonces ${action.instruccion}`
+  ).join("\n");
+  const parts = [{ text: `${configuration.protectedPrompt}\n\nCOMPORTAMIENTO DEL PROPIETARIO:\n${configuration.customPrompt || "Sin instrucciones adicionales."}\n\nACCIONES CONFIGURADAS:\n${actions || "Sin acciones adicionales."}\n\nClasifica este correo entrante. El resumen debe ser breve, específico y accionable. No digas que ejecutaste acciones que no ejecutaste.\nRemitente: ${payload.sender || "No identificado"}\nAsunto: ${payload.subject || "(sin asunto)"}\nCuerpo: ${(payload.body || "").slice(0, 12000)}\nPDF adjuntos: ${pdfs.length}` }];
+  for (const pdf of pdfs) parts.push({ inlineData: { mimeType: "application/pdf", data: pdf.base64 } });
+  return generateStructured(ai, parts, EMAIL_CLASSIFICATION_SCHEMA);
 }
 
 async function findCase(supabase, chassis, plate, directId) {
@@ -152,6 +186,19 @@ const EXTRACTION_SCHEMA = {
     document_type: { type: "string" },
     confidence: { type: "number" },
     summary: { type: "string" },
+    documents: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          legible: { type: "boolean" },
+          confidence: { type: "number" },
+          summary: { type: "string" },
+        },
+        required: ["name", "legible", "confidence", "summary"],
+      },
+    },
     lines: {
       type: "array",
       items: {
@@ -170,10 +217,10 @@ const EXTRACTION_SCHEMA = {
       },
     },
   },
-  required: ["chassis", "plate", "insurer", "confidence", "summary", "lines"],
+  required: ["chassis", "plate", "insurer", "confidence", "summary", "documents", "lines"],
 };
 
-async function extractInsurance(ai, payload, pdfs) {
+async function extractInsurance(ai, payload, pdfs, configuration) {
   const ids = extractIdentifiers(`${payload.subject || ""}\n${payload.body || ""}`);
   const prompt = `
 Eres un perito de Domínguez Auto Pintura. Extrae fielmente órdenes/cotizaciones de aseguradoras dominicanas.
@@ -183,7 +230,13 @@ Cada renglón debe clasificarse como pieza o mano_obra. Para cada uno conserva c
 descuento, subtotal efectivo que realmente paga el seguro antes de ITBIS, ITBIS y total con ITBIS.
 Si el documento muestra "Valor", "Monto" o "Precio total" después de descuento/cobertura, ese es effective_subtotal.
 No conviertas un total general de mano de obra en una línea si existen renglones individuales.
+Analiza los ${pdfs.length} PDF como UN SOLO PAQUETE, pero devuelve una entrada en documents para cada archivo y no omitas ninguno.
+Si un solo PDF no es legible o genera duda, baja su confidence: el paquete completo quedará bloqueado.
 Si algo no es legible, usa cadena vacía/0 y baja confidence; nunca adivines.
+
+REGLAS INMUTABLES Y CONFIGURACIÓN:
+${configuration.protectedPrompt}
+${configuration.customPrompt || ""}
 
 Asunto: ${payload.subject || "(sin asunto)"}
 Remitente: ${payload.sender || ""}
@@ -192,7 +245,10 @@ Chasis detectado en encabezado: ${ids.chassis || "no"}
 Placa detectada en encabezado: ${ids.plate || "no"}
 `;
   const parts = [{ text: prompt }];
-  for (const pdf of pdfs) parts.push({ inlineData: { mimeType: "application/pdf", data: pdf.base64 } });
+  for (const [index, pdf] of pdfs.entries()) {
+    parts.push({ text: `PDF ${index + 1}: ${safeFileName(pdf.name)}` });
+    parts.push({ inlineData: { mimeType: "application/pdf", data: pdf.base64 } });
+  }
   const extracted = await generateStructured(ai, parts, EXTRACTION_SCHEMA);
   extracted.chassis = ids.chassis || normalizeIdentifier(extracted.chassis) || "";
   extracted.plate = ids.plate || normalizeIdentifier(extracted.plate) || "";
@@ -245,20 +301,14 @@ async function ingest(supabase, ai, payload) {
   if (existing) return { duplicate: true, reviewId: existing.id, status: existing.estado };
 
   const senderStatus = await authorizedSender(supabase, payload.sender);
-  if (!senderStatus.ok) {
-    return { ignored: true, reason: "remitente_no_autorizado" };
-  }
   const pdfs = (Array.isArray(payload.attachments) ? payload.attachments : [])
     .filter((file) => file?.base64 && (/pdf/i.test(file.mimeType || "") || /\.pdf$/i.test(file.name || "")))
     .slice(0, 8);
+  const configuration = await assistantConfiguration(supabase);
+  const classification = await classifyEmail(ai, payload, pdfs, configuration);
+  const ids = extractIdentifiers(`${payload.subject || ""}\n${payload.body || ""}`);
 
   if (!pdfs.length) {
-    const summary = await generateStructured(ai, [{ text: `Resume en español, sin inventar, este correo de seguro para el taller. Remitente: ${payload.sender || ""}\nAsunto: ${payload.subject || ""}\n${(payload.body || "").slice(0, 9000)}` }], {
-      type: "object",
-      properties: { summary: { type: "string" } },
-      required: ["summary"],
-    });
-    const ids = extractIdentifiers(`${payload.subject || ""}\n${payload.body || ""}`);
     const caseData = await findCase(supabase, ids.chassis, ids.plate, null);
     const reviewId = await insertReview(supabase, payload, {
       caso_id: caseData?.id || null,
@@ -267,20 +317,44 @@ async function ingest(supabase, ai, payload) {
       autorizado_remitente: senderStatus.ok,
       estado: "revision",
       motivo_revision: "correo_sin_pdf",
-      resumen: summary.summary,
-      extraccion: { tipo: "correo_sin_pdf" },
+      resumen: classification.summary,
+      categoria_correo: classification.category,
+      prioridad_correo: classification.priority,
+      accion_sugerida: classification.suggested_action,
+      extraccion: { tipo: "correo_sin_pdf", clasificacion: classification },
     }, []);
     return {
       reviewId,
-      alert: `📧 *Correo de seguro sin PDF*\n\nRemitente: ${payload.sender || "No identificado"}\nAsunto: ${payload.subject || "(sin asunto)"}\n\n${summary.summary}\n\nQuedó en revisión; el bot no respondió el correo.`,
+      category: classification.category,
+      alert: `📧 *Correo clasificado*\n\nRemitente: ${payload.sender || "No identificado"}\nAsunto: ${payload.subject || "(sin asunto)"}\n\n${classification.summary}\n\nAcción sugerida: ${classification.suggested_action}\n\nEl asistente no respondió el correo.`,
     };
   }
 
-  const extraction = await extractInsurance(ai, payload, pdfs);
+  const isInsurance = senderStatus.kind === "insurance" || classification.category === "seguro";
+  if (!isInsurance) {
+    const caseData = await findCase(supabase, ids.chassis, ids.plate, payload.caseId || null);
+    const reviewId = await insertReview(supabase, payload, {
+      caso_id: caseData?.id || null,
+      chasis_detectado: ids.chassis,
+      placa_detectada: ids.plate,
+      autorizado_remitente: senderStatus.ok,
+      estado: "revision",
+      motivo_revision: "correo_general_con_pdf",
+      resumen: classification.summary,
+      categoria_correo: classification.category,
+      prioridad_correo: classification.priority,
+      accion_sugerida: classification.suggested_action,
+      extraccion: { tipo: "correo_general_con_pdf", clasificacion: classification },
+    }, pdfs);
+    return { reviewId, category: classification.category, requiresReview: true };
+  }
+
+  const extraction = await extractInsurance(ai, payload, pdfs, configuration);
   const caseData = await findCase(supabase, extraction.chassis, extraction.plate, payload.caseId || null);
   const quote = caseData ? await latestQuote(supabase, caseData.id) : null;
   const comparison = quote ? compareQuoteLines(quote, extraction.lines) : null;
-  const lowConfidence = Number(extraction.confidence || 0) < 0.8;
+  const packageStatus = assessPdfPackage(pdfs.length, extraction.documents, comparison);
+  const lowConfidence = Number(extraction.confidence || 0) < 0.8 || packageStatus.incomplete || packageStatus.uncertain;
   const reasons = [
     !senderStatus.ok && "remitente_no_autorizado",
     !caseData && "caso_no_vinculado",
@@ -298,8 +372,15 @@ async function ingest(supabase, ai, payload) {
     confianza: Math.max(0, Math.min(1, Number(extraction.confidence || 0))),
     estado: "revision",
     motivo_revision: reasons.join(",") || "aprobacion_obligatoria",
-    resumen: extraction.summary,
-    extraccion: extraction,
+    resumen: comparison?.hasDifferences
+      ? `${extraction.summary} Se detectaron diferencias en al menos uno de los ${pdfs.length} PDF; todo el paquete requiere revisión.`
+      : extraction.summary,
+    categoria_correo: "seguro",
+    prioridad_correo: reasons.length ? "alta" : classification.priority,
+    accion_sugerida: comparison?.hasDifferences
+      ? "Revisar todas las diferencias antes de aceptar cualquier PDF de este correo."
+      : classification.suggested_action,
+    extraccion: { ...extraction, clasificacion: classification, pdf_count: pdfs.length },
     comparacion: comparison,
   };
   const reviewId = await insertReview(supabase, payload, reviewValues, pdfs);
@@ -314,6 +395,30 @@ async function ingest(supabase, ai, payload) {
     comparison,
   };
   return { reviewId, alert: formatReviewAlert(review), comparison, reasons };
+}
+
+async function recordIngestError(supabase, ai, payload, error) {
+  if (!payload?.messageId) return null;
+  const { data: existing } = await supabase.from("revisiones_seguro").select("id").eq("source_message_id", payload.messageId).maybeSingle();
+  if (existing) return existing.id;
+  let summary = `No se pudo analizar el correo "${payload.subject || "(sin asunto)"}". Error técnico: ${error?.message || "desconocido"}. No se respondió ni se guardó ningún documento.`;
+  try {
+    const generated = await generateStructured(ai, [{ text: `Redacta un resumen breve en español para un operador. No inventes causas ni soluciones. Correo: ${payload.subject || "(sin asunto)"}. Remitente: ${payload.sender || "desconocido"}. Error real: ${error?.message || "desconocido"}. Aclara que no se respondió el correo.` }], {
+      type: "object", properties: { summary: { type: "string" } }, required: ["summary"],
+    });
+    summary = generated.summary;
+  } catch {
+    // Si la propia IA está caída, conservamos un resumen técnico veraz.
+  }
+  return insertReview(supabase, payload, {
+    estado: "error",
+    motivo_revision: "error_procesamiento",
+    resumen: summary,
+    categoria_correo: "otro",
+    prioridad_correo: "critica",
+    accion_sugerida: "Reintentar el análisis o revisar manualmente este correo.",
+    extraccion: { tipo: "error", mensaje: error?.message || "Error desconocido" },
+  }, []);
 }
 
 async function listReviews(supabase, req) {
@@ -406,9 +511,10 @@ async function rejectReview(supabase, id) {
 
 export default async function handler(req, res) {
   let clients;
+  let action = "";
   try {
     clients = buildClients();
-    const action = String(req.query.action || req.body?.action || "list").replace(/^insurance_/, "");
+    action = String(req.query.action || req.body?.action || "list").replace(/^insurance_/, "");
     if (!await authorizeRequest(clients.supabase, req, res, action)) return;
     if (action === "ingest" && req.method === "POST") return json(res, 200, await ingest(clients.supabase, clients.ai, req.body || {}));
     if (action === "list" && req.method === "GET") return json(res, 200, { data: await listReviews(clients.supabase, req) });
@@ -418,6 +524,10 @@ export default async function handler(req, res) {
     return json(res, 405, { error: "Acción o método no permitido." });
   } catch (error) {
     console.error("[seguro-automatizacion]", error);
+    if (action === "ingest" && clients) {
+      try { await recordIngestError(clients.supabase, clients.ai, req.body || {}, error); }
+      catch (recordError) { console.error("[seguro-automatizacion] No se pudo registrar el fallo:", recordError); }
+    }
     const status = /ya fue resuelta|Primero debes|no está|baja confianza|no tiene|Hay diferencias/.test(error?.message || "") ? 409 : 500;
     return json(res, status, { error: error?.message || "Error interno en automatización de seguros." });
   }
