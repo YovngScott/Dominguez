@@ -67,7 +67,7 @@ function safeFileName(value) {
 }
 
 function oauthCredentials() {
-  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
   if (!clientId || !clientSecret) throw new Error("Falta configurar GOOGLE_OAUTH_CLIENT_ID y GOOGLE_OAUTH_CLIENT_SECRET.");
   return { clientId, clientSecret };
@@ -738,7 +738,7 @@ export default async function handler(req, res) {
     }
     if (!await authorizeRequest(clients.supabase, req, res, action)) return;
     if (action === "ingest" && req.method === "POST") return json(res, 200, await ingest(clients.supabase, clients.ai, req.body || {}));
-    if (action === "gmail_accounts" && req.method === "GET") return json(res, 200, { data: await listGmailAccounts(clients.supabase), oauthConfigured: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) });
+    if (action === "gmail_accounts" && req.method === "GET") return json(res, 200, { data: await listGmailAccounts(clients.supabase), oauthConfigured: Boolean((process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID) && process.env.GOOGLE_OAUTH_CLIENT_SECRET) });
     if (action === "gmail_oauth_url" && req.method === "POST") return json(res, 200, { url: gmailAuthUrl(req, String(req.body?.email || "").trim().toLowerCase()) });
     if (action === "gmail_poll" && req.method === "POST") return json(res, 200, await pollGmailAccounts(clients.supabase, clients.ai));
     if (action === "gmail_disconnect" && req.method === "POST") return json(res, 200, await disconnectGmailAccount(clients.supabase, String(req.body?.id || "")));
