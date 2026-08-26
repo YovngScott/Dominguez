@@ -250,15 +250,15 @@ export default function CitasList() {
           onSaved={(info) => {
             setCitaModal(null);
             load();
-            if (info?.editando && info?.telefonoCambio && info?.wa === true)
-              setAviso({ tipo: "ok", texto: `Cita actualizada y WhatsApp enviado al nuevo número de ${info.nombre}.` });
-            else if (info?.editando && info?.telefonoCambio && info?.wa === false)
+            if (info?.editando && info?.reenviado && info?.wa === true)
+              setAviso({ tipo: "ok", texto: `Cita actualizada y reenviada por WhatsApp a ${info.nombre}.` });
+            else if (info?.editando && info?.reenviado && info?.wa === false)
               setAviso({
                 tipo: "fail",
-                texto: `La cita se actualizó, pero no se pudo enviar el WhatsApp al nuevo número.${info.waError ? " " + info.waError : ""}`,
+                texto: `La cita se guardó, pero no se pudo reenviar por WhatsApp.${info.waError ? " " + info.waError : ""}`,
               });
             else if (info?.editando)
-              setAviso({ tipo: "info", texto: "Cita actualizada correctamente." });
+              setAviso({ tipo: "info", texto: "Cita actualizada sin reenviar al cliente." });
             else if (info?.wa === true) setAviso({ tipo: "ok", texto: `WhatsApp de confirmación enviado a ${info.nombre}.` });
             else if (info?.wa === false)
               setAviso({
@@ -277,7 +277,7 @@ function CitaModal({ cita, onCancel, onSaved }) {
   const [clientes, setClientes] = useState([]);
   const [casos, setCasos] = useState([]);
   const [error, setError] = useState("");
-  const [guardando, setGuardando] = useState(false);
+  const [guardando, setGuardando] = useState("");
   const [confirmarSalida, setConfirmarSalida] = useState(false);
   const [form, setForm] = useState(() => ({
     fecha: cita?.fecha || hoy(),
@@ -290,9 +290,6 @@ function CitaModal({ cita, onCancel, onSaved }) {
     nota: cita?.nota || "",
   }));
   const up = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const telefonoOriginal = String(cita?.telefono || "").replace(/\D/g, "");
-  const telefonoActual = String(form.telefono || "").replace(/\D/g, "");
-  const telefonoCambio = editando && telefonoActual !== telefonoOriginal;
 
   // Vehículos del cliente elegido: por ahí se vincula la cita con su caso.
   // Solo los que siguen en proceso (los entregados ya no se agendan).
@@ -339,11 +336,14 @@ function CitaModal({ cita, onCancel, onSaved }) {
     await cargarCasos(id);
   }
 
-  async function guardar() {
+  async function guardar({ reenviar = false } = {}) {
     setError("");
     if (!form.nombre.trim()) return setError("El nombre es obligatorio.");
     if (!form.fecha) return setError("La fecha es obligatoria.");
-    setGuardando(true);
+    if (editando && reenviar && !form.telefono?.trim()) {
+      return setError("Agrega un teléfono para guardar y reenviar la cita.");
+    }
+    setGuardando(reenviar ? "reenviar" : "guardar");
     const payload = {
       fecha: form.fecha,
       hora: form.hora || null,
@@ -365,17 +365,17 @@ function CitaModal({ cita, onCancel, onSaved }) {
       }));
     }
     if (e) {
-      setGuardando(false);
+      setGuardando("");
       setError(e.message || "No se pudo guardar la cita. ¿Ejecutaste la migración sql/16_citas.sql?");
       return;
     }
 
-    // Envío AUTOMÁTICO del WhatsApp de confirmación (Evolution API). No bloquea
-    // el cierre: si falla, la cita ya quedó guardada. wa: null = sin teléfono,
-    // true = enviado, false = falló.
+    // Las citas nuevas conservan su confirmación automática. Al editar, el
+    // usuario decide explícitamente si solo guarda o si reenvía la información
+    // corregida al cliente. El fallo del canal no revierte los datos guardados.
     let wa = null;
     let waError = "";
-    if (form.telefono?.trim() && (!editando || telefonoCambio)) {
+    if (form.telefono?.trim() && (!editando || reenviar)) {
       const casoSel = casos.find((c) => c.id === form.caso_id);
       const vehiculo = casoSel
         ? [casoSel.marca?.nombre, casoSel.modelo?.nombre, casoSel.placa].filter(Boolean).join(" ")
@@ -400,8 +400,8 @@ function CitaModal({ cita, onCancel, onSaved }) {
       }
     }
 
-    setGuardando(false);
-    onSaved({ wa, waError, nombre: form.nombre, editando, telefonoCambio });
+    setGuardando("");
+    onSaved({ wa, waError, nombre: form.nombre, editando, reenviado: editando && reenviar });
   }
 
   return (
@@ -497,13 +497,36 @@ function CitaModal({ cita, onCancel, onSaved }) {
 
         {error && <p className="text-sm text-[var(--brand-red)] mt-3">{error}</p>}
 
-        <div className="flex gap-3 mt-6">
-          <button onClick={guardar} disabled={guardando} className="btn-primary disabled:opacity-50">
-            {guardando ? "Guardando…" : editando ? "Guardar cambios" : "Guardar cita"}
-          </button>
-          <button onClick={() => setConfirmarSalida(true)} className="btn-ghost">
+        <div className="flex flex-wrap justify-end gap-3 mt-6">
+          <button onClick={() => setConfirmarSalida(true)} disabled={Boolean(guardando)} className="btn-ghost disabled:opacity-50">
             Cancelar
           </button>
+          {editando ? (
+            <>
+              <button
+                onClick={() => guardar({ reenviar: false })}
+                disabled={Boolean(guardando)}
+                className="btn-ghost disabled:opacity-50"
+              >
+                {guardando === "guardar" ? "Guardando…" : "Guardar"}
+              </button>
+              <button
+                onClick={() => guardar({ reenviar: true })}
+                disabled={Boolean(guardando)}
+                className="btn-primary disabled:opacity-50"
+              >
+                {guardando === "reenviar" ? "Guardando y reenviando…" : "Guardar y reenviar"}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => guardar()}
+              disabled={Boolean(guardando)}
+              className="btn-primary disabled:opacity-50"
+            >
+              {guardando ? "Guardando…" : "Guardar cita"}
+            </button>
+          )}
         </div>
       </div>
       {confirmarSalida && (
