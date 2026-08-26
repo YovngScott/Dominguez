@@ -139,8 +139,9 @@ function buildClients() {
 async function generateStructured(ai, parts, schema) {
   const candidates = [
     process.env.GEMINI_INSURANCE_MODEL,
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
   ].filter(Boolean);
   let lastError;
   for (const model of [...new Set(candidates)]) {
