@@ -8,6 +8,6 @@
   "crons": [
     { "path": "/api/recordatorios-citas", "schedule": "0 13 * * *" },
     { "path": "/api/alerta-stock", "schedule": "30 12 * * *" },
-    { "path": "/api/resumen-citas-semanal", "schedule": "*/15 * * * *" }
+    { "path": "/api/resumen-citas-semanal", "schedule": "30 11 * * *" }
   ]
 }
