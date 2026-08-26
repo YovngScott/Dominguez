@@ -582,6 +582,13 @@ export default function Conexiones() {
       return;
     }
 
+    // La autorización real se completa en el servidor y el refresh token se
+    // guarda cifrado. Esta pantalla antigua ya no simula un OAuth local.
+    if (metodoAuth === "oauth" && (form.proveedor === "gmail" || form.proveedor === "google_workspace")) {
+      window.location.href = `/mensajes?correo=abrir&email=${encodeURIComponent(emailClean)}`;
+      return;
+    }
+
     const payload = {
       id: cuentaEditar ? cuentaEditar.id : crypto.randomUUID(),
       email: emailClean,

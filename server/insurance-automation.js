@@ -13,6 +13,7 @@ import {
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
 const PDF_BUCKET_PENDING = "seguros-pendientes";
 const PDF_BUCKET_CASES = "documentos-casos";
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 function json(res, status, body) {
   return res.status(status).json(body);
@@ -63,6 +64,65 @@ function safeFileName(value) {
     .map((char) => (char.charCodeAt(0) < 32 || "\\/:*?\"<>|".includes(char) ? "_" : char))
     .join("")
     .slice(0, 180) || "documento-seguro.pdf";
+}
+
+function oauthCredentials() {
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("Falta configurar GOOGLE_OAUTH_CLIENT_ID y GOOGLE_OAUTH_CLIENT_SECRET.");
+  return { clientId, clientSecret };
+}
+
+function credentialKey() {
+  const secret = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || process.env.STAGE_INSURANCE_SHARED_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) throw new Error("No hay una clave de cifrado disponible para Gmail.");
+  return crypto.createHash("sha256").update(secret).digest();
+}
+
+function encryptCredential(value) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", credentialKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(String(value), "utf8"), cipher.final()]);
+  return `v1.${iv.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}.${encrypted.toString("base64url")}`;
+}
+
+function decryptCredential(value) {
+  const [version, iv, tag, encrypted] = String(value || "").split(".");
+  if (version !== "v1" || !iv || !tag || !encrypted) throw new Error("Credencial de Gmail inválida.");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", credentialKey(), Buffer.from(iv, "base64url"));
+  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  return Buffer.concat([decipher.update(Buffer.from(encrypted, "base64url")), decipher.final()]).toString("utf8");
+}
+
+function oauthRedirectUri(req) {
+  if (process.env.GOOGLE_OAUTH_REDIRECT_URI) return process.env.GOOGLE_OAUTH_REDIRECT_URI;
+  const protocol = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "dominguez.vercel.app").split(",")[0].trim();
+  return `${protocol}://${host}/api/gmail-callback`;
+}
+
+function encodeOauthState(payload) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", credentialKey()).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function decodeOauthState(state) {
+  const [encoded, signature] = String(state || "").split(".");
+  if (!encoded || !signature) throw new Error("Autorización de Google inválida.");
+  const expected = crypto.createHmac("sha256", credentialKey()).update(encoded).digest();
+  const received = Buffer.from(signature, "base64url");
+  if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) throw new Error("Autorización de Google inválida.");
+  const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+  if (!payload.redirectUri || Number(payload.expiresAt || 0) < Date.now()) throw new Error("La autorización de Google venció.");
+  return payload;
+}
+
+async function googleRequest(url, init = {}) {
+  const response = await fetch(url, init);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body?.error_description || body?.error?.message || `Google respondió ${response.status}.`);
+  return body;
 }
 
 function buildClients() {
@@ -421,6 +481,163 @@ async function recordIngestError(supabase, ai, payload, error) {
   }, []);
 }
 
+function gmailAuthUrl(req, loginHint = "") {
+  const { clientId } = oauthCredentials();
+  const redirectUri = oauthRedirectUri(req);
+  const state = encodeOauthState({ redirectUri, expiresAt: Date.now() + 10 * 60_000 });
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: `${GMAIL_SCOPE} openid email`,
+    access_type: "offline",
+    prompt: "consent",
+    include_granted_scopes: "true",
+    state,
+  });
+  if (loginHint) params.set("login_hint", loginHint);
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+async function completeGmailOauth(supabase, req) {
+  const pending = decodeOauthState(req.query.state);
+  const { clientId, clientSecret } = oauthCredentials();
+  const tokens = await googleRequest("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      code: String(req.query.code || ""), client_id: clientId, client_secret: clientSecret,
+      redirect_uri: pending.redirectUri, grant_type: "authorization_code",
+    }),
+  });
+  const profile = await googleRequest("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { authorization: `Bearer ${tokens.access_token}` },
+  });
+  const email = String(profile.emailAddress || "").trim().toLowerCase();
+  if (!email) throw new Error("Google no devolvió la dirección de la cuenta.");
+  const { data: existing } = await supabase.from("asistente_correo_cuentas").select("id, refresh_token_cifrado").eq("email", email).maybeSingle();
+  if (!existing) {
+    const { count } = await supabase.from("asistente_correo_cuentas").select("id", { count: "exact", head: true });
+    if (Number(count || 0) >= 4) throw new Error("Ya alcanzaste el máximo de cuatro cuentas de correo.");
+  }
+  const encrypted = tokens.refresh_token ? encryptCredential(tokens.refresh_token) : existing?.refresh_token_cifrado;
+  if (!encrypted) throw new Error("Google no devolvió acceso sin conexión. Revoca el permiso anterior y vuelve a conectar.");
+  const { error } = await supabase.from("asistente_correo_cuentas").upsert({
+    ...(existing?.id ? { id: existing.id } : {}), email, etiqueta: "Correo del taller",
+    refresh_token_cifrado: encrypted, activa: true, ultimo_error: null,
+    actualizada_en: new Date().toISOString(),
+  }, { onConflict: "email" });
+  if (error) throw error;
+  return email;
+}
+
+async function gmailAccessToken(account) {
+  const { clientId, clientSecret } = oauthCredentials();
+  const tokens = await googleRequest("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId, client_secret: clientSecret,
+      refresh_token: decryptCredential(account.refresh_token_cifrado), grant_type: "refresh_token",
+    }),
+  });
+  return tokens.access_token;
+}
+
+function gmailHeader(headers, name) {
+  return headers?.find((header) => String(header.name).toLowerCase() === name.toLowerCase())?.value || "";
+}
+
+function gmailBody(part) {
+  if (!part) return "";
+  if (part.mimeType === "text/plain" && part.body?.data) return Buffer.from(part.body.data, "base64url").toString("utf8");
+  for (const child of part.parts || []) {
+    const value = gmailBody(child);
+    if (value.trim()) return value;
+  }
+  if (part.mimeType === "text/html" && part.body?.data) {
+    return Buffer.from(part.body.data, "base64url").toString("utf8").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  return "";
+}
+
+function gmailAttachmentParts(part) {
+  if (!part) return [];
+  return [...(part.filename ? [part] : []), ...(part.parts || []).flatMap(gmailAttachmentParts)];
+}
+
+async function processGmailAccount(supabase, ai, account) {
+  const accessToken = await gmailAccessToken(account);
+  const since = account.ultima_revision ? new Date(new Date(account.ultima_revision).getTime() - 2 * 60_000) : new Date(Date.now() - 24 * 60 * 60_000);
+  const ids = [];
+  let pageToken = "";
+  do {
+    const params = new URLSearchParams({ userId: "me", q: `in:inbox -in:chats after:${Math.floor(since.getTime() / 1000)}`, maxResults: "100" });
+    if (pageToken) params.set("pageToken", pageToken);
+    const listed = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, { headers: { authorization: `Bearer ${accessToken}` } });
+    ids.push(...(listed.messages || []).map((message) => message.id).filter(Boolean));
+    pageToken = ids.length < 500 ? String(listed.nextPageToken || "") : "";
+  } while (pageToken);
+
+  let processed = 0;
+  for (const messageId of ids.reverse()) {
+    const message = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`, { headers: { authorization: `Bearer ${accessToken}` } });
+    const attachments = [];
+    for (const part of gmailAttachmentParts(message.payload).slice(0, 12)) {
+      const isPdf = /pdf/i.test(part.mimeType || "") || /\.pdf$/i.test(part.filename || "");
+      if (!isPdf || !part.body?.attachmentId || Number(part.body.size || 0) > MAX_PDF_BYTES) continue;
+      const file = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.body.attachmentId)}`, { headers: { authorization: `Bearer ${accessToken}` } });
+      if (file.data) attachments.push({ name: part.filename || "documento.pdf", mimeType: "application/pdf", base64: Buffer.from(file.data, "base64url").toString("base64") });
+    }
+    await ingest(supabase, ai, {
+      messageId: `${account.id}:${messageId}`, accountEmail: account.email,
+      sender: gmailHeader(message.payload?.headers, "From"), subject: gmailHeader(message.payload?.headers, "Subject"),
+      body: gmailBody(message.payload).slice(0, 12000),
+      receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : new Date().toISOString(),
+      attachments,
+    });
+    processed += 1;
+  }
+  const { error } = await supabase.from("asistente_correo_cuentas").update({
+    ultima_revision: new Date().toISOString(), ultimo_error: null,
+    ultimo_message_id: ids.at(-1) || account.ultimo_message_id || null, actualizada_en: new Date().toISOString(),
+  }).eq("id", account.id);
+  if (error) throw error;
+  return processed;
+}
+
+async function pollGmailAccounts(supabase, ai) {
+  const { data: accounts, error } = await supabase.from("asistente_correo_cuentas").select("*").eq("activa", true).order("conectada_en");
+  if (error) throw error;
+  let messages = 0;
+  for (const account of accounts || []) {
+    try {
+      messages += await processGmailAccount(supabase, ai, account);
+    } catch (accountError) {
+      await supabase.from("asistente_correo_cuentas").update({ ultimo_error: String(accountError?.message || accountError).slice(0, 800), actualizada_en: new Date().toISOString() }).eq("id", account.id);
+    }
+  }
+  return { accounts: accounts?.length || 0, messages };
+}
+
+async function listGmailAccounts(supabase) {
+  const { data, error } = await supabase.from("asistente_correo_cuentas").select("id,email,etiqueta,activa,ultima_revision,ultimo_error,conectada_en").order("conectada_en");
+  if (error) throw error;
+  return data || [];
+}
+
+async function disconnectGmailAccount(supabase, id) {
+  const { data: account, error } = await supabase.from("asistente_correo_cuentas").select("*").eq("id", id).single();
+  if (error) throw error;
+  try {
+    const token = decryptCredential(account.refresh_token_cifrado);
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" } });
+  } catch { /* La eliminación local no depende de que Google responda. */ }
+  const { error: deleteError } = await supabase.from("asistente_correo_cuentas").delete().eq("id", id);
+  if (deleteError) throw deleteError;
+  return { ok: true };
+}
+
 async function listReviews(supabase, req) {
   let query = supabase
     .from("revisiones_seguro")
@@ -515,8 +732,16 @@ export default async function handler(req, res) {
   try {
     clients = buildClients();
     action = String(req.query.action || req.body?.action || "list").replace(/^insurance_/, "");
+    if (action === "oauth_callback" && req.method === "GET") {
+      const email = await completeGmailOauth(clients.supabase, req);
+      return res.redirect(302, `/mensajes?correo=conectado&email=${encodeURIComponent(email)}`);
+    }
     if (!await authorizeRequest(clients.supabase, req, res, action)) return;
     if (action === "ingest" && req.method === "POST") return json(res, 200, await ingest(clients.supabase, clients.ai, req.body || {}));
+    if (action === "gmail_accounts" && req.method === "GET") return json(res, 200, { data: await listGmailAccounts(clients.supabase), oauthConfigured: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) });
+    if (action === "gmail_oauth_url" && req.method === "POST") return json(res, 200, { url: gmailAuthUrl(req, String(req.body?.email || "").trim().toLowerCase()) });
+    if (action === "gmail_poll" && req.method === "POST") return json(res, 200, await pollGmailAccounts(clients.supabase, clients.ai));
+    if (action === "gmail_disconnect" && req.method === "POST") return json(res, 200, await disconnectGmailAccount(clients.supabase, String(req.body?.id || "")));
     if (action === "list" && req.method === "GET") return json(res, 200, { data: await listReviews(clients.supabase, req) });
     if (action === "detail" && req.method === "GET") return json(res, 200, { data: await detailReview(clients.supabase, String(req.query.id || "")) });
     if (action === "approve" && req.method === "POST") return json(res, 200, await approveReview(clients.supabase, String(req.body?.id || "")));
@@ -524,6 +749,7 @@ export default async function handler(req, res) {
     return json(res, 405, { error: "Acción o método no permitido." });
   } catch (error) {
     console.error("[seguro-automatizacion]", error);
+    if (action === "oauth_callback") return res.redirect(302, `/mensajes?correo=error&detalle=${encodeURIComponent(error?.message || "No se pudo conectar Gmail.")}`);
     if (action === "ingest" && clients) {
       try { await recordIngestError(clients.supabase, clients.ai, req.body || {}, error); }
       catch (recordError) { console.error("[seguro-automatizacion] No se pudo registrar el fallo:", recordError); }

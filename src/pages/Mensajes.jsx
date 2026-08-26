@@ -25,7 +25,7 @@ function fecha(valor) {
   return new Intl.DateTimeFormat("es-DO", { dateStyle: "medium", timeStyle: "short" }).format(new Date(valor));
 }
 
-async function seguroApi(action, { id, method = "GET" } = {}) {
+async function seguroApi(action, { id, method = "GET", payload } = {}) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Tu sesión venció. Vuelve a iniciar sesión.");
   const query = new URLSearchParams({ action: `insurance_${action}` });
@@ -36,7 +36,7 @@ async function seguroApi(action, { id, method = "GET" } = {}) {
       authorization: `Bearer ${session.access_token}`,
       ...(method !== "GET" ? { "content-type": "application/json" } : {}),
     },
-    body: method !== "GET" ? JSON.stringify({ id }) : undefined,
+    body: method !== "GET" ? JSON.stringify(payload || { id }) : undefined,
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || "No se pudo completar la operación.");
@@ -53,6 +53,12 @@ export default function Mensajes() {
   const [detalle, setDetalle] = useState(null);
   const [busy, setBusy] = useState("");
   const [configurador, setConfigurador] = useState(null);
+  const [cuentasCorreo, setCuentasCorreo] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("correo")) setCuentasCorreo(true);
+  }, []);
 
   const cargar = useCallback(async () => {
     setError("");
@@ -135,6 +141,7 @@ export default function Mensajes() {
           <p className="mt-1 text-sm text-[var(--ink-soft)]">Avisos persistentes de los correos y documentos que necesitan tu atención.</p>
         </div>
         <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          <button onClick={() => setCuentasCorreo(true)} className="btn-primary"><Icon name="mail" className="w-4 h-4" /> Conectar correos</button>
           <button onClick={() => setConfigurador("prompt")} className="btn-ghost"><Icon name="pencil" className="w-4 h-4" /> Prompt y comportamiento</button>
           <button onClick={() => setConfigurador("acciones")} className="btn-primary"><span className="text-lg leading-none">+</span> Agregar acciones</button>
           <button onClick={cargar} className="btn-ghost"><Icon name="clock" className="w-4 h-4" /> Actualizar</button>
@@ -186,6 +193,7 @@ export default function Mensajes() {
 
       {detalle && <DetalleModal data={detalle} busy={busy} onClose={() => setDetalle(null)} onResolve={resolver} />}
       {configurador && <AssistantConfigModal initialTab={configurador} onClose={() => setConfigurador(null)} />}
+      {cuentasCorreo && <EmailAccountsModal onClose={() => setCuentasCorreo(false)} onProcessed={cargar} />}
     </div>
   );
 }
@@ -214,6 +222,72 @@ function DetalleModal({ data, busy, onClose, onResolve }) {
 
 function Dato({ label, value }) { return <div className="rounded-xl border border-[var(--line)] p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink-soft)]">{label}</p><p className="mt-1 truncate font-bold text-[var(--ink)]">{value || "—"}</p></div>; }
 function Cambio({ title, text, tone = "blue" }) { const style = tone === "red" ? "border-red-200 bg-red-50" : tone === "amber" ? "border-amber-200 bg-amber-50" : tone === "green" ? "border-green-200 bg-green-50" : "border-blue-200 bg-blue-50"; return <div className={`rounded-xl border p-3 ${style}`}><p className="text-sm font-bold text-gray-900">{title}</p><p className="mt-0.5 text-xs text-gray-600">{text}</p></div>; }
+
+function EmailAccountsModal({ onClose, onProcessed }) {
+  const [accounts, setAccounts] = useState([]);
+  const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get("email") || "");
+  const [configured, setConfigured] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const params = new URLSearchParams(window.location.search);
+  const initialNotice = params.get("correo") === "conectado"
+    ? `Cuenta ${params.get("email") || "de Gmail"} conectada correctamente.`
+    : params.get("correo") === "error" ? params.get("detalle") || "No se pudo conectar Gmail." : "";
+  const [notice, setNotice] = useState(initialNotice);
+  const [error, setError] = useState(params.get("correo") === "error" ? initialNotice : "");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const body = await seguroApi("gmail_accounts");
+      setAccounts(body.data || []);
+      setConfigured(body.oauthConfigured !== false);
+    } catch (loadError) { setError(loadError.message); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function connect(event) {
+    event.preventDefault(); setError(""); setNotice("");
+    if (accounts.length >= 4) return setError("Puedes conectar un máximo de cuatro cuentas.");
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError("Escribe el correo de Gmail que deseas conectar.");
+    setBusy("connect");
+    try {
+      const body = await seguroApi("gmail_oauth_url", { method: "POST", payload: { email: email.trim() } });
+      window.location.assign(body.url);
+    } catch (connectError) { setError(connectError.message); setBusy(""); }
+  }
+
+  async function poll() {
+    setBusy("poll"); setError(""); setNotice("");
+    try {
+      const result = await seguroApi("gmail_poll", { method: "POST", payload: {} });
+      setNotice(`Revisión terminada: ${result.messages} correo(s) encontrado(s) en ${result.accounts} cuenta(s).`);
+      await load(); await onProcessed();
+    } catch (pollError) { setError(pollError.message); }
+    finally { setBusy(""); }
+  }
+
+  async function disconnect(account) {
+    if (!confirm(`¿Quitar el acceso a ${account.email}? El bot dejará de leer esa bandeja.`)) return;
+    setBusy(account.id); setError("");
+    try {
+      await seguroApi("gmail_disconnect", { method: "POST", payload: { id: account.id } });
+      setNotice(`${account.email} fue desconectado.`); await load();
+    } catch (disconnectError) { setError(disconnectError.message); }
+    finally { setBusy(""); }
+  }
+
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}><div className="card max-h-[92vh] w-full max-w-3xl overflow-y-auto p-5 sm:p-7" onClick={(event) => event.stopPropagation()}>
+    <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--brand-red)]">Acceso de solo lectura</p><h2 className="mt-1 text-xl font-extrabold text-[var(--ink)]">Cuentas de Gmail</h2><p className="mt-1 text-sm text-[var(--ink-soft)]">Conecta hasta cuatro bandejas. El bot puede leer y analizar, pero no enviar, eliminar ni modificar correos.</p></div><button onClick={onClose} className="btn-ghost !p-2"><Icon name="close" className="w-5 h-5" /></button></div>
+    {notice && !error && <div className="mt-5 rounded-xl border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">{notice}</div>}
+    {error && <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+    {!configured && <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="font-bold text-amber-900">Falta habilitar Google OAuth en el servidor</p><p className="mt-1 text-sm text-amber-800">Agrega GOOGLE_OAUTH_CLIENT_ID y GOOGLE_OAUTH_CLIENT_SECRET en Vercel y registra esta redirección exacta:</p><code className="mt-2 block break-all rounded-lg bg-white p-2 text-xs text-amber-900">https://dominguez.vercel.app/api/gmail-callback</code></div>}
+    <form onSubmit={connect} className="mt-5 rounded-xl border border-[var(--line)] p-4"><label className="text-sm font-bold text-[var(--ink)]">Correo que deseas conectar</label><div className="mt-2 flex flex-col gap-2 sm:flex-row"><input className="input flex-1" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="servicio@dominguezautopintura.com" /><button disabled={!configured || busy === "connect" || accounts.length >= 4} className="btn-primary shrink-0 disabled:opacity-40">{busy === "connect" ? "Abriendo Google…" : "Continuar con Google"}</button></div><p className="mt-2 text-xs text-[var(--ink-soft)]">Google mostrará la cuenta y el permiso Gmail de solo lectura antes de autorizar.</p></form>
+    <div className="mt-6 flex items-center justify-between gap-3"><h3 className="font-extrabold text-[var(--ink)]">Conectadas ({accounts.length}/4)</h3><button disabled={!accounts.length || busy === "poll"} onClick={poll} className="btn-ghost disabled:opacity-40"><Icon name="clock" className="w-4 h-4" />{busy === "poll" ? "Revisando…" : "Revisar ahora"}</button></div>
+    <div className="mt-3 space-y-3">{loading ? <div className="rounded-xl border border-[var(--line)] p-8 text-center text-sm text-[var(--ink-soft)]">Cargando cuentas…</div> : accounts.length === 0 ? <div className="rounded-xl border-2 border-dashed border-[var(--line)] p-8 text-center"><Icon name="mail" className="mx-auto w-9 h-9 text-[var(--ink-soft)]" /><p className="mt-2 font-bold text-[var(--ink)]">Aún no hay correos conectados</p></div> : accounts.map((account) => <div key={account.id} className="rounded-xl border border-[var(--line)] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold text-[var(--ink)]">{account.email}</p><p className={`mt-1 text-xs font-semibold ${account.ultimo_error ? "text-red-600" : "text-green-600"}`}>{account.ultimo_error ? `Requiere atención: ${account.ultimo_error}` : "Conectada y lista para lectura"}</p><p className="mt-1 text-xs text-[var(--ink-soft)]">Última revisión: {account.ultima_revision ? fecha(account.ultima_revision) : "todavía no realizada"}</p></div><button disabled={Boolean(busy)} onClick={() => disconnect(account)} className="btn-ghost !text-red-600">Desconectar</button></div></div>)}</div>
+  </div></div>;
+}
 
 function AssistantConfigModal({ initialTab, onClose }) {
   const [tab, setTab] = useState(initialTab);
