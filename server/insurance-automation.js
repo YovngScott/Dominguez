@@ -329,9 +329,17 @@ function insuranceScope(extraction) {
   const aliases = String(process.env.DOMINGUEZ_SUPPLIER_ALIASES || "")
     .split(",").map((value) => value.trim()).filter(Boolean);
   const lines = Array.isArray(extraction?.lines) ? extraction.lines : [];
-  const dominguezLines = lines.filter((line) => isDominguezSupplier(line.supplier, aliases));
+  const documents = Array.isArray(extraction?.documents) ? extraction.documents : [];
+  // Algunos formatos de aseguradora imprimen el suplidor una sola vez en el
+  // encabezado del PDF y dejan vacía esa columna en cada línea. En ese caso
+  // heredamos el suplidor del documento, pero solo si no hay documentos de
+  // terceros mezclados (para no atribuir líneas ajenas a Dominguez).
+  const documentSuppliers = documents.map((document) => String(document.supplier || "").trim()).filter(Boolean);
+  const allDocumentsForUs = documentSuppliers.length > 0 && documentSuppliers.every((supplier) => isDominguezSupplier(supplier, aliases));
+  const anyDocumentForUs = documentSuppliers.some((supplier) => isDominguezSupplier(supplier, aliases));
+  const dominguezLines = lines.filter((line) => isDominguezSupplier(line.supplier, aliases) || (allDocumentsForUs && !String(line.supplier || "").trim()));
   const sections = new Set();
-  for (const document of extraction?.documents || []) {
+  for (const document of documents) {
     for (const section of document.sections_present || []) sections.add(section);
   }
   // Compatibilidad con modelos antiguos que no devuelvan sections_present.
@@ -339,7 +347,7 @@ function insuranceScope(extraction) {
   const sectionsPresent = { pieza: sections.has("pieza"), mano_obra: sections.has("mano_obra") };
   const hasPartsForUs = dominguezLines.some((line) => (line.section || line.type) === "pieza");
   const hasLaborForUs = dominguezLines.some((line) => (line.section || line.type) === "mano_obra");
-  const unknownSupplier = lines.some((line) => !String(line.supplier || "").trim());
+  const unknownSupplier = lines.some((line) => !String(line.supplier || "").trim()) && !allDocumentsForUs;
   return {
     aliases,
     dominguezLines,
@@ -349,6 +357,7 @@ function insuranceScope(extraction) {
     orderClosed: hasPartsForUs,
     otherSupplierOnly: lines.length > 0 && !dominguezLines.length && !unknownSupplier,
     supplierUnknown: unknownSupplier,
+    supplierDocumentMatch: anyDocumentForUs,
   };
 }
 
@@ -522,6 +531,7 @@ async function ingest(supabase, ai, payload) {
     plate: extraction.plate,
     chassis: extraction.chassis,
     comparison,
+    orderClosed: Boolean(scope.orderClosed),
   };
   return { reviewId, alert: formatReviewAlert(review), comparison, reasons };
 }
@@ -802,10 +812,6 @@ async function approveReview(supabase, id) {
   if (!review.autorizado_remitente) throw new Error("El remitente no está en Contactos/Suplidores autorizados.");
   if (!review.cotizacion_id) throw new Error("El caso no tiene una cotización para comparar.");
   if (Number(review.confianza || 0) < 0.8) throw new Error("La extracción tiene baja confianza; corrígela o recházala.");
-  if (review.comparacion?.hasDifferences) {
-    throw new Error("Hay diferencias: el bot no puede guardar este PDF. Ajusta el caso manualmente y rechaza la revisión.");
-  }
-
   const { data: types } = await supabase.from("tipos_documento").select("id").eq("nombre", "Cotización del seguro").limit(1);
   const typeId = types?.[0]?.id || null;
   for (const file of review.archivos) {

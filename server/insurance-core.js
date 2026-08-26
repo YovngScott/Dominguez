@@ -212,7 +212,9 @@ export function assessPdfPackage(expectedCount, documents, comparison, threshold
 }
 
 export function formatReviewAlert(review) {
-  const title = review.caseMatched
+  const title = review.orderClosed
+    ? "🔒 Orden cerrada de Dominguez Auto Pintura"
+    : review.caseMatched
     ? review.comparison?.hasDifferences ? "⚠️ Cotización con diferencias" : "✅ Cotización sin diferencias"
     : "🚨 Correo de seguro sin caso vinculado";
   const lines = [title, "", `Remitente: ${review.sender || "No identificado"}`, `Asunto: ${review.subject || "(sin asunto)"}`];

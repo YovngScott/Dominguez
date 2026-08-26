@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../components/Icon";
 import { supabase } from "../lib/supabaseClient";
@@ -54,6 +54,7 @@ export default function Mensajes() {
   const [busy, setBusy] = useState("");
   const [configurador, setConfigurador] = useState(null);
   const [cuentasCorreo, setCuentasCorreo] = useState(false);
+  const pollingRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -73,6 +74,31 @@ export default function Mensajes() {
   }, [estado, tipo]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Mantiene la bandeja al día mientras el panel está abierto. El proceso
+  // server-to-server también puede ejecutarse desde Supabase Cron, pero este
+  // intervalo evita que el operador tenga que pulsar "Revisar ahora" durante
+  // la jornada y conserva la misma ruta idempotente.
+  useEffect(() => {
+    let cancelled = false;
+    const revisar = async () => {
+      if (cancelled || pollingRef.current) return;
+      pollingRef.current = true;
+      try {
+        await seguroApi("gmail_poll", { method: "POST", payload: {} });
+        if (!cancelled) await cargar();
+      } catch {
+        // La revisión manual/modal muestra el detalle; el refresco silencioso
+        // no debe interrumpir la bandeja por una sesión vencida o una cuenta
+        // temporalmente desconectada.
+      } finally {
+        pollingRef.current = false;
+      }
+    };
+    revisar();
+    const timer = window.setInterval(revisar, 5 * 60 * 1000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [cargar]);
 
   useEffect(() => {
     const channel = supabase
@@ -239,16 +265,17 @@ function DetalleModal({ data, busy, onClose, onResolve }) {
   const r = data.revision;
   const c = r.comparacion;
   const esSeguro = r.categoria_correo === "seguro";
-  const noAprobable = !r.caso_id || !r.cotizacion_id || !r.autorizado_remitente || Number(r.confianza || 0) < 0.8 || c?.hasDifferences || !r.archivos?.length;
+  const noAprobable = !r.caso_id || !r.cotizacion_id || !r.autorizado_remitente || Number(r.confianza || 0) < 0.8 || !r.archivos?.length;
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}><div className="card max-h-[92vh] w-full max-w-4xl overflow-y-auto p-5 sm:p-7" onClick={(e) => e.stopPropagation()}>
     <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--brand-red)]">Revisión del seguro</p><h2 className="mt-1 text-xl font-extrabold text-[var(--ink)]">{r.asunto || data.mensaje.titulo}</h2><p className="mt-1 text-xs text-[var(--ink-soft)]">{r.remitente} · {fecha(r.recibido_en)}</p></div><button onClick={onClose} aria-label="Cerrar" className="btn-ghost !p-2"><Icon name="close" className="w-5 h-5" /></button></div>
     <div className="mt-5 grid gap-3 sm:grid-cols-3"><Dato label="Placa" value={r.placa_detectada} /><Dato label="Chasis" value={r.chasis_detectado} /><Dato label="Confianza" value={`${Math.round(Number(r.confianza || 0) * 100)}%`} /></div>
     {r.resumen && <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700">Resumen del asistente</p><p className="mt-1 text-sm text-gray-700">{r.resumen}</p>{r.accion_sugerida && <p className="mt-3 text-sm font-bold text-gray-900">Acción sugerida: {r.accion_sugerida}</p>}</div>}
     {c && <div className="mt-5 space-y-2"><h3 className="font-bold text-[var(--ink)]">Comparación con la última cotización</h3>{c.changed?.map((x, i) => <Cambio key={`c${i}`} title={x.ours.description} text={`Taller RD$${Number(x.ours.subtotal || 0).toLocaleString()} → Seguro RD$${Number(x.theirs.subtotal || 0).toLocaleString()}`} tone="amber" />)}{c.removed?.map((x, i) => <Cambio key={`r${i}`} title={`Eliminada: ${x.description}`} text={`Cotizada en RD$${Number(x.subtotal || 0).toLocaleString()}`} tone="red" />)}{c.added?.map((x, i) => <Cambio key={`a${i}`} title={`Agregada: ${x.description}`} text={`Seguro RD$${Number(x.subtotal || 0).toLocaleString()}`} />)}{!c.hasDifferences && <Cambio title="Todas las líneas coinciden" text="El PDF permanece pendiente hasta tu aprobación." tone="green" />}</div>}
-    <div className="mt-5 flex flex-wrap gap-2">{r.archivos?.map((f) => <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="btn-ghost"><Icon name="file" className="w-4 h-4" />{f.nombre_archivo}</a>)}</div>
+    <div className="mt-5"><p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--ink-soft)]">Documentos</p><div className="flex flex-wrap gap-2">{r.archivos?.map((f) => <a key={f.id} href={f.url} target="_blank" rel="noreferrer" className="btn-ghost"><Icon name="file" className="w-4 h-4" />{f.nombre_archivo}<span className="text-[10px] text-[var(--ink-soft)]">{f.documento_caso_id ? "guardado en caso" : "pendiente en Supabase"}</span></a>)}</div></div>
     {r.caso_id && <Link to={`/casos/${r.caso_id}`} className="mt-4 inline-flex text-sm font-bold text-[var(--brand-red)] hover:underline">Abrir caso relacionado</Link>}
     <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-[var(--line)] pt-5"><button disabled={Boolean(busy)} onClick={() => onResolve("reject")} className="btn-ghost !text-red-600">Marcar resuelto</button>{esSeguro && <button disabled={Boolean(busy) || noAprobable} onClick={() => onResolve("approve")} className="btn-primary disabled:opacity-40">Aprobar y guardar PDF</button>}</div>
-    {esSeguro && noAprobable && r.estado === "revision" && <p className="mt-3 text-right text-xs text-[var(--ink-soft)]">Si uno de los PDF tiene diferencias o controles pendientes, se bloquea el paquete completo.</p>}
+    {esSeguro && noAprobable && r.estado === "revision" && <p className="mt-3 text-right text-xs text-[var(--ink-soft)]">Completa los controles pendientes (caso, cotización, remitente, confianza y PDF) para aprobar.</p>}
+    {esSeguro && c?.hasDifferences && r.estado === "revision" && <p className="mt-3 text-right text-xs text-amber-700">Hay diferencias detectadas. Puedes aprobar y guardar el PDF; quedarán visibles en el historial para tu revisión.</p>}
   </div></div>;
 }
 
