@@ -17,7 +17,10 @@ function label(date) { return new Date(`${date}T12:00:00Z`).toLocaleDateString("
 export default async function handler(req, res) {
   const webhookSecret = process.env.SUPABASE_DATABASE_WEBHOOK_SECRET;
   const isWebhook = Boolean(webhookSecret && String(req.headers["x-supabase-webhook-secret"] || "") === webhookSecret && req.body?.record?.id);
-  const cronSecret = process.env.CRON_SECRET; if (cronSecret && !isWebhook && req.headers.authorization !== `Bearer ${cronSecret}`) return res.status(401).json({ error: "No autorizado." });
+  const supabaseCronSecret = process.env.SUPABASE_CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET;
+  const authorizedCron = req.headers.authorization === `Bearer ${cronSecret}` || (supabaseCronSecret && String(req.headers["x-supabase-cron-secret"] || "") === supabaseCronSecret);
+  if ((cronSecret || supabaseCronSecret) && !isWebhook && !authorizedCron) return res.status(401).json({ error: "No autorizado." });
   const sbUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL; const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!sbUrl || !key) return res.status(500).json({ error: "Falta configuración de Supabase." });
   const range = weekRange();
