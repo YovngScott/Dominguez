@@ -23,4 +23,12 @@ create table if not exists citas_resumen_semanal (
   enviado_at timestamptz not null default now()
 );
 alter table citas_resumen_semanal enable row level security;
+
+create table if not exists citas_avisos_enviados (
+  cita_id uuid not null references citas(id) on delete cascade,
+  tipo text not null check (tipo in ('nueva_semana')),
+  enviado_at timestamptz not null default now(),
+  primary key (cita_id, tipo)
+);
+alter table citas_avisos_enviados enable row level security;
 -- La tabla solo la usa el cron con service_role; no se expone al navegador.

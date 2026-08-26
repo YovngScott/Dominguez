@@ -15,12 +15,31 @@ function weekRange(now = new Date()) {
 function label(date) { return new Date(`${date}T12:00:00Z`).toLocaleDateString("es-DO", { timeZone: TZ, weekday: "long", day: "2-digit", month: "2-digit" }); }
 
 export default async function handler(req, res) {
-  const cronSecret = process.env.CRON_SECRET; if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) return res.status(401).json({ error: "No autorizado." });
+  const webhookSecret = process.env.SUPABASE_DATABASE_WEBHOOK_SECRET;
+  const isWebhook = Boolean(webhookSecret && String(req.headers["x-supabase-webhook-secret"] || "") === webhookSecret && req.body?.record?.id);
+  const cronSecret = process.env.CRON_SECRET; if (cronSecret && !isWebhook && req.headers.authorization !== `Bearer ${cronSecret}`) return res.status(401).json({ error: "No autorizado." });
   const sbUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL; const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!sbUrl || !key) return res.status(500).json({ error: "Falta configuración de Supabase." });
   const range = weekRange();
   const headers = { apikey: key, Authorization: `Bearer ${key}` };
   const select = "id,nombre,telefono,fecha,hora,motivo,caso:casos(placa,marca:marcas(nombre),modelo:modelos(nombre))";
+  if (isWebhook) {
+    if (req.body?.type !== "INSERT" || req.body?.table !== "citas") return res.status(200).json({ sent: false, reason: "evento_no_aplicable" });
+    const citaId = req.body.record.id;
+    const existing = await fetch(`${sbUrl}/rest/v1/citas_avisos_enviados?cita_id=eq.${citaId}&tipo=eq.nueva_semana&select=cita_id`, { headers });
+    if ((await existing.json())?.length) return res.status(200).json({ sent: false, duplicate: true });
+    const citaRes = await fetch(`${sbUrl}/rest/v1/citas?id=eq.${citaId}&select=${encodeURIComponent(select)}`, { headers });
+    const cita = (await citaRes.json())?.[0];
+    if (!cita || cita.estado === "cancelada") return res.status(200).json({ sent: false, reason: "cita_no_notificable" });
+    const phoneRes = await fetch(`${sbUrl}/rest/v1/telefonos_notificacion?select=telefono&activo=eq.true&resumen_semanal=eq.true&limit=1`, { headers });
+    const phoneRows = await phoneRes.json(); const number = normalizarTelefono(phoneRows?.[0]?.telefono, process.env.WHATSAPP_DEFAULT_COUNTRY || "1");
+    if (!number || !evolutionConfig().ok) return res.status(503).json({ error: "No hay número de resumen o WhatsApp conectado." });
+    const vehicle = [cita.caso?.marca?.nombre, cita.caso?.modelo?.nombre, cita.caso?.placa].filter(Boolean).join(" ");
+    const envio = await enviarTextoWhatsapp({ number, text: `➕ Nueva cita agregada esta semana\n\n• ${label(cita.fecha)}${cita.hora ? ` ${cita.hora}` : ""} — ${cita.nombre}${cita.telefono ? ` (${cita.telefono})` : ""}${vehicle ? `\nVehículo: ${vehicle}` : ""}${cita.motivo ? `\nMotivo: ${cita.motivo}` : ""}` });
+    if (!envio.ok) return res.status(502).json({ error: envio.error || "No se pudo enviar el aviso." });
+    await fetch(`${sbUrl}/rest/v1/citas_avisos_enviados`, { method: "POST", headers: { ...headers, "content-type": "application/json", Prefer: "resolution=ignore-duplicates" }, body: JSON.stringify({ cita_id: citaId, tipo: "nueva_semana" }) });
+    return res.status(200).json({ sent: true, webhook: true });
+  }
   const r = await fetch(`${sbUrl}/rest/v1/citas?select=${encodeURIComponent(select)}&fecha=gte.${range.start}&fecha=lte.${range.end}&estado=neq.cancelada&order=fecha.asc,hora.asc`, { headers });
   const citas = await r.json(); if (!Array.isArray(citas)) return res.status(502).json({ error: "No se pudieron leer las citas." });
   const markerRes = await fetch(`${sbUrl}/rest/v1/citas_resumen_semanal?semana_inicio=eq.${range.start}&select=semana_inicio,citas_ids,enviado_at`, { headers });
