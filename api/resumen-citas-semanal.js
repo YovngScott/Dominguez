@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   const mondayWindow = range.day === 1 && (range.hour > 7 || (range.hour === 7 && range.minute >= 30)) && (range.hour < 8);
   if (!mondayWindow && !marker) return res.status(200).json({ sent: false, reason: "fuera_de_horario", total: citas.length });
   if (!mondayWindow && marker && !added.length) return res.status(200).json({ sent: false, reason: "sin_novedades", total: citas.length });
-  const phoneRes = await fetch(`${sbUrl}/rest/v1/telefonos_notificacion?select=telefono&activo=eq.true&order=created_at.asc&limit=1`, { headers });
+  const phoneRes = await fetch(`${sbUrl}/rest/v1/telefonos_notificacion?select=telefono&activo=eq.true&resumen_semanal=eq.true&order=created_at.asc&limit=1`, { headers });
   const phoneRows = await phoneRes.json(); const number = normalizarTelefono(phoneRows?.[0]?.telefono, process.env.WHATSAPP_DEFAULT_COUNTRY || "1");
   if (!number || !evolutionConfig().ok) return res.status(503).json({ error: "No hay número de notificación o WhatsApp conectado." });
   const list = (mondayWindow ? citas : added).map((c) => `• ${label(c.fecha)}${c.hora ? ` ${c.hora}` : ""} — ${c.nombre}${c.telefono ? ` (${c.telefono})` : ""}${c.motivo ? ` · ${c.motivo}` : ""}`).join("\n");
