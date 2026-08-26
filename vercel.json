@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     { "source": "/api/whatsapp-conectar", "destination": "/api/whatsapp-estado?action=conectar" },
+    { "source": "/api/gmail-callback", "destination": "/api/procesar-seguro?action=insurance_oauth_callback" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
