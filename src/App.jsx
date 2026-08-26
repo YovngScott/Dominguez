@@ -8,6 +8,7 @@ import WhatsappConnectModal from "./components/WhatsappConnectModal";
 import Login from "./pages/Login";
 import { aplicarTema, temaOscuroGuardado } from "./lib/theme";
 import { supabase } from "./lib/supabaseClient";
+import { dedupeDashboardMessages } from "./lib/emailInbox";
 
 // Cada página se carga bajo demanda (code-splitting): el navegador solo
 // descarga el código de la pantalla que se está abriendo, no el de toda la
@@ -139,11 +140,12 @@ function PrivateLayout({ children }) {
     }
     let activo = true;
     const cargarContador = async () => {
-      const { count } = await supabase
+      const { data } = await supabase
         .from("mensajes_dashboard")
-        .select("id", { count: "exact", head: true })
-        .eq("estado", "nuevo");
-      if (activo) setMensajesNuevos(count || 0);
+        .select("id,titulo,cuerpo,creado_en,metadata")
+        .eq("estado", "nuevo")
+        .neq("tipo", "publicidad");
+      if (activo) setMensajesNuevos(dedupeDashboardMessages(data || []).length);
     };
     cargarContador();
     const channel = supabase

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../components/Icon";
 import { supabase } from "../lib/supabaseClient";
+import { dedupeDashboardMessages } from "../lib/emailInbox";
 
 const TIPO_LABEL = {
   diferencia_cotizacion: "Diferencia de cotización",
@@ -16,7 +17,6 @@ const TIPO_LABEL = {
   factura: "Factura",
   cita: "Cita",
   correo_interno: "Interno",
-  publicidad: "Publicidad",
   correo_general: "Correo general",
 };
 
@@ -62,13 +62,13 @@ export default function Mensajes() {
 
   const cargar = useCallback(async () => {
     setError("");
-    let query = supabase.from("mensajes_dashboard").select("*").order("creado_en", { ascending: false }).limit(100);
+    let query = supabase.from("mensajes_dashboard").select("*").neq("tipo", "publicidad").order("creado_en", { ascending: false }).limit(100);
     if (estado === "pendientes") query = query.in("estado", ["nuevo", "leido"]);
     else if (estado !== "todos") query = query.eq("estado", estado);
     if (tipo !== "todos") query = query.eq("tipo", tipo);
     const { data, error: queryError } = await query;
     if (queryError) setError("No se pudieron cargar los mensajes.");
-    setMensajes(data || []);
+    setMensajes(dedupeDashboardMessages(data || []));
     setLoading(false);
   }, [estado, tipo]);
 
@@ -262,7 +262,7 @@ function EmailAccountsModal({ onClose, onProcessed }) {
     setBusy("poll"); setError(""); setNotice("");
     try {
       const result = await seguroApi("gmail_poll", { method: "POST", payload: {} });
-      const summary = `Revisión terminada: ${result.messages} correo(s) nuevo(s), ${result.duplicates || 0} ya revisado(s), en ${result.accounts} cuenta(s).`;
+      const summary = `Revisión terminada: ${result.messages} correo(s) nuevo(s), ${result.duplicates || 0} ya revisado(s) y ${result.ignored || 0} spam/promoción(es) descartado(s), en ${result.accounts} cuenta(s).`;
       if (result.failures) setError(`${summary} ${result.failures} correo(s) requieren atención.`);
       else setNotice(summary);
       await load(); await onProcessed();

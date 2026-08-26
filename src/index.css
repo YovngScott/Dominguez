@@ -137,6 +137,8 @@ select {
    especificidad (.dark .clase) sin necesidad de !important.
    =========================================================== */
 html.dark .bg-white { background-color: var(--surface); }
+html.dark .bg-gray-50,
+html.dark .bg-gray-100,
 html.dark .bg-slate-50,
 html.dark .bg-slate-100 { background-color: var(--surface-2); }
 html.dark .bg-slate-200 { background-color: #2b2f38; }
@@ -150,17 +152,27 @@ html.dark .bg-\[var\(--ink\)\] { background-color: var(--banner); }
 
 html.dark .text-slate-900,
 html.dark .text-slate-800,
-html.dark .text-slate-700 { color: var(--ink); }
+html.dark .text-slate-700,
+html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-gray-700 { color: var(--ink); }
 html.dark .text-slate-600,
 html.dark .text-slate-500,
 html.dark .text-slate-400,
+html.dark .text-gray-600,
 html.dark .text-gray-500 { color: var(--ink-soft); }
 
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300,
 html.dark .border-slate-100,
 html.dark .border-slate-200 { border-color: var(--line); }
 html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: var(--line); }
 
+html.dark .hover\:bg-white:hover,
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-gray-100:hover,
 html.dark .hover\:bg-slate-50:hover,
 html.dark .hover\:bg-slate-200:hover { background-color: var(--surface-2); }
 html.dark .hover\:bg-slate-300:hover { background-color: #363b45; }
@@ -169,6 +181,12 @@ html.dark .hover\:bg-slate-800:hover { background-color: #24272f; }
 /* Tonos de estado (los -50/-100 claros → translúcidos en oscuro) */
 html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.16); }
 html.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.22); }
+html.dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.14); }
+html.dark .bg-green-100 { background-color: rgba(34, 197, 94, 0.2); }
+html.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.14); }
+html.dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.2); }
+html.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.14); }
+html.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2); }
 html.dark .bg-amber-50 { background-color: rgba(217, 119, 6, 0.16); }
 html.dark .bg-amber-100 { background-color: rgba(217, 119, 6, 0.22); }
 html.dark .bg-sky-50,
@@ -180,13 +198,38 @@ html.dark .text-amber-600,
 html.dark .text-amber-700 { color: #fbbf24; }
 html.dark .text-sky-600,
 html.dark .text-sky-700 { color: #38bdf8; }
+html.dark .text-blue-600,
+html.dark .text-blue-700,
+html.dark .text-blue-800,
+html.dark .text-blue-900 { color: #60a5fa; }
+html.dark .text-green-600,
+html.dark .text-green-700,
+html.dark .text-green-800,
+html.dark .text-green-900 { color: #4ade80; }
+html.dark .text-red-600,
+html.dark .text-red-700,
+html.dark .text-red-800,
+html.dark .text-red-900 { color: #f87171; }
+html.dark .text-amber-800,
+html.dark .text-amber-900 { color: #fbbf24; }
+html.dark .border-blue-200,
+html.dark .border-blue-300 { border-color: rgba(96, 165, 250, 0.38); }
+html.dark .border-green-200,
+html.dark .border-green-300 { border-color: rgba(74, 222, 128, 0.38); }
+html.dark .border-red-200,
+html.dark .border-red-300 { border-color: rgba(248, 113, 113, 0.38); }
 html.dark .border-sky-200,
 html.dark .border-sky-300 { border-color: rgba(56, 189, 248, 0.4); }
 html.dark .border-emerald-200 { border-color: rgba(52, 211, 153, 0.4); }
 html.dark .border-amber-200 { border-color: rgba(251, 191, 36, 0.4); }
 
-/* Sombras un poco más marcadas en oscuro */
+/* En oscuro se evitan halos claros y reflejos saturados. */
 html.dark .card { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
+html.dark .btn-primary { box-shadow: 0 5px 14px -9px rgba(255, 77, 74, 0.45); }
+html.dark .btn-ghost:hover { background-color: var(--surface-2); }
+html.dark .shadow-lg,
+html.dark .shadow-xl,
+html.dark .shadow-2xl { box-shadow: 0 14px 36px rgba(0, 0, 0, 0.48); }
 
 /* Tarjetas de categoría (aseguradora): usan un degradado claro
    "from-*-50 to-white". En oscuro se reemplaza por un tinte plano y sutil

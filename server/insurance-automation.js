@@ -205,7 +205,7 @@ async function classifyEmail(ai, payload, pdfs, configuration) {
   const actions = configuration.actions.map((action) =>
     `- ${action.nombre} [${action.prioridad}]: si ${action.condicion}, entonces ${action.instruccion}`
   ).join("\n");
-  const parts = [{ text: `${configuration.protectedPrompt}\n\nCOMPORTAMIENTO DEL PROPIETARIO:\n${configuration.customPrompt || "Sin instrucciones adicionales."}\n\nACCIONES CONFIGURADAS:\n${actions || "Sin acciones adicionales."}\n\nClasifica este correo entrante. El resumen debe ser breve, específico y accionable. No digas que ejecutaste acciones que no ejecutaste.\nRemitente: ${payload.sender || "No identificado"}\nAsunto: ${payload.subject || "(sin asunto)"}\nCuerpo: ${(payload.body || "").slice(0, 12000)}\nPDF adjuntos: ${pdfs.length}` }];
+  const parts = [{ text: `${configuration.protectedPrompt}\n\nCOMPORTAMIENTO DEL PROPIETARIO:\n${configuration.customPrompt || "Sin instrucciones adicionales."}\n\nACCIONES CONFIGURADAS:\n${actions || "Sin acciones adicionales."}\n\nClasifica este correo entrante. Usa la categoría publicidad para spam, promociones masivas, boletines, publicidad y notificaciones sociales sin valor operativo. No clasifiques como publicidad un correo real de una aseguradora, suplidor, cliente o empleado aunque sea automático. El resumen debe ser breve, específico y accionable. No digas que ejecutaste acciones que no ejecutaste.\nRemitente: ${payload.sender || "No identificado"}\nAsunto: ${payload.subject || "(sin asunto)"}\nCuerpo: ${(payload.body || "").slice(0, 12000)}\nPDF adjuntos: ${pdfs.length}` }];
   for (const pdf of pdfs) parts.push({ inlineData: { mimeType: "application/pdf", data: pdf.base64 } });
   return generateStructured(ai, parts, EMAIL_CLASSIFICATION_SCHEMA);
 }
@@ -387,6 +387,7 @@ async function ingest(supabase, ai, payload) {
     .slice(0, 8);
   const configuration = await assistantConfiguration(supabase);
   const classification = await classifyEmail(ai, payload, pdfs, configuration);
+  if (classification.category === "publicidad") return { ignored: true, reason: "spam_or_promotion" };
   const ids = extractIdentifiers(`${payload.subject || ""}\n${payload.body || ""}`);
 
   if (!pdfs.length) {
@@ -569,6 +570,19 @@ function gmailHeader(headers, name) {
   return headers?.find((header) => String(header.name).toLowerCase() === name.toLowerCase())?.value || "";
 }
 
+function gmailMessageKey(message, accountId, providerMessageId) {
+  const internetId = gmailHeader(message.payload?.headers, "Message-ID")
+    .trim().toLowerCase().replace(/^<|>$/g, "").slice(0, 500);
+  return internetId ? `gmail:rfc822:${internetId}` : `gmail:account:${accountId}:${providerMessageId}`;
+}
+
+function ignoredGmailLabels(labelIds) {
+  const labels = new Set(labelIds || []);
+  return ["SPAM", "TRASH", "CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"].some((label) => labels.has(label));
+}
+
+export { gmailMessageKey, ignoredGmailLabels };
+
 function gmailBody(part) {
   if (!part) return "";
   if (part.mimeType === "text/plain" && part.body?.data) return Buffer.from(part.body.data, "base64url").toString("utf8");
@@ -587,7 +601,7 @@ function gmailAttachmentParts(part) {
   return [...(part.filename ? [part] : []), ...(part.parts || []).flatMap(gmailAttachmentParts)];
 }
 
-async function processGmailAccount(supabase, ai, account) {
+async function processGmailAccount(supabase, ai, account, seenMessageKeys) {
   const accessToken = await gmailAccessToken(account);
   const since = account.ultima_revision ? new Date(new Date(account.ultima_revision).getTime() - 2 * 60_000) : new Date(Date.now() - 24 * 60 * 60_000);
   const ids = [];
@@ -602,12 +616,24 @@ async function processGmailAccount(supabase, ai, account) {
 
   let processed = 0;
   let duplicates = 0;
+  let ignored = 0;
   let failures = 0;
   const failureMessages = [];
   for (const messageId of ids.reverse()) {
     let messagePayload = { messageId: `${account.id}:${messageId}`, accountEmail: account.email };
     try {
       const message = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`, { headers: { authorization: `Bearer ${accessToken}` } });
+      const globalMessageKey = gmailMessageKey(message, account.id, messageId);
+      if (seenMessageKeys.has(globalMessageKey)) {
+        duplicates += 1;
+        continue;
+      }
+      seenMessageKeys.add(globalMessageKey);
+      messagePayload.messageId = globalMessageKey;
+      if (ignoredGmailLabels(message.labelIds)) {
+        ignored += 1;
+        continue;
+      }
       const attachments = [];
       for (const part of gmailAttachmentParts(message.payload).slice(0, 12)) {
         const isPdf = /pdf/i.test(part.mimeType || "") || /\.pdf$/i.test(part.filename || "");
@@ -623,7 +649,8 @@ async function processGmailAccount(supabase, ai, account) {
         attachments,
       };
       const result = await ingest(supabase, ai, messagePayload);
-      if (result?.duplicate) duplicates += 1;
+      if (result?.ignored) ignored += 1;
+      else if (result?.duplicate) duplicates += 1;
       else processed += 1;
     } catch (messageError) {
       failures += 1;
@@ -641,7 +668,7 @@ async function processGmailAccount(supabase, ai, account) {
     ultimo_message_id: ids.at(-1) || account.ultimo_message_id || null, actualizada_en: new Date().toISOString(),
   }).eq("id", account.id);
   if (error) throw error;
-  return { processed, duplicates, failures };
+  return { processed, duplicates, ignored, failures };
 }
 
 async function pollGmailAccounts(supabase, ai) {
@@ -649,19 +676,22 @@ async function pollGmailAccounts(supabase, ai) {
   if (error) throw error;
   let messages = 0;
   let duplicates = 0;
+  let ignored = 0;
   let failures = 0;
+  const seenMessageKeys = new Set();
   for (const account of accounts || []) {
     try {
-      const result = await processGmailAccount(supabase, ai, account);
+      const result = await processGmailAccount(supabase, ai, account, seenMessageKeys);
       messages += result.processed;
       duplicates += result.duplicates;
+      ignored += result.ignored;
       failures += result.failures;
     } catch (accountError) {
       failures += 1;
       await supabase.from("asistente_correo_cuentas").update({ ultimo_error: String(accountError?.message || accountError).slice(0, 800), actualizada_en: new Date().toISOString() }).eq("id", account.id);
     }
   }
-  return { accounts: accounts?.length || 0, messages, duplicates, failures };
+  return { accounts: accounts?.length || 0, messages, duplicates, ignored, failures };
 }
 
 async function listGmailAccounts(supabase) {
