@@ -262,7 +262,9 @@ function EmailAccountsModal({ onClose, onProcessed }) {
     setBusy("poll"); setError(""); setNotice("");
     try {
       const result = await seguroApi("gmail_poll", { method: "POST", payload: {} });
-      setNotice(`Revisión terminada: ${result.messages} correo(s) encontrado(s) en ${result.accounts} cuenta(s).`);
+      const summary = `Revisión terminada: ${result.messages} correo(s) nuevo(s), ${result.duplicates || 0} ya revisado(s), en ${result.accounts} cuenta(s).`;
+      if (result.failures) setError(`${summary} ${result.failures} correo(s) requieren atención.`);
+      else setNotice(summary);
       await load(); await onProcessed();
     } catch (pollError) { setError(pollError.message); }
     finally { setBusy(""); }

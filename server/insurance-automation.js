@@ -329,7 +329,20 @@ async function insertReview(supabase, payload, values, pdfs) {
     })
     .select("id")
     .single();
-  if (error) throw error;
+  if (error) {
+    // Dos revisiones pueden coincidir (botón manual, cron o reintento de Vercel).
+    // La base sigue siendo la autoridad: el segundo proceso reutiliza la fila
+    // ganadora en vez de detener toda la cuenta por la restricción UNIQUE.
+    if (error.code === "23505") {
+      const { data: existing, error: existingError } = await supabase
+        .from("revisiones_seguro")
+        .select("id")
+        .eq("source_message_id", payload.messageId)
+        .single();
+      if (!existingError && existing?.id) return existing.id;
+    }
+    throw error;
+  }
 
   for (const pdf of pdfs) {
     const buffer = Buffer.from(pdf.base64, "base64");
@@ -359,7 +372,14 @@ async function ingest(supabase, ai, payload) {
     .select("id, estado")
     .eq("source_message_id", payload.messageId)
     .maybeSingle();
-  if (existing) return { duplicate: true, reviewId: existing.id, status: existing.estado };
+  if (existing?.estado === "error") {
+    // Los errores técnicos son reintentables. Sustituimos el marcador de error
+    // por el resultado real; no contiene PDFs aprobados ni acciones del usuario.
+    const { error: retryDeleteError } = await supabase.from("revisiones_seguro").delete().eq("id", existing.id).eq("estado", "error");
+    if (retryDeleteError) throw retryDeleteError;
+  } else if (existing) {
+    return { duplicate: true, reviewId: existing.id, status: existing.estado };
+  }
 
   const senderStatus = await authorizedSender(supabase, payload.sender);
   const pdfs = (Array.isArray(payload.attachments) ? payload.attachments : [])
@@ -581,44 +601,67 @@ async function processGmailAccount(supabase, ai, account) {
   } while (pageToken);
 
   let processed = 0;
+  let duplicates = 0;
+  let failures = 0;
+  const failureMessages = [];
   for (const messageId of ids.reverse()) {
-    const message = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`, { headers: { authorization: `Bearer ${accessToken}` } });
-    const attachments = [];
-    for (const part of gmailAttachmentParts(message.payload).slice(0, 12)) {
-      const isPdf = /pdf/i.test(part.mimeType || "") || /\.pdf$/i.test(part.filename || "");
-      if (!isPdf || !part.body?.attachmentId || Number(part.body.size || 0) > MAX_PDF_BYTES) continue;
-      const file = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.body.attachmentId)}`, { headers: { authorization: `Bearer ${accessToken}` } });
-      if (file.data) attachments.push({ name: part.filename || "documento.pdf", mimeType: "application/pdf", base64: Buffer.from(file.data, "base64url").toString("base64") });
+    let messagePayload = { messageId: `${account.id}:${messageId}`, accountEmail: account.email };
+    try {
+      const message = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`, { headers: { authorization: `Bearer ${accessToken}` } });
+      const attachments = [];
+      for (const part of gmailAttachmentParts(message.payload).slice(0, 12)) {
+        const isPdf = /pdf/i.test(part.mimeType || "") || /\.pdf$/i.test(part.filename || "");
+        if (!isPdf || !part.body?.attachmentId || Number(part.body.size || 0) > MAX_PDF_BYTES) continue;
+        const file = await googleRequest(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.body.attachmentId)}`, { headers: { authorization: `Bearer ${accessToken}` } });
+        if (file.data) attachments.push({ name: part.filename || "documento.pdf", mimeType: "application/pdf", base64: Buffer.from(file.data, "base64url").toString("base64") });
+      }
+      messagePayload = {
+        ...messagePayload,
+        sender: gmailHeader(message.payload?.headers, "From"), subject: gmailHeader(message.payload?.headers, "Subject"),
+        body: gmailBody(message.payload).slice(0, 12000),
+        receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : new Date().toISOString(),
+        attachments,
+      };
+      const result = await ingest(supabase, ai, messagePayload);
+      if (result?.duplicate) duplicates += 1;
+      else processed += 1;
+    } catch (messageError) {
+      failures += 1;
+      failureMessages.push(String(messageError?.message || messageError));
+      try {
+        await recordIngestError(supabase, ai, messagePayload, messageError);
+      } catch (recordError) {
+        failureMessages.push(`No se pudo registrar el fallo: ${String(recordError?.message || recordError)}`);
+      }
     }
-    await ingest(supabase, ai, {
-      messageId: `${account.id}:${messageId}`, accountEmail: account.email,
-      sender: gmailHeader(message.payload?.headers, "From"), subject: gmailHeader(message.payload?.headers, "Subject"),
-      body: gmailBody(message.payload).slice(0, 12000),
-      receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : new Date().toISOString(),
-      attachments,
-    });
-    processed += 1;
   }
   const { error } = await supabase.from("asistente_correo_cuentas").update({
-    ultima_revision: new Date().toISOString(), ultimo_error: null,
+    ultima_revision: new Date().toISOString(),
+    ultimo_error: failures ? `${failures} correo(s) requieren atención. ${failureMessages[0] || "Revisa el Centro de mensajes."}`.slice(0, 800) : null,
     ultimo_message_id: ids.at(-1) || account.ultimo_message_id || null, actualizada_en: new Date().toISOString(),
   }).eq("id", account.id);
   if (error) throw error;
-  return processed;
+  return { processed, duplicates, failures };
 }
 
 async function pollGmailAccounts(supabase, ai) {
   const { data: accounts, error } = await supabase.from("asistente_correo_cuentas").select("*").eq("activa", true).order("conectada_en");
   if (error) throw error;
   let messages = 0;
+  let duplicates = 0;
+  let failures = 0;
   for (const account of accounts || []) {
     try {
-      messages += await processGmailAccount(supabase, ai, account);
+      const result = await processGmailAccount(supabase, ai, account);
+      messages += result.processed;
+      duplicates += result.duplicates;
+      failures += result.failures;
     } catch (accountError) {
+      failures += 1;
       await supabase.from("asistente_correo_cuentas").update({ ultimo_error: String(accountError?.message || accountError).slice(0, 800), actualizada_en: new Date().toISOString() }).eq("id", account.id);
     }
   }
-  return { accounts: accounts?.length || 0, messages };
+  return { accounts: accounts?.length || 0, messages, duplicates, failures };
 }
 
 async function listGmailAccounts(supabase) {
