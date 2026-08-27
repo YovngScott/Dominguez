@@ -1,4 +1,3 @@
-/* global process */
 // Inicio de sesión por PIN. El PIN se valida contra su hash en Supabase y
 // solamente se devuelve el correo interno de Auth cuando la coincidencia es
 // válida. El navegador luego abre una sesión normal de Supabase con ese PIN.

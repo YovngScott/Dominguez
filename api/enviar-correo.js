@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   if (!Array.isArray(to) || !to.length) return res.status(400).json({ error: "Falta el destinatario." });
   if (!subject) return res.status(400).json({ error: "Falta el asunto." });
 
-  let adjuntos = [];
+  let adjuntos;
   try {
     adjuntos = await prepararAdjuntos(attachment || []);
   } catch (error) {

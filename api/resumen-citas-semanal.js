@@ -5,7 +5,6 @@ function zonedParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(date);
   return Object.fromEntries(parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
 }
-function isoDate(y, m, d) { return `${y}-${m}-${d}`; }
 function weekRange(now = new Date()) {
   const p = zonedParts(now); const base = new Date(Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)));
   const day = base.getUTCDay() || 7; base.setUTCDate(base.getUTCDate() - day + 1);

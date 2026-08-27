@@ -1,4 +1,3 @@
-/* global process */
 import { createHash, randomUUID } from "node:crypto";
 // Administración de trabajadores. La service role queda solo en Vercel: el
 // navegador llama este endpoint con su sesión y nunca ve claves privilegiadas.

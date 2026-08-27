@@ -1,4 +1,3 @@
-/* global process, Buffer */
 // Endpoint for automated insurance mail and PDF processing.
 // Receives email JSON metadata and attachments (Base64), runs them through Gemini,
 // queries Supabase, matches the case, uploads the documents, and alerts via WhatsApp.

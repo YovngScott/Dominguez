@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   }
 
   // Insumos activos cuyo stock quedó en/por debajo del mínimo.
-  let insumos = [];
+  let insumos;
   try {
     const r = await fetch(
       `${sbUrl}/rest/v1/suministros?select=nombre,stock,stock_minimo,unidad&activo=eq.true&order=stock.asc`,

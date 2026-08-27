@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     `&telefono=not.is.null` +
     `&recordatorio_enviado_at=is.null`;
 
-  let citas = [];
+  let citas;
   try {
     const r = await fetch(`${sbUrl}/rest/v1/citas?select=${encodeURIComponent(select)}&${filtro}`, {
       headers,

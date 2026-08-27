@@ -1,4 +1,3 @@
-/* global process */
 // Endpoint consolidado para estado de WhatsApp, sincronización global de cuentas/teléfonos/excluidos/prompts y envío de alertas de prueba.
 import {
   estadoWhatsapp,

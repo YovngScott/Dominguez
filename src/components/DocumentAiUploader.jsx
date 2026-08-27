@@ -1,6 +1,4 @@
 import { useState, useRef } from "react";
-import Icon from "./Icon";
-import { compressImage } from "../lib/imageCompress";
 
 export default function DocumentAiUploader({ onParsed, disabled = false }) {
   const [carnet, setCarnet] = useState(null); // { file, preview, base64, mimeType }

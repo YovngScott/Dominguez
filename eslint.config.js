@@ -23,4 +23,10 @@ export default defineConfig([
       'react-hooks/set-state-in-effect': 'off',
     },
   },
+  {
+    files: ['api/**/*.js', 'email/**/*.js', 'whatsapp/**/*.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])
