@@ -31,6 +31,17 @@ const ANIOS = Array.from({ length: ANIO_ACTUAL + 1 - 1980 + 1 }, (_, i) => {
   return { id: y, label: y };
 });
 
+async function reintentar(operacion, intentos = 3) {
+  let ultimo;
+  for (let intento = 0; intento < intentos; intento += 1) {
+    try { return await operacion(); } catch (e) {
+      ultimo = e;
+      if (intento + 1 < intentos) await new Promise((resolve) => setTimeout(resolve, 350 * (intento + 1)));
+    }
+  }
+  throw ultimo;
+}
+
 export default function NewQuote() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -365,7 +376,12 @@ export default function NewQuote() {
 
     try {
       const aseg = aseguradoras.find((a) => a.id === form.aseguradora_id);
-      const { data: userData } = await supabase.auth.getUser();
+      const authResult = await reintentar(async () => {
+        const result = await supabase.auth.getUser();
+        if (result.error) throw result.error;
+        return result;
+      });
+      const { data: userData } = authResult;
       let cot;
 
       if (editando) {
@@ -406,7 +422,12 @@ export default function NewQuote() {
         }
       } else {
         setEstado("Asignando número…");
-        const { data: numero, error: numErr } = await supabase.rpc("siguiente_numero_cotizacion");
+        const numeroResult = await reintentar(async () => {
+          const result = await supabase.rpc("siguiente_numero_cotizacion");
+          if (result.error) throw result.error;
+          return result;
+        });
+        const { data: numero } = numeroResult;
         if (numErr) throw numErr;
 
         // Busca un caso con el mismo chasis para enlazar
@@ -553,10 +574,14 @@ export default function NewQuote() {
         aseguradora_telefono: aseg?.telefono,
       });
       const pdfPath = `${cot.id}/cotizacion.pdf`;
-      await supabase.storage
-        .from("cotizaciones")
-        .upload(pdfPath, blob, { contentType: "application/pdf", upsert: true });
-      await supabase.from("cotizaciones").update({ pdf_path: pdfPath }).eq("id", cot.id);
+      await reintentar(async () => {
+        const { error: uploadError } = await supabase.storage
+          .from("cotizaciones")
+          .upload(pdfPath, blob, { contentType: "application/pdf", upsert: true });
+        if (uploadError) throw uploadError;
+        const { error: updateError } = await supabase.from("cotizaciones").update({ pdf_path: pdfPath }).eq("id", cot.id);
+        if (updateError) throw updateError;
+      });
 
       clearFormDraft("newquote");
       navigate(`/cotizaciones/${cot.id}`);
@@ -690,7 +715,24 @@ export default function NewQuote() {
             </div>
           </Section>
 
-          {/* Piezas con Dictado de Voz */}
+          {/* Primero se define el servicio; después se agregan sus piezas. */}
+          <ItemsCard
+            icon="wrench"
+            titulo="Valoración de mano de obra"
+            boton="+ Agregar servicio"
+            onAdd={() => setModal({ tipo: "servicio", index: null })}
+            items={form.items_mano_obra}
+            columnas={["Descripción", "Cant.", "Precio", "ITBIS", "Total"]}
+            fila={(it) => {
+              const c = calcularItem(it);
+              const desc = it.pieza ? `${it.nombre} · ${nombrePieza({ ...it, nombre: it.pieza })}` : it.nombre;
+              return [desc, it.cantidad, rd(it.precio), rd(c.itbisMonto), rd(c.total)];
+            }}
+            onEdit={(i) => setModal({ tipo: "servicio", index: i })}
+            onDelete={(i) => setConfirmarBorrar({ tipo: "servicio", index: i, nombre: form.items_mano_obra[i]?.nombre || "este servicio" })}
+          />
+
+          {/* Piezas */}
           <ItemsCard
             icon="layers"
             titulo="Valoración de piezas"
@@ -705,29 +747,6 @@ export default function NewQuote() {
             onEdit={(i) => setModal({ tipo: "pieza", index: i })}
             onDelete={(i) =>
               setConfirmarBorrar({ tipo: "pieza", index: i, nombre: nombrePieza(form.items_piezas[i]) })
-            }
-          />
-
-          {/* Mano de obra */}
-          <ItemsCard
-            icon="wrench"
-            titulo="Valoración de mano de obra"
-            boton="+ Agregar servicio"
-            onAdd={() => setModal({ tipo: "servicio", index: null })}
-            items={form.items_mano_obra}
-            columnas={["Descripción", "Cant.", "Precio", "ITBIS", "Total"]}
-            fila={(it) => {
-              const c = calcularItem(it);
-              const desc = it.pieza ? `${it.nombre} · ${nombrePieza({ ...it, nombre: it.pieza })}` : it.nombre;
-              return [desc, it.cantidad, rd(it.precio), rd(c.itbisMonto), rd(c.total)];
-            }}
-            onEdit={(i) => setModal({ tipo: "servicio", index: i })}
-            onDelete={(i) =>
-              setConfirmarBorrar({
-                tipo: "servicio",
-                index: i,
-                nombre: form.items_mano_obra[i]?.nombre || "este servicio",
-              })
             }
           />
 

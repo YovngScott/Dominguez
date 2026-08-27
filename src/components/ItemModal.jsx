@@ -21,18 +21,6 @@ export default function ItemModal({ tipo, initial, onConfirm, onCancel, sugerenc
   function up(campo, valor) { setItem((it) => ({ ...it, [campo]: valor })); }
   const { total } = calcularItem(item);
   const nombreValido = item.nombre.trim();
-  const sugerenciasRelacionadas = useMemo(() => {
-    if (!esServicio || !item.nombre.trim()) return [];
-    const tokens = item.nombre.toLowerCase().split(/[^a-záéíóúñ0-9]+/).filter((t) => t.length > 2);
-    const matches = sugerenciasPiezas.filter((pieza) => tokens.some((token) => String(pieza.label || pieza.nombre || pieza).toLowerCase().includes(token)));
-    return (matches.length ? matches : sugerenciasPiezas).slice(0, 8);
-  }, [esServicio, item.nombre, sugerenciasPiezas]);
-
-  function agregarPieza(pieza) {
-    const label = String(pieza.label || pieza.nombre || pieza).trim();
-    if (!label || item.nombre.toLowerCase().includes(label.toLowerCase())) return;
-    up("nombre", `${item.nombre.trim()} · ${label}`);
-  }
 
   function guardar() {
     const limpio = { ...item };
@@ -64,14 +52,6 @@ export default function ItemModal({ tipo, initial, onConfirm, onCancel, sugerenc
               maxResults={12}
             />
             {!esServicio && <p className="text-[11px] text-[var(--ink-soft)] mt-1.5">DELT delantero · TRAS trasero · RH derecha · LH izquierda · SUP superior · INF inferior</p>}
-            {esServicio && sugerenciasRelacionadas.length > 0 && (
-              <div className="mt-2 rounded-lg border border-[var(--line)] bg-[var(--paper)] p-2">
-                <p className="text-[11px] font-semibold text-[var(--ink-soft)] mb-1.5">Piezas relacionadas (toca para añadir)</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {sugerenciasRelacionadas.map((pieza, i) => <button type="button" key={`${pieza.id || pieza.label || pieza}-${i}`} onClick={() => agregarPieza(pieza)} className="text-xs px-2 py-1 rounded-md border border-[var(--line)] text-[var(--ink-soft)] hover:border-[var(--brand-red)] hover:text-[var(--brand-red)]">{pieza.label || pieza.nombre || pieza}</button>)}
-                </div>
-              </div>
-            )}
           </Campo>
         </div>
 
