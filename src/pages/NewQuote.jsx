@@ -31,6 +31,22 @@ const ANIOS = Array.from({ length: ANIO_ACTUAL + 1 - 1980 + 1 }, (_, i) => {
   return { id: y, label: y };
 });
 
+const CATALOGOS_CACHE_KEY = "dominguez:cotizacion:catalogos:v1";
+const CATALOGOS_CACHE_MS = 6 * 60 * 60 * 1000;
+
+function leerCatalogosCache() {
+  try {
+    const cache = JSON.parse(localStorage.getItem(CATALOGOS_CACHE_KEY) || "null");
+    return cache && Date.now() - cache.guardadoEn < CATALOGOS_CACHE_MS ? cache : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarCatalogosCache(datos) {
+  try { localStorage.setItem(CATALOGOS_CACHE_KEY, JSON.stringify({ ...datos, guardadoEn: Date.now() })); } catch { /* almacenamiento lleno o privado */ }
+}
+
 async function reintentar(operacion, intentos = 3) {
   let ultimo;
   for (let intento = 0; intento < intentos; intento += 1) {
@@ -129,6 +145,14 @@ export default function NewQuote() {
 
   useEffect(() => {
     async function load() {
+      const cache = leerCatalogosCache();
+      if (cache) {
+        setAseguradoras(cache.aseguradoras || []);
+        setMarcas(cache.marcas || []);
+        setPiezasCatalogo(cache.piezas || []);
+        setServiciosCatalogo(cache.servicios || []);
+      }
+
       const [{ data: asegs }, { data: ms }, { data: piezas }, { data: servicios }, { data: catDanos }] =
         await Promise.all([
           supabase.from("aseguradoras").select("id,nombre,direccion,telefono,activo,orden").eq("activo", true).order("orden"),
@@ -137,10 +161,17 @@ export default function NewQuote() {
           supabase.from("servicios_catalogo").select("nombre").order("nombre"),
           supabase.from("categorias_foto").select("id").ilike("nombre", "%daño%").limit(1).maybeSingle(),
         ]);
-      setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
-      setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
-      setPiezasCatalogo(opcionesPiezasCanonicas(piezas));
-      setServiciosCatalogo((servicios || []).map((s) => ({ id: s.nombre, label: s.nombre })));
+      const datos = {
+        aseguradoras: (asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")),
+        marcas: (ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })),
+        piezas: opcionesPiezasCanonicas(piezas),
+        servicios: (servicios || []).map((s) => ({ id: s.nombre, label: s.nombre })),
+      };
+      setAseguradoras(datos.aseguradoras);
+      setMarcas(datos.marcas);
+      setPiezasCatalogo(datos.piezas);
+      setServiciosCatalogo(datos.servicios);
+      guardarCatalogosCache(datos);
       setCategoriaDanosId(catDanos?.id || null);
     }
     load();
@@ -428,7 +459,6 @@ export default function NewQuote() {
           return result;
         });
         const { data: numero } = numeroResult;
-        if (numErr) throw numErr;
 
         // Busca un caso con el mismo chasis para enlazar
         let casoId = null;
@@ -715,23 +745,6 @@ export default function NewQuote() {
             </div>
           </Section>
 
-          {/* Primero se define el servicio; después se agregan sus piezas. */}
-          <ItemsCard
-            icon="wrench"
-            titulo="Valoración de mano de obra"
-            boton="+ Agregar servicio"
-            onAdd={() => setModal({ tipo: "servicio", index: null })}
-            items={form.items_mano_obra}
-            columnas={["Descripción", "Cant.", "Precio", "ITBIS", "Total"]}
-            fila={(it) => {
-              const c = calcularItem(it);
-              const desc = it.pieza ? `${it.nombre} · ${nombrePieza({ ...it, nombre: it.pieza })}` : it.nombre;
-              return [desc, it.cantidad, rd(it.precio), rd(c.itbisMonto), rd(c.total)];
-            }}
-            onEdit={(i) => setModal({ tipo: "servicio", index: i })}
-            onDelete={(i) => setConfirmarBorrar({ tipo: "servicio", index: i, nombre: form.items_mano_obra[i]?.nombre || "este servicio" })}
-          />
-
           {/* Piezas */}
           <ItemsCard
             icon="layers"
@@ -748,6 +761,23 @@ export default function NewQuote() {
             onDelete={(i) =>
               setConfirmarBorrar({ tipo: "pieza", index: i, nombre: nombrePieza(form.items_piezas[i]) })
             }
+          />
+
+          {/* Al agregar una línea, el selector guía: mano de obra y luego pieza. */}
+          <ItemsCard
+            icon="wrench"
+            titulo="Valoración de mano de obra"
+            boton="+ Agregar servicio"
+            onAdd={() => setModal({ tipo: "servicio", index: null })}
+            items={form.items_mano_obra}
+            columnas={["Descripción", "Cant.", "Precio", "ITBIS", "Total"]}
+            fila={(it) => {
+              const c = calcularItem(it);
+              const desc = it.pieza ? `${it.nombre} · ${nombrePieza({ ...it, nombre: it.pieza })}` : it.nombre;
+              return [desc, it.cantidad, rd(it.precio), rd(c.itbisMonto), rd(c.total)];
+            }}
+            onEdit={(i) => setModal({ tipo: "servicio", index: i })}
+            onDelete={(i) => setConfirmarBorrar({ tipo: "servicio", index: i, nombre: form.items_mano_obra[i]?.nombre || "este servicio" })}
           />
 
           {/* Evidencias */}
