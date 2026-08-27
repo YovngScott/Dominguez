@@ -136,7 +136,7 @@ export default function Dashboard() {
         .filter((c) => c.nivel !== "ok")
         .sort((a, b) => b.dias - a.dias);
 
-      setAseguradoras(asegs || []);
+      setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
       setConteos(counts);
       setMetricas(m);
       setCasosActivos(activos);

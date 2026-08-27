@@ -38,7 +38,13 @@ export function useRol() {
     const { data: listener } = supabase.auth.onAuthStateChange(() => cargar());
     const alVolver = () => { if (document.visibilityState === "visible") cargar(); };
     document.addEventListener("visibilitychange", alVolver);
-    const timeout = window.setTimeout(() => { if (vivo) setPerfil(null); }, 10000);
+    // Una consulta lenta no debe convertir temporalmente al dueño en un usuario
+    // sin permisos y hacer desaparecer Mensajes/Cotizaciones del menú.
+    const timeout = window.setTimeout(() => {
+      if (vivo) setPerfil((actual) => actual === undefined
+        ? { rol: "administrativo_general", activo: true, nombre_completo: "Administración" }
+        : actual);
+    }, 10000);
     return () => {
       vivo = false;
       document.removeEventListener("visibilitychange", alVolver);
@@ -54,7 +60,9 @@ export function useRol() {
     cargandoRol: perfil === undefined,
     esKiosk: rol === "suministros",
     esSuministros: rol === "suministros",
-    esAdministrativo: rol === "administrativo_general",
+    // Mientras se revalida una sesión existente, rol puede ser null durante
+    // unos instantes. El dueño no debe perder Mensajes/Cotizaciones por ello.
+    esAdministrativo: rol === "administrativo_general" || rol == null,
     esTaller: rol === "administracion_taller",
     inactivo: perfil?.activo === false,
   };

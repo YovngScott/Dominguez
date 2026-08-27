@@ -65,7 +65,7 @@ function PanelAseguradoras() {
       supabase.from("aseguradoras").select("id, nombre, logo_url").eq("activo", true).order("orden"),
     ]);
     setContactos(cts || []);
-    setAseguradoras(asegs || []);
+    setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
     setLoading(false);
   }
 
