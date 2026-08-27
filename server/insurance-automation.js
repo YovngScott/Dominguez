@@ -31,6 +31,14 @@ async function authorizeRequest(supabase, req, res, action) {
   const supplied = req.headers["x-stage-insurance-secret"];
   if (configured && supplied && timingSafeEqual(configured, supplied)) return "integration";
 
+  // Supabase Cron ejecuta la lectura de Gmail aunque no haya nadie con el
+  // Centro de mensajes abierto. Esta credencial solo autoriza esa operación.
+  const cronSecret = process.env.GMAIL_POLL_SECRET;
+  const suppliedCronSecret = req.headers["x-supabase-cron-secret"];
+  if (action === "gmail_poll" && cronSecret && suppliedCronSecret && timingSafeEqual(cronSecret, suppliedCronSecret)) {
+    return "scheduler";
+  }
+
   // El panel puede revisar y resolver mensajes con la sesión real de Supabase.
   // La ingestión queda reservada al secreto servidor-a-servidor.
   if (action !== "ingest") {
@@ -740,26 +748,64 @@ async function processGmailAccount(supabase, ai, account, seenMessageKeys) {
 }
 
 async function pollGmailAccounts(supabase, ai) {
-  const { data: accounts, error } = await supabase.from("asistente_correo_cuentas").select("*").eq("activa", true).order("conectada_en");
-  if (error) throw error;
-  let messages = 0;
-  let duplicates = 0;
-  let ignored = 0;
-  let failures = 0;
-  const seenMessageKeys = new Set();
-  for (const account of accounts || []) {
-    try {
-      const result = await processGmailAccount(supabase, ai, account, seenMessageKeys);
-      messages += result.processed;
-      duplicates += result.duplicates;
-      ignored += result.ignored;
-      failures += result.failures;
-    } catch (accountError) {
-      failures += 1;
-      await supabase.from("asistente_correo_cuentas").update({ ultimo_error: String(accountError?.message || accountError).slice(0, 800), actualizada_en: new Date().toISOString() }).eq("id", account.id);
+  const lockToken = crypto.randomUUID();
+  const startedAt = new Date();
+  const lockedUntil = new Date(startedAt.getTime() + 4 * 60_000).toISOString();
+  const { data: lock, error: lockError } = await supabase
+    .from("asistente_correo_poll_estado")
+    .update({
+      lock_token: lockToken,
+      bloqueado_hasta: lockedUntil,
+      ultima_ejecucion_inicio: startedAt.toISOString(),
+      actualizado_en: startedAt.toISOString(),
+    })
+    .eq("id", "gmail")
+    .or(`bloqueado_hasta.is.null,bloqueado_hasta.lt.${startedAt.toISOString()}`)
+    .select("id")
+    .maybeSingle();
+  if (lockError) throw lockError;
+  if (!lock) return { skipped: true, reason: "poll_in_progress" };
+
+  try {
+    const { data: accounts, error } = await supabase.from("asistente_correo_cuentas").select("*").eq("activa", true).order("conectada_en");
+    if (error) throw error;
+    let messages = 0;
+    let duplicates = 0;
+    let ignored = 0;
+    let failures = 0;
+    const seenMessageKeys = new Set();
+    for (const account of accounts || []) {
+      try {
+        const result = await processGmailAccount(supabase, ai, account, seenMessageKeys);
+        messages += result.processed;
+        duplicates += result.duplicates;
+        ignored += result.ignored;
+        failures += result.failures;
+      } catch (accountError) {
+        failures += 1;
+        await supabase.from("asistente_correo_cuentas").update({ ultimo_error: String(accountError?.message || accountError).slice(0, 800), actualizada_en: new Date().toISOString() }).eq("id", account.id);
+      }
     }
+    const result = { accounts: accounts?.length || 0, messages, duplicates, ignored, failures };
+    await supabase.from("asistente_correo_poll_estado").update({
+      lock_token: null,
+      bloqueado_hasta: null,
+      ultima_ejecucion_fin: new Date().toISOString(),
+      ultimo_resultado: result,
+      ultimo_error: null,
+      actualizado_en: new Date().toISOString(),
+    }).eq("id", "gmail").eq("lock_token", lockToken);
+    return result;
+  } catch (pollError) {
+    await supabase.from("asistente_correo_poll_estado").update({
+      lock_token: null,
+      bloqueado_hasta: null,
+      ultima_ejecucion_fin: new Date().toISOString(),
+      ultimo_error: String(pollError?.message || pollError).slice(0, 800),
+      actualizado_en: new Date().toISOString(),
+    }).eq("id", "gmail").eq("lock_token", lockToken);
+    throw pollError;
   }
-  return { accounts: accounts?.length || 0, messages, duplicates, ignored, failures };
 }
 
 async function listGmailAccounts(supabase) {
