@@ -68,7 +68,7 @@ export default function EtiquetasPiezas() {
         supabase.from("marcas").select("id, nombre").order("nombre"),
         supabase.from("piezas_catalogo").select("nombre").order("nombre"),
       ]);
-      setAseguradoras((asegs || []).map((a) => ({ id: a.nombre, label: a.nombre })));
+      setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")).map((a) => ({ id: a.nombre, label: a.nombre })));
       setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
       setPiezasCatalogo(opcionesPiezasCanonicas(pc));
     }

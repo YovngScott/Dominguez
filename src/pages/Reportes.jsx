@@ -68,7 +68,7 @@ export default function Reportes() {
         .select("id, nombre")
         .eq("activo", true)
         .order("orden");
-      setAseguradoras(data || []);
+      setAseguradoras((data || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
     }
     load();
   }, []);

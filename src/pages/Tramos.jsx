@@ -28,7 +28,7 @@ export default function Tramos() {
           .not("tramo", "is", null)
           .is("entregada_at", null),
       ]);
-      setAseguradoras(asegs || []);
+      setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
       setItems(rec || []);
       if (asegs?.length) setActiva((a) => a || asegs[0].nombre);
       setLoading(false);
