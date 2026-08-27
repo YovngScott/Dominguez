@@ -34,6 +34,7 @@ export default function CaseDetail() {
   const [estadoError, setEstadoError] = useState("");
   const [historial, setHistorial] = useState([]);
   const [cotizaciones, setCotizaciones] = useState([]);
+  const [citas, setCitas] = useState([]);
   const [firmaUrl, setFirmaUrl] = useState(null);
   const [showFirma, setShowFirma] = useState(false);
   const [guardandoFirma, setGuardandoFirma] = useState(false);
@@ -85,9 +86,20 @@ export default function CaseDetail() {
     setCotizaciones(data || []);
   }
 
+  async function loadCitas() {
+    const { data } = await supabase
+      .from("citas")
+      .select("id, fecha, hora, nombre, telefono, motivo, nota, estado, caso_id")
+      .eq("caso_id", casoId)
+      .order("fecha", { ascending: true })
+      .order("hora", { ascending: true });
+    setCitas(data || []);
+  }
+
   useEffect(() => {
     loadCaso();
     loadHistorial();
+    loadCitas();
   }, [casoId]);
 
   // Carga las cotizaciones enlazadas una vez que conocemos el chasis del caso
@@ -435,6 +447,9 @@ export default function CaseDetail() {
         <TabButton active={tab === "historial"} onClick={() => setTab("historial")}>
           <Icon name="clock" className="w-4 h-4" /> Historial
         </TabButton>
+        <TabButton active={tab === "citas"} onClick={() => setTab("citas")}>
+          <Icon name="calendar" className="w-4 h-4" /> Citas {citas.length > 0 && `(${citas.length})`}
+        </TabButton>
       </div>
 
       {tab === "fotos" && <PhotoManager casoId={caso.id} />}
@@ -455,6 +470,7 @@ export default function CaseDetail() {
         />
       )}
       {tab === "historial" && <Historial eventos={historial} />}
+      {tab === "citas" && <CitasCaso lista={citas} casoId={casoId} onRefresh={loadCitas} />}
 
       {showFirma && (
         <SignaturePad
@@ -536,6 +552,22 @@ function Cotizaciones({ lista, casoId }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function CitasCaso({ lista, casoId, onRefresh }) {
+  async function marcar(cita, estado) {
+    const { error } = await supabase.from("citas").update({ estado }).eq("id", cita.id);
+    if (!error) onRefresh();
+  }
+  return (
+    <div className="card p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div><h2 className="font-bold text-[var(--ink)]">Citas de este caso</h2><p className="text-xs text-[var(--ink-soft)] mt-0.5">Actualiza el estado sin salir del vehículo.</p></div>
+        <Link to={`/citas?nuevo=1&caso=${casoId}`} className="btn-primary text-sm py-2 px-3">+ Nueva cita</Link>
+      </div>
+      {lista.length === 0 ? <p className="text-sm text-[var(--ink-soft)]">No hay citas enlazadas a este caso.</p> : <div className="space-y-2">{lista.map((cita) => <div key={cita.id} className="rounded-xl border border-[var(--line)] p-3 flex flex-wrap items-center justify-between gap-3"><div className="min-w-0"><p className="font-semibold text-[var(--ink)]">{cita.nombre}</p><p className="text-sm text-[var(--ink-soft)]">{cita.fecha}{cita.hora ? ` · ${cita.hora}` : ""}{cita.telefono ? ` · ${cita.telefono}` : ""}</p>{cita.motivo && <p className="text-xs text-[var(--ink-soft)] mt-1">{cita.motivo}</p>}</div><select value={cita.estado || "pendiente"} onChange={(e) => marcar(cita, e.target.value)} className="input text-sm py-1.5 px-2 w-auto">{["pendiente", "confirmada", "atendida", "cancelada"].map((estado) => <option key={estado} value={estado}>{estado}</option>)}</select></div>)}</div>}
     </div>
   );
 }

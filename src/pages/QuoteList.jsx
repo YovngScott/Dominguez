@@ -68,6 +68,9 @@ export default function QuoteList() {
                   {[c.marca, c.modelo].filter(Boolean).join(" ")}
                   {c.placa ? ` · ${c.placa}` : ""}
                 </p>
+                <p className="text-xs text-[var(--ink-soft)] mt-0.5">
+                  {c.created_at ? new Date(c.created_at).toLocaleDateString("es-DO", { day: "2-digit", month: "short", year: "numeric" }) : "Fecha no disponible"}
+                </p>
               </div>
               <div className="text-right shrink-0 pl-3">
                 <p className="font-bold text-[var(--ink)]">{rd(c.total)}</p>

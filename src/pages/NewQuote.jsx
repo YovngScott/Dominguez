@@ -120,13 +120,13 @@ export default function NewQuote() {
     async function load() {
       const [{ data: asegs }, { data: ms }, { data: piezas }, { data: servicios }, { data: catDanos }] =
         await Promise.all([
-          supabase.from("aseguradoras").select("*").eq("activo", true).order("orden"),
+          supabase.from("aseguradoras").select("id,nombre,direccion,telefono,activo,orden").eq("activo", true).order("orden"),
           supabase.from("marcas").select("id, nombre").order("nombre"),
           supabase.from("piezas_catalogo").select("nombre").order("nombre"),
           supabase.from("servicios_catalogo").select("nombre").order("nombre"),
           supabase.from("categorias_foto").select("id").ilike("nombre", "%daño%").limit(1).maybeSingle(),
         ]);
-      setAseguradoras(asegs || []);
+      setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
       setMarcas((ms || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
       setPiezasCatalogo(opcionesPiezasCanonicas(piezas));
       setServiciosCatalogo((servicios || []).map((s) => ({ id: s.nombre, label: s.nombre })));

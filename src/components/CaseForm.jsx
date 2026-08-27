@@ -49,10 +49,10 @@ export default function CaseForm({ initial, onSubmit, submitLabel = "Guardar cas
   useEffect(() => {
     async function load() {
       const [{ data: asegs }, { data: marcasData }] = await Promise.all([
-        supabase.from("aseguradoras").select("*").eq("activo", true).order("orden"),
+        supabase.from("aseguradoras").select("id,nombre,direccion,telefono,activo,orden").eq("activo", true).order("orden"),
         supabase.from("marcas").select("id, nombre").order("nombre"),
       ]);
-      setAseguradoras(asegs || []);
+      setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
       setMarcas((marcasData || []).map((m) => ({ id: m.nombre, label: m.nombre, _id: m.id })));
     }
     load();
