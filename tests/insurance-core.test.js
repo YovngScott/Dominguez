@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessPdfPackage, compareQuoteLines, descriptionSimilarity, extractIdentifiers, isDominguezSupplier } from "../server/insurance-core.js";
+import { assessPdfPackage, compareQuoteLines, descriptionSimilarity, extractIdentifiers, inferInsurerSections, insurerLineType, isDominguezSupplier } from "../server/insurance-core.js";
 
 test("extrae chasis y placa del asunto", () => {
   assert.deepEqual(extractIdentifiers("Kia placa G624728, chasis MZBEP814BPN407288"), {
@@ -50,6 +50,34 @@ test("un PDF solo de piezas no marca la mano de obra como eliminada", () => {
   );
   assert.equal(result.removed.length, 0);
   assert.deepEqual(result.omittedTypes, ["mano_obra"]);
+});
+
+test("SURA MAN significa mano de obra y no elimina las piezas ausentes", () => {
+  const insurerLines = [
+    {
+      type: "pieza",
+      source_type_code: "MAN",
+      description: "GUARDALODO DELANTERO LH",
+      quantity: 1,
+      effective_subtotal: 7200,
+    },
+  ];
+  const sectionsPresent = inferInsurerSections(insurerLines, ["pieza"]);
+  const result = compareQuoteLines(
+    {
+      items_piezas: [{ nombre: "FARO DELANTERO LH", cantidad: 1, precio: 12000 }],
+      items_mano_obra: [{ nombre: "CAMB Y PINT", pieza: "GUARDALODO DELT LH", cantidad: 1, precio: 7200 }],
+    },
+    insurerLines,
+    { sectionsPresent },
+  );
+
+  assert.equal(insurerLineType(insurerLines[0]), "mano_obra");
+  assert.deepEqual(sectionsPresent, { pieza: false, mano_obra: true });
+  assert.equal(result.removed.length, 0);
+  assert.equal(result.added.length, 0);
+  assert.equal(result.changed.length, 0);
+  assert.deepEqual(result.omittedTypes, ["pieza"]);
 });
 
 test("reconoce proveedor Dominguez con acentos y razón social", () => {

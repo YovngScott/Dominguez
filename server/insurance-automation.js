@@ -7,6 +7,9 @@ import {
   compareQuoteLines,
   extractIdentifiers,
   formatReviewAlert,
+  inferInsurerSections,
+  insurerLineType,
+  insurerSourceLineType,
   isDominguezSupplier,
   normalizeIdentifier,
 } from "./insurance-core.js";
@@ -277,6 +280,7 @@ const EXTRACTION_SCHEMA = {
         type: "object",
         properties: {
           type: { type: "string", enum: ["pieza", "mano_obra"] },
+          source_type_code: { type: "string" },
           description: { type: "string" },
           quantity: { type: "number" },
           unit_price: { type: "number" },
@@ -287,7 +291,7 @@ const EXTRACTION_SCHEMA = {
           supplier: { type: "string" },
           section: { type: "string", enum: ["pieza", "mano_obra", "otro"] },
         },
-        required: ["type", "description", "quantity", "effective_subtotal", "supplier", "section"],
+        required: ["type", "source_type_code", "description", "quantity", "effective_subtotal", "supplier", "section"],
       },
     },
   },
@@ -301,6 +305,8 @@ Eres un perito de Domínguez Auto Pintura. Extrae fielmente órdenes/cotizacione
 No inventes líneas ni montos. El siniestro/reclamo NO se usa para vincular el caso.
 Busca chasis y placa primero en el asunto/cuerpo y, si faltan, en los PDF.
 Cada renglón debe clasificarse como pieza o mano_obra y debe incluir el proveedor que aparece en esa línea o sección.
+Conserva literalmente en source_type_code el código de la columna "Tipo" del PDF; si no existe, usa cadena vacía. REGLA SURA: el código MAN significa MANO DE OBRA,
+aunque la descripción sea el nombre de una pieza (por ejemplo GUARDALODO, BONETE o BUMPER). MAN nunca es una pieza.
 Detecta si cada PDF contiene sección de piezas, mano de obra, ambas o ninguna. Para cada uno conserva cantidad, precio unitario,
 descuento, subtotal efectivo que realmente paga el seguro antes de ITBIS, ITBIS y total con ITBIS.
 Si el documento muestra "Valor", "Monto" o "Precio total" después de descuento/cobertura, ese es effective_subtotal.
@@ -330,6 +336,15 @@ Placa detectada en encabezado: ${ids.plate || "no"}
   const extracted = await generateStructured(ai, parts, EXTRACTION_SCHEMA);
   extracted.chassis = ids.chassis || normalizeIdentifier(extracted.chassis) || "";
   extracted.plate = ids.plate || normalizeIdentifier(extracted.plate) || "";
+  extracted.lines = (Array.isArray(extracted.lines) ? extracted.lines : []).map((line) => {
+    const authoritativeType = insurerSourceLineType(line);
+    const type = authoritativeType || insurerLineType(line);
+    return {
+      ...line,
+      type,
+      section: (authoritativeType || line.section !== "otro") ? type : "otro",
+    };
+  });
   return extracted;
 }
 
@@ -346,13 +361,11 @@ function insuranceScope(extraction) {
   const allDocumentsForUs = documentSuppliers.length > 0 && documentSuppliers.every((supplier) => isDominguezSupplier(supplier, aliases));
   const anyDocumentForUs = documentSuppliers.some((supplier) => isDominguezSupplier(supplier, aliases));
   const dominguezLines = lines.filter((line) => isDominguezSupplier(line.supplier, aliases) || (allDocumentsForUs && !String(line.supplier || "").trim()));
-  const sections = new Set();
+  const declaredSections = [];
   for (const document of documents) {
-    for (const section of document.sections_present || []) sections.add(section);
+    for (const section of document.sections_present || []) declaredSections.push(section);
   }
-  // Compatibilidad con modelos antiguos que no devuelvan sections_present.
-  if (!sections.size) for (const line of lines) if (line.section !== "otro") sections.add(line.type);
-  const sectionsPresent = { pieza: sections.has("pieza"), mano_obra: sections.has("mano_obra") };
+  const sectionsPresent = inferInsurerSections(lines, declaredSections);
   const hasPartsForUs = dominguezLines.some((line) => (line.section || line.type) === "pieza");
   const hasLaborForUs = dominguezLines.some((line) => (line.section || line.type) === "mano_obra");
   const unknownSupplier = lines.some((line) => !String(line.supplier || "").trim()) && !allDocumentsForUs;

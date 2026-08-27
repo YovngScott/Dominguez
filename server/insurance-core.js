@@ -83,6 +83,44 @@ function asNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+const LABOR_SOURCE_CODES = new Set(["MAN", "MO", "MDO", "LAB", "LABOR"]);
+const PART_SOURCE_CODES = new Set(["PIE", "PZA", "REP", "PAR", "MAT"]);
+
+function sourceTypeCode(item) {
+  return normalizeIdentifier(
+    item?.source_type_code ?? item?.codigo_tipo ?? item?.tipo_origen ?? item?.document_type_code ?? "",
+  );
+}
+
+export function insurerSourceLineType(item) {
+  const code = sourceTypeCode(item);
+  if (LABOR_SOURCE_CODES.has(code)) return "mano_obra";
+  if (PART_SOURCE_CODES.has(code)) return "pieza";
+  return null;
+}
+
+export function insurerLineType(item) {
+  const sourceType = insurerSourceLineType(item);
+  if (sourceType) return sourceType;
+  const declared = normalizeIdentifier(item?.type ?? item?.tipo ?? item?.section ?? item?.seccion ?? "");
+  return declared === "MANOOBRA" || declared === "MAN" || declared === "LABOR" ? "mano_obra" : "pieza";
+}
+
+export function inferInsurerSections(lines, declaredSections = []) {
+  const list = Array.isArray(lines) ? lines : [];
+  const sourceTypes = list.map(insurerSourceLineType).filter(Boolean);
+  // Los códigos impresos en la tabla son más confiables que una inferencia por
+  // el nombre del artículo (por ejemplo, SURA usa MAN para mano de obra).
+  const types = list.length > 0 && sourceTypes.length === list.length
+    ? sourceTypes
+    : (Array.isArray(declaredSections) ? declaredSections : []).map((section) => insurerLineType({ type: section }));
+  const fallback = types.length ? types : list.map(insurerLineType);
+  return {
+    pieza: fallback.includes("pieza"),
+    mano_obra: fallback.includes("mano_obra"),
+  };
+}
+
 export function normalizeLocalQuote(quote) {
   const parts = Array.isArray(quote?.items_piezas) ? quote.items_piezas : [];
   const labor = Array.isArray(quote?.items_mano_obra) ? quote.items_mano_obra : [];
@@ -118,7 +156,7 @@ export function normalizeInsurerLines(lines) {
     const explicitSubtotal = asNumber(item.effective_subtotal ?? item.subtotal_efectivo ?? item.monto);
     return {
       id: `seguro-${index}`,
-      type: item.type === "mano_obra" || item.tipo === "mano_obra" ? "mano_obra" : "pieza",
+      type: insurerLineType(item),
       description: item.description || item.descripcion || "Línea sin descripción",
       quantity,
       unitPrice,
