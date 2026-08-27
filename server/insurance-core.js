@@ -9,6 +9,8 @@ const SYNONYMS = new Map([
   ["bumper", "parachoque"], ["paragolpe", "parachoque"], ["defensa", "parachoque"],
   ["delantera", "delantero"], ["delt", "delantero"], ["frontal", "delantero"],
   ["trasera", "trasero"], ["tras", "trasero"], ["posterior", "trasero"],
+  ["sup", "superior"], ["inf", "inferior"],
+  ["frentin", "frentil"],
   ["derecha", "rh"], ["derecho", "rh"], ["der", "rh"],
   ["izquierda", "lh"], ["izquierdo", "lh"], ["izq", "lh"],
   ["desab", "desabollar"], ["desabolladura", "desabollar"],

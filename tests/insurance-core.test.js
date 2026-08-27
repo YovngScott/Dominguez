@@ -80,6 +80,25 @@ test("SURA MAN significa mano de obra y no elimina las piezas ausentes", () => {
   assert.deepEqual(result.omittedTypes, ["pieza"]);
 });
 
+test("SURA empareja abreviaturas y errores frecuentes en nombres de mano de obra", () => {
+  const comparison = compareQuoteLines({
+    items_piezas: [{ nombre: "SOPORTE SUPERIOR DE FRENTIL", cantidad: 1, precio: 12000 }],
+    items_mano_obra: [
+      { nombre: "CAMB Y PINT", pieza: "BUMPER DEL SUP", cantidad: 1, precio: 7200 },
+      { nombre: "DESAB Y PINT", pieza: "FRENTIN", cantidad: 1, precio: 7200 },
+    ],
+  }, [
+    { description: "BUMPER DELANTERO SUPERIOR", type: "pieza", source_type_code: "MAN", quantity: 1, unit_price: 7200 },
+    { description: "FRENTIL", type: "pieza", source_type_code: "MAN", quantity: 1, unit_price: 7200 },
+  ], { sectionsPresent: { pieza: false, mano_obra: true } });
+
+  assert.equal(comparison.summary.localLines, 2);
+  assert.equal(comparison.summary.matched, 2);
+  assert.equal(comparison.summary.removed, 0);
+  assert.equal(comparison.summary.added, 0);
+  assert.deepEqual(comparison.omittedTypes, ["pieza"]);
+});
+
 test("reconoce proveedor Dominguez con acentos y razón social", () => {
   assert.equal(isDominguezSupplier("DOMÍNGUEZ AUTO PINTURA, SRL"), true);
   assert.equal(isDominguezSupplier("Otro suplidor"), false);
