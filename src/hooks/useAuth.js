@@ -5,11 +5,27 @@ export function useAuth() {
   const [session, setSession] = useState(undefined); // undefined = cargando
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    let vivo = true;
+    const fallback = window.setTimeout(() => { if (vivo) setSession(null); }, 10000);
+    const cargar = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (vivo) {
+        window.clearTimeout(fallback);
+        setSession(data.session || null);
+      }
+    };
+    cargar();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
     });
-    return () => listener.subscription.unsubscribe();
+    const alVolver = () => { if (document.visibilityState === "visible") cargar(); };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      vivo = false;
+      window.clearTimeout(fallback);
+      document.removeEventListener("visibilitychange", alVolver);
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   return {

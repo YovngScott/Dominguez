@@ -36,8 +36,13 @@ export function useRol() {
 
     cargar();
     const { data: listener } = supabase.auth.onAuthStateChange(() => cargar());
+    const alVolver = () => { if (document.visibilityState === "visible") cargar(); };
+    document.addEventListener("visibilitychange", alVolver);
+    const timeout = window.setTimeout(() => { if (vivo) setPerfil(null); }, 10000);
     return () => {
       vivo = false;
+      document.removeEventListener("visibilitychange", alVolver);
+      window.clearTimeout(timeout);
       listener.subscription.unsubscribe();
     };
   }, []);

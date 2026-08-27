@@ -16,7 +16,6 @@ import {
 import { useFormDraft, clearFormDraft } from "../hooks/useFormDraft";
 import Icon from "../components/Icon";
 import DocumentAiUploader from "../components/DocumentAiUploader";
-import VoiceItemsRecorder from "../components/VoiceItemsRecorder";
 import {
   calcularItem,
   calcularTotales,
@@ -280,48 +279,6 @@ export default function NewQuote() {
     });
   }
 
-  // ---- Procesamiento con IA: Dictado de Voz (Piezas y Mano de Obra) ----
-  function handleVoiceItemsExtracted({ piezas = [], servicios = [] }) {
-    setForm((f) => {
-      const nuevasPiezas = [...f.items_piezas];
-      const nuevosServicios = [...f.items_mano_obra];
-
-      piezas.forEach((p) => {
-        const nom = normalizarNombrePieza(p.nombre);
-        if (nom) {
-          nuevasPiezas.push({
-            nombre: nom,
-            cantidad: p.cantidad || 1,
-            precio: p.precio || 0,
-            itbis_pct: p.itbis_pct ?? 18,
-            incluye_itbis: !!p.incluye_itbis,
-          });
-        }
-      });
-
-      servicios.forEach((s) => {
-        const nom = (s.nombre || "Servicio").trim();
-        const pz = s.pieza ? normalizarNombrePieza(s.pieza) : "";
-        if (nom) {
-          nuevosServicios.push({
-            nombre: nom,
-            pieza: pz,
-            cantidad: s.cantidad || 1,
-            precio: s.precio || 0,
-            itbis_pct: s.itbis_pct ?? 18,
-            incluye_itbis: !!s.incluye_itbis,
-          });
-        }
-      });
-
-      return {
-        ...f,
-        items_piezas: nuevasPiezas,
-        items_mano_obra: nuevosServicios,
-      };
-    });
-  }
-
   function borrarItem(tipo, index) {
     const key = tipo === "pieza" ? "items_piezas" : "items_mano_obra";
     setForm((f) => ({ ...f, [key]: f[key].filter((_, i) => i !== index) }));
@@ -396,6 +353,13 @@ export default function NewQuote() {
     if (!form.aseguradora_id) {
       enviandoRef.current = false;
       return setError("Selecciona la aseguradora.");
+    }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      // El borrador local ya contiene toda la cotización. No intentamos crear
+      // un caso sin conexión (eso produciría datos parciales o duplicados).
+      enviandoRef.current = false;
+      setError("Sin conexión. La cotización quedó guardada en este dispositivo; vuelve a conectarte para guardarla en la base de datos.");
+      return;
     }
     setEstado("Guardando…");
 
@@ -731,9 +695,6 @@ export default function NewQuote() {
             icon="layers"
             titulo="Valoración de piezas"
             boton="+ Agregar pieza"
-            voiceSlot={
-              <VoiceItemsRecorder onItemsExtracted={handleVoiceItemsExtracted} tipo="piezas" />
-            }
             onAdd={() => setModal({ tipo: "pieza", index: null })}
             items={form.items_piezas}
             columnas={["Pieza", "Cant.", "Precio", "ITBIS", "Total"]}
@@ -747,14 +708,11 @@ export default function NewQuote() {
             }
           />
 
-          {/* Mano de obra con Dictado de Voz */}
+          {/* Mano de obra */}
           <ItemsCard
             icon="wrench"
             titulo="Valoración de mano de obra"
             boton="+ Agregar servicio"
-            voiceSlot={
-              <VoiceItemsRecorder onItemsExtracted={handleVoiceItemsExtracted} tipo="servicios" />
-            }
             onAdd={() => setModal({ tipo: "servicio", index: null })}
             items={form.items_mano_obra}
             columnas={["Descripción", "Cant.", "Precio", "ITBIS", "Total"]}

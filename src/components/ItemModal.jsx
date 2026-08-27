@@ -35,29 +35,23 @@ export default function ItemModal({ tipo, initial, onConfirm, onCancel, sugerenc
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold text-[var(--ink)]">{esServicio ? "Agregar servicio" : "Agregar pieza"}</h3>
-            {!esServicio && <p className="text-xs text-[var(--ink-soft)] mt-0.5">Escribe una sola descripción completa.</p>}
+            <p className="text-xs text-[var(--ink-soft)] mt-0.5">Escribe una sola descripción completa.</p>
           </div>
           <button onClick={onCancel} className="text-[var(--ink-soft)] text-xl p-2 -mr-2" aria-label="Cerrar">✕</button>
         </div>
 
         <div className="space-y-3">
-          {esServicio && (
-            <Campo label="Nombre del servicio">
-              <Combobox items={sugerenciasServicios} value={item.nombre} onChange={(val) => up("nombre", val)} placeholder="Ej. Cambiar y pintar" allowCreate autoFocus maxResults={12} />
-            </Campo>
-          )}
-
-          <Campo label={esServicio ? "Pieza relacionada" : "Pieza"}>
+          <Campo label={esServicio ? "Servicio" : "Pieza"}>
             <Combobox
-              items={sugerenciasPiezas}
-              value={esServicio ? item.pieza : item.nombre}
-              onChange={(val) => up(esServicio ? "pieza" : "nombre", normalizarNombrePieza(val))}
-              placeholder="Ej. Bumper DELT RH"
+              items={esServicio ? sugerenciasServicios : sugerenciasPiezas}
+              value={esServicio ? item.nombre : item.nombre}
+              onChange={(val) => up("nombre", esServicio ? val : normalizarNombrePieza(val))}
+              placeholder={esServicio ? "Ej. DESAB Y PINT BUMPER DELT" : "Ej. Bumper DELT RH"}
               allowCreate
-              autoFocus={!esServicio}
+              autoFocus
               maxResults={12}
             />
-            <p className="text-[11px] text-[var(--ink-soft)] mt-1.5">DELT delantero · TRAS trasero · RH derecha · LH izquierda · SUP superior · INF inferior</p>
+            {!esServicio && <p className="text-[11px] text-[var(--ink-soft)] mt-1.5">DELT delantero · TRAS trasero · RH derecha · LH izquierda · SUP superior · INF inferior</p>}
           </Campo>
         </div>
 

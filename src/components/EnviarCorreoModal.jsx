@@ -16,6 +16,7 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoEmail, setNuevoEmail] = useState("");
   const [adjuntarFotos, setAdjuntarFotos] = useState(evidencias.length > 0);
+  const [mensaje, setMensaje] = useState(() => cuerpoInicial(cot));
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
@@ -82,18 +83,26 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
     return `Cotización ${veh || "vehículo"}${extra ? " — " + extra : ""}`;
   }
 
-  function cuerpo() {
-    const veh = [cot.marca, cot.modelo, cot.anio].filter(Boolean).join(" ");
+  function cuerpoInicial(cotizacion) {
+    const veh = [cotizacion.marca, cotizacion.modelo, cotizacion.anio].filter(Boolean).join(" ");
     const detalle = [
-      cot.placa ? `placa ${cot.placa}` : null,
-      cot.color ? `color ${cot.color}` : null,
-      cot.chasis ? `chasis ${cot.chasis}` : null,
-      cot.numero_reclamo ? `reclamo ${cot.numero_reclamo}` : null,
+      cotizacion.placa ? `placa ${cotizacion.placa}` : null,
+      cotizacion.color ? `color ${cotizacion.color}` : null,
+      cotizacion.chasis ? `chasis ${cotizacion.chasis}` : null,
+      cotizacion.numero_reclamo ? `reclamo ${cotizacion.numero_reclamo}` : null,
     ].filter(Boolean).join(", ");
-    return `<p>Buenos días,</p>
-<p>Adjuntamos la cotización del vehículo <b>${veh || "—"}</b>${detalle ? ` (${detalle})` : ""}.</p>
-<p>Quedamos atentos a su aprobación. Cualquier consulta, con gusto.</p>
-<p>Saludos cordiales,<br><b>Dominguez Auto Pintura</b></p>`;
+    return `Buenos días,\n\nAdjuntamos la cotización del vehículo ${veh || "—"}${detalle ? ` (${detalle})` : ""}.\n\nQuedamos atentos a su aprobación. Cualquier consulta, con gusto.\n\nSaludos cordiales,\nDominguez Auto Pintura`;
+  }
+
+  useEffect(() => {
+    setMensaje(cuerpoInicial(cot));
+  }, [cot.id]);
+
+  function cuerpo() {
+    const safe = String(mensaje || "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/\r?\n/g, "<br>");
+    return `<p>${safe}</p>`;
   }
 
   function iniciarEnvio() {
@@ -213,6 +222,12 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
             Adjuntar fotos de los daños ({evidencias.length})
           </label>
         )}
+
+        <label className="block mb-4">
+          <span className="field-label">Mensaje del correo</span>
+          <textarea rows={8} className="input mt-2 resize-y" value={mensaje} onChange={(e) => setMensaje(e.target.value)} />
+          <span className="mt-1 block text-xs text-[var(--ink-soft)]">Puedes ajustar el texto antes de enviarlo. El PDF y los destinatarios no cambian.</span>
+        </label>
 
         {error && <p className="text-sm text-[var(--brand-red)] mb-3">{error}</p>}
         {ok && <p className="text-sm text-emerald-600 mb-3 font-medium">✓ {ok}</p>}

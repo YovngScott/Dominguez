@@ -32,14 +32,15 @@ export async function compressImage(file, { maxWidth = 1600, quality = 0.8 } = {
             canvas.toBlob(
               (blob) => {
                 if (blob) {
-                  const ext = ".jpg";
+                  const webp = blob.type === "image/webp";
+                  const ext = webp ? ".webp" : ".jpg";
                   const cleanName = (file.name || "foto.jpg").replace(/\.\w+$/, ext);
-                  resolve(new File([blob], cleanName, { type: "image/jpeg" }));
+                  resolve(new File([blob], cleanName, { type: webp ? "image/webp" : "image/jpeg" }));
                 } else {
                   resolve(file);
                 }
               },
-              "image/jpeg",
+              "image/webp",
               quality
             );
           } catch {

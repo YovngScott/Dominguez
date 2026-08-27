@@ -26,7 +26,11 @@ function fecha(valor) {
 }
 
 async function seguroApi(action, { id, method = "GET", payload } = {}) {
-  const { data: { session } } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    const refreshed = await supabase.auth.refreshSession();
+    session = refreshed.data?.session || null;
+  }
   if (!session) throw new Error("Tu sesión venció. Vuelve a iniciar sesión.");
   const query = new URLSearchParams({ action: `insurance_${action}` });
   if (id && method === "GET") query.set("id", id);
