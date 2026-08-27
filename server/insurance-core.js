@@ -101,25 +101,42 @@ export function insurerSourceLineType(item) {
   return null;
 }
 
+// Algunas órdenes de La Colonial se titulan "Piezas de vehículos", aunque la
+// tabla incluya operaciones que el taller ejecuta. Un nombre de repuesto dentro
+// de "CAMBIAR Y PINTAR ..." no convierte esa operación en una pieza.
+// Se usa el texto sin quitar palabras de trabajo: normalizeDescription elimina
+// varias de ellas para poder emparejar nombres, por eso no sirve aquí.
+export function insurerDescriptionLineType(item) {
+  const text = String(item?.description ?? item?.descripcion ?? "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!text) return null;
+  const explicitLabor = /\b(mano de obra|labor mecanica|desabollar|pintar|pintura|reparacion|reparar|enderezar|cuadre|alinear|montar|desmontar|instalar|salvar)\b/;
+  const combinedLabor = /\b(cambiar|cambio|reemplazar|reemplazo)\b.*\b(pintar|pintura)\b/;
+  return explicitLabor.test(text) || combinedLabor.test(text) ? "mano_obra" : null;
+}
+
 export function insurerLineType(item) {
   const sourceType = insurerSourceLineType(item);
   if (sourceType) return sourceType;
+  // Esta semántica gana a la clasificación del modelo cuando hay una operación
+  // inequívoca. Así, "CAMBIAR Y PINTAR ESTRIBO" no borra la pieza ESTRIBO.
+  const descriptionType = insurerDescriptionLineType(item);
+  if (descriptionType) return descriptionType;
   const declared = normalizeIdentifier(item?.type ?? item?.tipo ?? item?.section ?? item?.seccion ?? "");
   return declared === "MANOOBRA" || declared === "MAN" || declared === "LABOR" ? "mano_obra" : "pieza";
 }
 
 export function inferInsurerSections(lines, declaredSections = []) {
   const list = Array.isArray(lines) ? lines : [];
-  const sourceTypes = list.map(insurerSourceLineType).filter(Boolean);
-  // Los códigos impresos en la tabla son más confiables que una inferencia por
-  // el nombre del artículo (por ejemplo, SURA usa MAN para mano de obra).
-  const types = list.length > 0 && sourceTypes.length === list.length
-    ? sourceTypes
+  // Los renglones procesados son más precisos que el título del documento.
+  // Ej.: una orden titulada "Piezas" puede contener solo mano de obra.
+  const types = list.length
+    ? list.map(insurerLineType)
     : (Array.isArray(declaredSections) ? declaredSections : []).map((section) => insurerLineType({ type: section }));
-  const fallback = types.length ? types : list.map(insurerLineType);
   return {
-    pieza: fallback.includes("pieza"),
-    mano_obra: fallback.includes("mano_obra"),
+    pieza: types.includes("pieza"),
+    mano_obra: types.includes("mano_obra"),
   };
 }
 

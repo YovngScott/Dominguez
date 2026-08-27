@@ -9,7 +9,6 @@ import {
   formatReviewAlert,
   inferInsurerSections,
   insurerLineType,
-  insurerSourceLineType,
   isDominguezSupplier,
   normalizeIdentifier,
 } from "./insurance-core.js";
@@ -307,6 +306,10 @@ Busca chasis y placa primero en el asunto/cuerpo y, si faltan, en los PDF.
 Cada renglón debe clasificarse como pieza o mano_obra y debe incluir el proveedor que aparece en esa línea o sección.
 Conserva literalmente en source_type_code el código de la columna "Tipo" del PDF; si no existe, usa cadena vacía. REGLA SURA: el código MAN significa MANO DE OBRA,
 aunque la descripción sea el nombre de una pieza (por ejemplo GUARDALODO, BONETE o BUMPER). MAN nunca es una pieza.
+REGLA LA COLONIAL: "CAMBIAR Y PINTAR", "DESABOLLAR Y PINTAR", "REPARACIÓN", "CUADRE", "ALINEAR", "MONTAR" o "DESMONTAR" son mano de obra,
+incluso si mencionan ESTRIBO, ESPEJO, BUMPER u otra pieza. El título "Piezas de vehículos" no cambia esa regla.
+Si una orden de La Colonial muestra DOMÍNGUEZ AUTO PINTURA como suplidor en el encabezado y otro suplidor de repuestos en el pie, asigna las operaciones de mano de obra
+a Domínguez y las piezas físicas al suplidor de repuestos. No atribuyas a Domínguez piezas de otro suplidor ni declares esas piezas eliminadas.
 Detecta si cada PDF contiene sección de piezas, mano de obra, ambas o ninguna. Para cada uno conserva cantidad, precio unitario,
 descuento, subtotal efectivo que realmente paga el seguro antes de ITBIS, ITBIS y total con ITBIS.
 Si el documento muestra "Valor", "Monto" o "Precio total" después de descuento/cobertura, ese es effective_subtotal.
@@ -337,12 +340,11 @@ Placa detectada en encabezado: ${ids.plate || "no"}
   extracted.chassis = ids.chassis || normalizeIdentifier(extracted.chassis) || "";
   extracted.plate = ids.plate || normalizeIdentifier(extracted.plate) || "";
   extracted.lines = (Array.isArray(extracted.lines) ? extracted.lines : []).map((line) => {
-    const authoritativeType = insurerSourceLineType(line);
-    const type = authoritativeType || insurerLineType(line);
+    const type = insurerLineType(line);
     return {
       ...line,
       type,
-      section: (authoritativeType || line.section !== "otro") ? type : "otro",
+      section: type,
     };
   });
   return extracted;
@@ -365,7 +367,13 @@ function insuranceScope(extraction) {
   for (const document of documents) {
     for (const section of document.sections_present || []) declaredSections.push(section);
   }
-  const sectionsPresent = inferInsurerSections(lines, declaredSections);
+  // Solo una línea efectivamente atribuida a Domínguez puede declarar que la
+  // sección fue evaluada para nuestro taller. Las piezas de otro suplidor no
+  // pueden provocar eliminaciones en nuestra cotización.
+  const sectionsPresent = inferInsurerSections(
+    dominguezLines.length ? dominguezLines : lines,
+    dominguezLines.length ? [] : declaredSections,
+  );
   const hasPartsForUs = dominguezLines.some((line) => (line.section || line.type) === "pieza");
   const hasLaborForUs = dominguezLines.some((line) => (line.section || line.type) === "mano_obra");
   const unknownSupplier = lines.some((line) => !String(line.supplier || "").trim()) && !allDocumentsForUs;
@@ -379,6 +387,56 @@ function insuranceScope(extraction) {
     otherSupplierOnly: lines.length > 0 && !dominguezLines.length && !unknownSupplier,
     supplierUnknown: unknownSupplier,
     supplierDocumentMatch: anyDocumentForUs,
+  };
+}
+
+function prepareInsuranceReview({ extraction, caseData, quote, senderStatus, classification, pdfCount }) {
+  const scope = insuranceScope(extraction);
+  // Solo comparamos las líneas cuyo proveedor es Domínguez. Las de terceros
+  // quedan visibles en la extracción, pero nunca generan diferencias nuestras.
+  const comparison = quote
+    ? compareQuoteLines(quote, scope.dominguezLines, { sectionsPresent: scope.sectionsPresent })
+    : null;
+  const packageStatus = assessPdfPackage(pdfCount, extraction.documents, comparison);
+  const lowConfidence = Number(extraction.confidence || 0) < 0.8 || packageStatus.incomplete || packageStatus.uncertain;
+  const reasons = [
+    !senderStatus.ok && "remitente_no_autorizado",
+    !caseData && "caso_no_vinculado",
+    caseData && !quote && "caso_sin_cotizacion",
+    lowConfidence && "extraccion_baja_confianza",
+    comparison?.hasDifferences && "diferencias_detectadas",
+    scope.otherSupplierOnly && "pdf_otro_proveedor",
+    scope.supplierUnknown && "proveedor_no_identificado",
+  ].filter(Boolean);
+  return {
+    scope,
+    comparison,
+    reasons,
+    values: {
+      caso_id: caseData?.id || null,
+      cotizacion_id: quote?.id || null,
+      chasis_detectado: extraction.chassis || null,
+      placa_detectada: extraction.plate || null,
+      aseguradora: extraction.insurer || senderStatus.insurer,
+      autorizado_remitente: senderStatus.ok,
+      confianza: Math.max(0, Math.min(1, Number(extraction.confidence || 0))),
+      estado: "revision",
+      motivo_revision: reasons.join(",") || "aprobacion_obligatoria",
+      resumen: scope.orderClosed
+        ? `🔒 Orden cerrada: ${extraction.summary} Hay piezas asignadas a Dominguez Auto Pintura; verificar compra y recepción.`
+        : comparison?.hasDifferences
+          ? `${extraction.summary} Se detectaron diferencias en al menos uno de los ${pdfCount} PDF; todo el paquete requiere revisión.`
+          : extraction.summary,
+      categoria_correo: "seguro",
+      prioridad_correo: scope.otherSupplierOnly ? "baja" : (reasons.length ? "alta" : classification.priority),
+      accion_sugerida: scope.otherSupplierOnly
+        ? "Conservar como referencia; no requiere acción de Dominguez."
+        : comparison?.hasDifferences
+          ? "Revisar todas las diferencias antes de aceptar cualquier PDF de este correo."
+          : classification.suggested_action,
+      extraccion: { ...extraction, clasificacion: classification, pdf_count: pdfCount, alcance: scope },
+      comparacion: comparison,
+    },
   };
 }
 
@@ -500,48 +558,8 @@ async function ingest(supabase, ai, payload) {
   const extraction = await extractInsurance(ai, payload, pdfs, configuration);
   const caseData = await findCase(supabase, extraction.chassis, extraction.plate, payload.caseId || null);
   const quote = caseData ? await latestQuote(supabase, caseData.id) : null;
-  const scope = insuranceScope(extraction);
-  // Solo comparamos las líneas cuyo proveedor es Dominguez. Las de terceros
-  // quedan visibles en la extracción, pero nunca generan diferencias nuestras.
-  const comparison = quote
-    ? compareQuoteLines(quote, scope.dominguezLines, { sectionsPresent: scope.sectionsPresent })
-    : null;
-  const packageStatus = assessPdfPackage(pdfs.length, extraction.documents, comparison);
-  const lowConfidence = Number(extraction.confidence || 0) < 0.8 || packageStatus.incomplete || packageStatus.uncertain;
-  const reasons = [
-    !senderStatus.ok && "remitente_no_autorizado",
-    !caseData && "caso_no_vinculado",
-    caseData && !quote && "caso_sin_cotizacion",
-    lowConfidence && "extraccion_baja_confianza",
-    comparison?.hasDifferences && "diferencias_detectadas",
-    scope.otherSupplierOnly && "pdf_otro_proveedor",
-    scope.supplierUnknown && "proveedor_no_identificado",
-  ].filter(Boolean);
-  const reviewValues = {
-    caso_id: caseData?.id || null,
-    cotizacion_id: quote?.id || null,
-    chasis_detectado: extraction.chassis || null,
-    placa_detectada: extraction.plate || null,
-    aseguradora: extraction.insurer || senderStatus.insurer,
-    autorizado_remitente: senderStatus.ok,
-    confianza: Math.max(0, Math.min(1, Number(extraction.confidence || 0))),
-    estado: "revision",
-    motivo_revision: reasons.join(",") || "aprobacion_obligatoria",
-    resumen: scope.orderClosed
-      ? `🔒 Orden cerrada: ${extraction.summary} Hay piezas asignadas a Dominguez Auto Pintura; verificar compra y recepción.`
-      : comparison?.hasDifferences
-        ? `${extraction.summary} Se detectaron diferencias en al menos uno de los ${pdfs.length} PDF; todo el paquete requiere revisión.`
-        : extraction.summary,
-    categoria_correo: "seguro",
-    prioridad_correo: scope.otherSupplierOnly ? "baja" : (reasons.length ? "alta" : classification.priority),
-    accion_sugerida: scope.otherSupplierOnly
-      ? "Conservar como referencia; no requiere acción de Dominguez."
-      : comparison?.hasDifferences
-      ? "Revisar todas las diferencias antes de aceptar cualquier PDF de este correo."
-      : classification.suggested_action,
-    extraccion: { ...extraction, clasificacion: classification, pdf_count: pdfs.length, alcance: scope },
-    comparacion: comparison,
-  };
+  const prepared = prepareInsuranceReview({ extraction, caseData, quote, senderStatus, classification, pdfCount: pdfs.length });
+  const { scope, comparison, reasons, values: reviewValues } = prepared;
   const reviewId = await insertReview(supabase, payload, reviewValues, pdfs);
   const review = {
     sender: payload.sender,
@@ -864,13 +882,52 @@ async function detailReview(supabase, id) {
   return { ...review, archivos: signed };
 }
 
+async function reanalyzeReview(supabase, ai, id) {
+  const review = await detailReview(supabase, id);
+  if (review.estado !== "revision") throw new Error("Solo se puede reanalizar una revisión pendiente.");
+  if (!review.archivos.length) throw new Error("Esta revisión no tiene un PDF pendiente para reanalizar.");
+  const pdfs = [];
+  for (const file of review.archivos) {
+    const { data: blob, error } = await supabase.storage.from(PDF_BUCKET_PENDING).download(file.storage_path);
+    if (error) throw error;
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    if (!buffer.length || buffer.length > MAX_PDF_BYTES) throw new Error(`PDF inválido o demasiado grande: ${file.nombre_archivo}`);
+    pdfs.push({ name: file.nombre_archivo, mimeType: "application/pdf", base64: buffer.toString("base64") });
+  }
+  const payload = {
+    messageId: review.source_message_id,
+    accountEmail: review.source_account,
+    sender: review.remitente,
+    subject: review.asunto,
+    receivedAt: review.recibido_en,
+    caseId: review.caso_id,
+  };
+  const configuration = await assistantConfiguration(supabase);
+  const extraction = await extractInsurance(ai, payload, pdfs, configuration);
+  const caseData = await findCase(supabase, extraction.chassis, extraction.plate, review.caso_id || null);
+  const quote = caseData ? await latestQuote(supabase, caseData.id) : null;
+  const senderStatus = await authorizedSender(supabase, review.remitente);
+  const classification = review.extraccion?.clasificacion || {
+    priority: review.prioridad_correo || "alta",
+    suggested_action: review.accion_sugerida || "Revisar el PDF antes de aprobar.",
+  };
+  const prepared = prepareInsuranceReview({ extraction, caseData, quote, senderStatus, classification, pdfCount: pdfs.length });
+  const { error } = await supabase.from("revisiones_seguro").update({
+    ...prepared.values,
+    actualizado_en: new Date().toISOString(),
+  }).eq("id", id).eq("estado", "revision");
+  if (error) throw error;
+  return { ok: true, comparison: prepared.comparison, reasons: prepared.reasons };
+}
+
 async function approveReview(supabase, id) {
   const review = await detailReview(supabase, id);
   if (review.estado !== "revision") throw new Error("Esta revisión ya fue resuelta.");
   if (!review.caso_id) throw new Error("Primero debes vincular la revisión con un caso.");
-  if (!review.autorizado_remitente) throw new Error("El remitente no está en Contactos/Suplidores autorizados.");
-  if (!review.cotizacion_id) throw new Error("El caso no tiene una cotización para comparar.");
-  if (Number(review.confianza || 0) < 0.8) throw new Error("La extracción tiene baja confianza; corrígela o recházala.");
+  if (!review.archivos.length) throw new Error("Esta revisión no tiene un PDF para guardar.");
+  // La aprobación siempre pertenece al dueño. Remitente, cotización,
+  // confianza y diferencias generan avisos, pero no deben impedirle conservar
+  // el PDF dentro del caso cuando ya tomó su decisión.
   const { data: types } = await supabase.from("tipos_documento").select("id").eq("nombre", "Cotización del seguro").limit(1);
   const typeId = types?.[0]?.id || null;
   for (const file of review.archivos) {
@@ -941,6 +998,7 @@ export default async function handler(req, res) {
     if (action === "gmail_disconnect" && req.method === "POST") return json(res, 200, await disconnectGmailAccount(clients.supabase, String(req.body?.id || "")));
     if (action === "list" && req.method === "GET") return json(res, 200, { data: await listReviews(clients.supabase, req) });
     if (action === "detail" && req.method === "GET") return json(res, 200, { data: await detailReview(clients.supabase, String(req.query.id || "")) });
+    if (action === "reanalyze" && req.method === "POST") return json(res, 200, await reanalyzeReview(clients.supabase, clients.ai, String(req.body?.id || "")));
     if (action === "approve" && req.method === "POST") return json(res, 200, await approveReview(clients.supabase, String(req.body?.id || "")));
     if (action === "reject" && req.method === "POST") return json(res, 200, await rejectReview(clients.supabase, String(req.body?.id || "")));
     return json(res, 405, { error: "Acción o método no permitido." });

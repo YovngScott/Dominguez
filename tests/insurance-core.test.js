@@ -99,6 +99,30 @@ test("SURA empareja abreviaturas y errores frecuentes en nombres de mano de obra
   assert.deepEqual(comparison.omittedTypes, ["pieza"]);
 });
 
+test("una orden titulada piezas no elimina piezas cuando sus renglones son mano de obra", () => {
+  const insurerLines = [
+    { type: "pieza", section: "pieza", description: "CAMBIAR Y PINTAR ESTRIBO DELANTERO RH", quantity: 1, unit_price: 7000 },
+    { type: "pieza", section: "pieza", description: "CAMBIAR Y PINTAR ESPEJO RETROVISOR DELANTERO RH", quantity: 1, unit_price: 3500 },
+  ];
+  const sectionsPresent = inferInsurerSections(insurerLines, ["pieza"]);
+  const result = compareQuoteLines({
+    items_piezas: [
+      { nombre: "ESTRIBO RH", cantidad: 1, precio: 80000 },
+      { nombre: "ESPEJO RETROVISOR CON LUZ DELT RH", cantidad: 1, precio: 97500 },
+    ],
+    items_mano_obra: [
+      { nombre: "CAMB Y PINT", pieza: "ESTRIBO DELT RH", cantidad: 1, precio: 7000 },
+      { nombre: "CAMB Y PINT", pieza: "ESPEJO RETROVISOR DELT RH", cantidad: 1, precio: 3500 },
+    ],
+  }, insurerLines, { sectionsPresent });
+
+  assert.deepEqual(sectionsPresent, { pieza: false, mano_obra: true });
+  assert.equal(result.changed.length, 0);
+  assert.equal(result.removed.length, 0);
+  assert.equal(result.added.length, 0);
+  assert.deepEqual(result.omittedTypes, ["pieza"]);
+});
+
 test("reconoce proveedor Dominguez con acentos y razón social", () => {
   assert.equal(isDominguezSupplier("DOMÍNGUEZ AUTO PINTURA, SRL"), true);
   assert.equal(isDominguezSupplier("Otro suplidor"), false);
