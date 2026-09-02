@@ -23,7 +23,7 @@ export function mensajeAmigable(textoCrudo, status) {
   if (status === 401 || status === 403 || /unauthorized|forbidden/i.test(t)) {
     return "El servidor de WhatsApp rechazó la clave (revisa EVOLUTION_API_KEY en Vercel).";
   }
-  if (/fetch failed|ENOTFOUND|ECONNREFUSED|timeout|network/i.test(t)) {
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|timeout|network|abort/i.test(t)) {
     return "No hay conexión con el servidor de WhatsApp. Puede estar apagado o sin internet.";
   }
   return t || "No se pudo comunicar con el servidor de WhatsApp.";
@@ -34,6 +34,18 @@ export function evolutionConfig() {
   const apiKey = process.env.EVOLUTION_API_KEY;
   const instancia = process.env.EVOLUTION_INSTANCE;
   return { apiUrl, apiKey, instancia, ok: !!(apiUrl && apiKey && instancia) };
+}
+
+// Evolution se aloja fuera de Vercel. Un servidor detenido no debe dejar una
+// función ni el modal de vinculación esperando indefinidamente.
+async function fetchEvolution(url, options = {}, timeoutMs = 12_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Normaliza el teléfono a solo dígitos con código de país (lo que espera
@@ -52,7 +64,7 @@ export async function enviarTextoWhatsapp({ number, text }) {
     return { ok: false, status: 500, error: "Evolution no configurado (EVOLUTION_API_URL/KEY/INSTANCE)." };
   }
   try {
-    const r = await fetch(`${apiUrl}/message/sendText/${encodeURIComponent(instancia)}`, {
+    const r = await fetchEvolution(`${apiUrl}/message/sendText/${encodeURIComponent(instancia)}`, {
       method: "POST",
       headers: { apikey: apiKey, "content-type": "application/json" },
       body: JSON.stringify({ number, text }),
@@ -75,7 +87,7 @@ export async function estadoWhatsapp() {
   const { apiUrl, apiKey, instancia, ok } = evolutionConfig();
   if (!ok) return { ok: false, state: "no_config" };
   try {
-    const r = await fetch(`${apiUrl}/instance/connectionState/${encodeURIComponent(instancia)}`, {
+    const r = await fetchEvolution(`${apiUrl}/instance/connectionState/${encodeURIComponent(instancia)}`, {
       headers: { apikey: apiKey },
     });
     const data = await r.json().catch(() => ({}));
@@ -124,7 +136,7 @@ async function socketVivo(apiUrl, apiKey, instancia) {
       process.env.SHOP_WHATSAPP || "8095757986",
       process.env.WHATSAPP_DEFAULT_COUNTRY || "1"
     );
-    const r = await fetch(`${apiUrl}/chat/whatsappNumbers/${encodeURIComponent(instancia)}`, {
+    const r = await fetchEvolution(`${apiUrl}/chat/whatsappNumbers/${encodeURIComponent(instancia)}`, {
       method: "POST",
       headers: { apikey: apiKey, "content-type": "application/json" },
       body: JSON.stringify({ numbers: [propio] }),
@@ -148,7 +160,7 @@ export async function conectarWhatsapp({ number } = {}) {
   if (!ok) return { ok: false, error: "Evolution no configurado (EVOLUTION_API_URL/KEY/INSTANCE)." };
   try {
     const qs = number ? `?number=${encodeURIComponent(number)}` : "";
-    const r = await fetch(`${apiUrl}/instance/connect/${encodeURIComponent(instancia)}${qs}`, {
+    const r = await fetchEvolution(`${apiUrl}/instance/connect/${encodeURIComponent(instancia)}${qs}`, {
       headers: { apikey: apiKey },
     });
     const data = await r.json().catch(() => ({}));
@@ -173,7 +185,7 @@ export async function configurarWebhookEvolution(webhookUrl = "https://dominguez
   const { apiUrl, apiKey, instancia, ok } = evolutionConfig();
   if (!ok) return { ok: false, error: "Evolution no configurado." };
   try {
-    const r = await fetch(`${apiUrl}/webhook/set/${encodeURIComponent(instancia)}`, {
+    const r = await fetchEvolution(`${apiUrl}/webhook/set/${encodeURIComponent(instancia)}`, {
       method: "POST",
       headers: { apikey: apiKey, "content-type": "application/json" },
       body: JSON.stringify({
@@ -250,7 +262,7 @@ export async function obtenerBase64Mensaje(messageId) {
   const { apiUrl, apiKey, instancia, ok } = evolutionConfig();
   if (!ok) return null;
   try {
-    const r = await fetch(`${apiUrl}/chat/getBase64FromMediaMessage/${encodeURIComponent(instancia)}`, {
+    const r = await fetchEvolution(`${apiUrl}/chat/getBase64FromMediaMessage/${encodeURIComponent(instancia)}`, {
       method: "POST",
       headers: { apikey: apiKey, "content-type": "application/json" },
       body: JSON.stringify({

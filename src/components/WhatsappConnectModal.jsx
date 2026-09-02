@@ -59,6 +59,11 @@ export default function WhatsappConnectModal({ onClose, onConnected }) {
           setCargando(false);
           return; // ya conectado, no hace falta QR
         }
+        if (d?.state === "sin_servidor") {
+          setError(d?.error || "El servidor de WhatsApp no está respondiendo.");
+          setCargando(false);
+          return;
+        }
       } catch {
         /* si falla el estado, igual intentamos el QR */
       }
@@ -91,7 +96,7 @@ export default function WhatsappConnectModal({ onClose, onConnected }) {
   // Mientras no esté conectado y estemos en modo QR, refresca el QR cada 30s
   // (los QR de WhatsApp caducan a los ~40s).
   useEffect(() => {
-    if (estado === "open" || modo !== "qr") return;
+    if (estado === "open" || estado === "sin_servidor" || modo !== "qr") return;
     const t = setInterval(() => pedirConexion(), 30000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -162,7 +167,7 @@ export default function WhatsappConnectModal({ onClose, onConnected }) {
                   </div>
                 )}
                 <button onClick={() => pedirConexion()} className="btn-ghost mt-4">
-                  Refrescar código
+                  Reintentar conexión
                 </button>
               </div>
             ) : (
@@ -202,7 +207,11 @@ export default function WhatsappConnectModal({ onClose, onConnected }) {
                 {modo === "qr" ? "Prefiero usar un código de 8 dígitos" : "Prefiero escanear el QR"}
               </button>
               <span className="text-xs text-[var(--ink-soft)]">
-                {estado === "connecting" ? "Conectando…" : "Esperando escaneo…"}
+                {estado === "sin_servidor"
+                  ? "Servidor no disponible"
+                  : estado === "connecting"
+                    ? "Conectando…"
+                    : "Esperando escaneo…"}
               </span>
             </div>
           </>
