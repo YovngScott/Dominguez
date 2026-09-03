@@ -15,7 +15,7 @@ export default function SelectorLlave({ casoId, numeroLlave, estado, onChange })
       .from("casos")
       .select("id, numero_llave")
       .not("numero_llave", "is", null)
-      .neq("estado", "entregado")
+      .not("estado", "in", "(entregado,completado)")
       .neq("id", casoId);
     if (!e) setOcupadas(new Set((data || []).map((c) => c.numero_llave)));
   }
@@ -40,8 +40,8 @@ export default function SelectorLlave({ casoId, numeroLlave, estado, onChange })
     setAbierto(false);
   }
 
-  if (estado === "entregado") {
-    return <p className="text-xs text-[var(--ink-soft)]">Llave liberada al entregar el vehículo.</p>;
+  if (["entregado", "completado"].includes(estado)) {
+    return <p className="text-xs text-[var(--ink-soft)]">Llave liberada al cerrar el caso.</p>;
   }
 
   return (

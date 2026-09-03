@@ -302,7 +302,7 @@ function CitaModal({ cita, onCancel, onSaved }) {
       .from("casos")
       .select("id, placa, estado, marca:marcas(nombre), modelo:modelos(nombre)")
       .eq("cliente_id", clienteId)
-      .neq("estado", "entregado")
+      .not("estado", "in", "(entregado,completado)")
       .order("created_at", { ascending: false });
     const lista = data || [];
     setCasos(lista);

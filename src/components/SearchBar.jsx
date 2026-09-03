@@ -10,11 +10,10 @@ const CASO_SELECT = `
   aseguradora:aseguradoras(nombre)
 `;
 
-// Los vehículos ya entregados se excluyen del buscador: se consultan en el
-// apartado "Vehículos entregados". Así la búsqueda muestra solo lo que está
-// en proceso, que es lo que se busca en el día a día.
+// Los casos cerrados se consultan desde sus apartados propios. Así la búsqueda
+// principal muestra solo lo que sigue en proceso.
 const casosActivos = () =>
-  supabase.from("casos").select(CASO_SELECT).neq("estado", "entregado");
+  supabase.from("casos").select(CASO_SELECT).not("estado", "in", "(entregado,completado)");
 
 export default function SearchBar({ autoFocus = false }) {
   const [query, setQuery] = useState("");

@@ -31,6 +31,7 @@ const EtiquetasPiezas = lazy(() => import("./pages/EtiquetasPiezas"));
 const EtiquetasHistorial = lazy(() => import("./pages/EtiquetasHistorial"));
 const Tramos = lazy(() => import("./pages/Tramos"));
 const Entregados = lazy(() => import("./pages/Entregados"));
+const CasosCompletos = lazy(() => import("./pages/CasosCompletos"));
 const Landing = lazy(() => import("./pages/Landing"));
 const ClientList = lazy(() => import("./pages/ClientList"));
 const ContactosList = lazy(() => import("./pages/ContactosList"));
@@ -64,6 +65,7 @@ const NAV_GROUPS = [
       { to: "/ordenes", label: "Recibos", icon: "clipboard" },
       { to: "/llaves", label: "Llaves", icon: "key" },
       { to: "/citas", label: "Citas", icon: "clock" },
+      { to: "/casos/completos", label: "Casos completos", icon: "check" },
       { to: "/entregados", label: "Vehículos entregados", icon: "check" },
     ],
   },
@@ -386,6 +388,14 @@ export default function App() {
         element={
           <PrivateLayout>
             <NewCase />
+          </PrivateLayout>
+        }
+      />
+      <Route
+        path="/casos/completos"
+        element={
+          <PrivateLayout>
+            <CasosCompletos />
           </PrivateLayout>
         }
       />

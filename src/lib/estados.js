@@ -26,6 +26,14 @@ export const ESTADOS = {
     card: "from-sky-50 to-white border-sky-200",
     accent: "#0284c7",
   },
+  completado: {
+    label: "Completados",
+    short: "Completo",
+    icon: "check",
+    chip: "bg-violet-100 text-violet-700",
+    card: "from-violet-50 to-white border-violet-200",
+    accent: "#7c3aed",
+  },
   entregado: {
     label: "Entregados",
     short: "Entregados",

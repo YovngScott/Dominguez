@@ -19,7 +19,7 @@ export default function Llaves() {
       .from("casos")
       .select("id, numero_llave, estado, placa, numero_reclamo, anio, cliente:clientes(nombre_completo), marca:marcas(nombre), modelo:modelos(nombre)")
       .not("numero_llave", "is", null)
-      .neq("estado", "entregado")
+      .not("estado", "in", "(entregado,completado)")
       .order("numero_llave");
     if (err) setError(err.message || "No se pudieron cargar las llaves.");
     else { setCasos(data || []); setError(""); }

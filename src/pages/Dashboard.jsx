@@ -13,7 +13,7 @@ const METRICAS = [
     key: "espera",
     etiqueta: "En espera de piezas",
     color: "#d97706",
-    filtro: (c) => !["vehiculo_en_taller", "listo_para_trabajar", "entregado"].includes(c.estado),
+    filtro: (c) => !["vehiculo_en_taller", "listo_para_trabajar", "completado", "entregado"].includes(c.estado),
   },
   {
     key: "listos",
@@ -95,7 +95,7 @@ export default function Dashboard() {
       const activos = [];
       (casos || []).forEach((c) => {
         counts[c.aseguradora_id] = (counts[c.aseguradora_id] || 0) + 1;
-        if (c.estado === "entregado") {
+        if (["entregado", "completado"].includes(c.estado)) {
           // los entregados no cuentan como casos activos
         } else if (c.estado === "vehiculo_en_taller") {
           m.enTaller += 1;
