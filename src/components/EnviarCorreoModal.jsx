@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { enviarCorreo } from "../lib/enviarCorreo";
-import { urlAJpegBlob } from "../lib/toJpeg";
+import { urlAJpegCorreo } from "../lib/toJpeg";
 import { uuid } from "../lib/uuid";
 import Icon from "./Icon";
 
@@ -139,9 +139,15 @@ export default function EnviarCorreoModal({ cot, pdfUrl, evidencias = [], onClos
         // mandan como contenido base64 (más compatible en cualquier correo).
         // Enviar URLs firmadas evita superar el límite de tamaño del JSON
         // cuando la cotización tiene muchas fotos.
+        // Se reserva margen para el PDF y para la codificación base64. El
+        // presupuesto se reparte entre todas las evidencias, no importa si
+        // son cinco o muchas más.
+        const maxPorFoto = Math.min(1600 * 1024, Math.floor((10 * 1024 * 1024) / evidencias.length));
         const fotos = await Promise.all(
           evidencias.map(async (url, i) => {
-            const jpg = await urlAJpegBlob(url, 0.88);
+            // Se limita cada foto a ~1.6 MB. Así, incluso con varias fotos,
+            // el base64 y el PDF siguen bajo el máximo de 20 MB del correo.
+            const jpg = await urlAJpegCorreo(url, maxPorFoto);
             const path = `${cot.id}/correo/${uuid()}.jpg`;
             const { error: uploadError } = await supabase.storage
               .from("cotizaciones")

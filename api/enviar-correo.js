@@ -69,14 +69,18 @@ async function prepararAdjuntos(adjuntos) {
   const lista = Array.isArray(adjuntos) ? adjuntos : [];
   const resultado = [];
   let totalBytes = 0;
-  // Brevo admite hasta 20 MB por mensaje; dejamos margen para cabeceras y
-  // la codificación MIME/base64 para que el envío no sea rechazado al límite.
-  const MAX_TOTAL = 19 * 1024 * 1024;
+  // Brevo limita el mensaje completo a 20 MB. Los adjuntos se transmiten en
+  // base64 (un 33% mayor), por eso el contenido binario debe quedar bastante
+  // por debajo; 13 MB deja margen para el PDF, cabeceras y MIME.
+  const MAX_TOTAL = 13 * 1024 * 1024;
 
   for (const adjunto of lista) {
     if (adjunto?.content && adjunto?.name) {
-      totalBytes += Math.floor(String(adjunto.content).length * 0.75);
-      if (totalBytes > MAX_TOTAL) throw new Error("Los adjuntos superan 19 MB. Desmarca algunas fotos e intenta nuevamente.");
+      const bytes = Math.floor((adjunto.content.length * 3) / 4);
+      totalBytes += bytes;
+      if (totalBytes > MAX_TOTAL) {
+        throw new Error("Los adjuntos son demasiado pesados para enviarlos por correo.");
+      }
       resultado.push({ content: adjunto.content, name: adjunto.name });
       continue;
     }
@@ -87,7 +91,7 @@ async function prepararAdjuntos(adjuntos) {
     const bytes = new Uint8Array(await respuesta.arrayBuffer());
     totalBytes += bytes.byteLength;
     if (totalBytes > MAX_TOTAL) {
-      throw new Error("Los adjuntos superan 19 MB. Desmarca algunas fotos e intenta nuevamente.");
+      throw new Error("Los adjuntos superan el tamaño permitido para el correo.");
     }
     resultado.push({ content: Buffer.from(bytes).toString("base64"), name: adjunto.name });
   }
