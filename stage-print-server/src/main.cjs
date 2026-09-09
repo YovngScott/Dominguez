@@ -137,10 +137,14 @@ ipcMain.handle("stage:save-printer", async (_event, printerName) => {
 
 ipcMain.handle("stage:test-print", async (_event, printerName) => {
   const zpl =
-    "^XA^PW812^LL406^FO35,35^A0N,45,45^FDSTAGE AI LABS^FS" +
-    "^FO35,100^A0N,30,30^FDPrint Server conectado^FS" +
-    "^FO35,155^GB742,2,2^FS^FO35,185^A0N,28,28^FDPrueba de impresion ZPL^FS" +
-    `^FO35,235^A0N,24,24^FD${new Date().toLocaleString("es-DO")}^FS^XZ`;
+    // La impresora está configurada con etiquetas de 4 x 3 pulgadas
+    // (812 x 610 dots a 203 dpi). El modo térmico y la intensidad viajan
+    // en cada trabajo RAW, pues el driver de Windows no los aplica al ZPL.
+    "^XA^PW812^LL610^LH0,0^MNN^MTD^MD15^PR3" +
+    "^FO35,45^A0N,52,52^FDSTAGE AI LABS^FS" +
+    "^FO35,120^A0N,34,34^FDPrint Server conectado^FS" +
+    "^FO35,190^GB742,3,3^FS^FO35,225^A0N,32,32^FDPRUEBA TERMICA ZPL^FS" +
+    `^FO35,285^A0N,26,26^FD${new Date().toLocaleString("es-DO")}^FS^XZ`;
   const chosen = printerName || loadSettings().printerName;
   await printRawZpl(chosen, zpl);
   return { success: true, printerName: chosen };

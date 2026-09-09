@@ -1,10 +1,10 @@
-// ZPL para la ETIQUETA DE VEHÍCULO (4x2", impresora térmica): marca/modelo
+// ZPL para la ETIQUETA DE VEHÍCULO (4x3", impresora térmica): marca/modelo
 // arriba y los TRABAJOS A REALIZAR en grande. Se pueden hacer VARIAS etiquetas
 // (una por puerta/zona): cada "unidad" se imprime en su propia hoja.
-// 203 dpi → 812 x 406 dots.
+// 203 dpi → 812 x 610 dots.
 
 const W = 812;
-const H = 406;
+const H = 610;
 const M = 18;
 const RW = W - M * 2;
 // Compensa el margen superior más corto del rollo nuevo (≈1.5 mm).
@@ -27,7 +27,9 @@ function lineas(texto, fontH, anchoDots) {
 // Una etiqueta (un ^XA…^XZ): vehículo + lista de trabajos de esa unidad.
 function etiquetaVehiculo(marca, modelo, anio, trabajos) {
   const items = (trabajos || []).map((t) => ascii(t)).filter(Boolean);
-  let z = `^XA^PW${W}^LL${H}^LH0,0`;
+  // El trabajo RAW debe fijar medio e intensidad: el driver de Windows no
+  // transfiere esta configuración al contenido ZPL enviado directamente.
+  let z = `^XA^PW${W}^LL${H}^LH0,0^MNN^MTD^MD15^PR3`;
   let y = TOP;
 
   const veh = [marca, modelo, anio].filter(Boolean).join(" ") || "-";

@@ -1,15 +1,15 @@
 // Genera ZPL (lenguaje de impresoras térmicas) para las etiquetas de piezas,
 // equivalente al PDF de piezasLabelPdf pero para imprimir directo vía el
-// print server (impresora 4BARCODE 4B-2074B, 203 dpi). Una etiqueta de 4x2".
+// print server (impresora 4BARCODE 4B-2074B, 203 dpi). Una etiqueta de 4x3".
 //
 // Notas:
-//  - 203 dpi = 8 dots/mm → 4" = 812 dots de ancho, 2" = 406 de alto.
+//  - 203 dpi = 8 dots/mm → 4" = 812 dots de ancho, 3" = 610 de alto.
 //  - El print server escribe el ZPL a un archivo en ASCII, así que el texto se
 //    transute a ASCII (sin acentos) para que no se dañe. Para una etiqueta de
 //    taller es perfectamente legible.
 
 const W = 812; // 4" @ 203 dpi
-const H = 406; // 2"
+const H = 610; // 3" (material configurado en la impresora)
 const LX = 18; // margen izquierdo
 const RW = W - LX * 2; // ancho útil
 // El nuevo rollo tiene un margen superior algo más corto; bajamos el arte 1.5 mm
@@ -59,7 +59,9 @@ function fechaHoraAhora() {
 // Construye una etiqueta (un ^XA…^XZ) con el encabezado + un grupo de piezas.
 // Si hay qrUrl, dibuja un QR arriba a la derecha (abre el caso al escanearlo).
 function etiqueta(caso, grupo, qrUrl, sello) {
-  let z = `^XA^PW${W}^LL${H}^LH0,0`;
+  // RAW no hereda la densidad/medio del controlador de Windows. Se fuerza
+  // térmica directa, etiqueta con separación, intensidad y velocidad seguras.
+  let z = `^XA^PW${W}^LL${H}^LH0,0^MNN^MTD^MD15^PR3`;
   let y = TOP;
 
   // QR arriba a la derecha. Magnificación 3 (no 4): con la URL real (que lleva
