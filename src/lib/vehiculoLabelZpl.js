@@ -1,10 +1,10 @@
-// ZPL para la ETIQUETA DE VEHÍCULO (4x3", impresora térmica): marca/modelo
+// ZPL para la ETIQUETA DE VEHÍCULO (4x2", impresora térmica): marca/modelo
 // arriba y los TRABAJOS A REALIZAR en grande. Se pueden hacer VARIAS etiquetas
 // (una por puerta/zona): cada "unidad" se imprime en su propia hoja.
-// 203 dpi → 812 x 610 dots.
+// 203 dpi → 812 x 406 dots.
 
 const W = 812;
-const H = 610;
+const H = 406;
 const M = 18;
 const RW = W - M * 2;
 // Compensa el margen superior más corto del rollo nuevo (≈1.5 mm).

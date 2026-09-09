@@ -137,10 +137,10 @@ ipcMain.handle("stage:save-printer", async (_event, printerName) => {
 
 ipcMain.handle("stage:test-print", async (_event, printerName) => {
   const zpl =
-    // La impresora está configurada con etiquetas de 4 x 3 pulgadas
-    // (812 x 610 dots a 203 dpi). El modo térmico y la intensidad viajan
+    // La impresora está configurada con etiquetas de 4 x 2 pulgadas
+    // (812 x 406 dots a 203 dpi). El modo térmico y la intensidad viajan
     // en cada trabajo RAW, pues el driver de Windows no los aplica al ZPL.
-    "^XA^PW812^LL610^LH0,0^MNN^MTD^MD15^PR3" +
+    "^XA^PW812^LL406^LH0,0^MNN^MTD^MD15^PR3" +
     "^FO35,45^A0N,52,52^FDSTAGE AI LABS^FS" +
     "^FO35,120^A0N,34,34^FDPrint Server conectado^FS" +
     "^FO35,190^GB742,3,3^FS^FO35,225^A0N,32,32^FDPRUEBA TERMICA ZPL^FS" +

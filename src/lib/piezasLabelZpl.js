@@ -1,15 +1,15 @@
 // Genera ZPL (lenguaje de impresoras térmicas) para las etiquetas de piezas,
 // equivalente al PDF de piezasLabelPdf pero para imprimir directo vía el
-// print server (impresora 4BARCODE 4B-2074B, 203 dpi). Una etiqueta de 4x3".
+// print server (impresora 4BARCODE 4B-2074B, 203 dpi). Una etiqueta de 4x2".
 //
 // Notas:
-//  - 203 dpi = 8 dots/mm → 4" = 812 dots de ancho, 3" = 610 de alto.
+//  - 203 dpi = 8 dots/mm → 4" = 812 dots de ancho, 2" = 406 de alto.
 //  - El print server escribe el ZPL a un archivo en ASCII, así que el texto se
 //    transute a ASCII (sin acentos) para que no se dañe. Para una etiqueta de
 //    taller es perfectamente legible.
 
 const W = 812; // 4" @ 203 dpi
-const H = 610; // 3" (material configurado en la impresora)
+const H = 406; // 2" (material configurado en la impresora)
 const LX = 18; // margen izquierdo
 const RW = W - LX * 2; // ancho útil
 // El nuevo rollo tiene un margen superior algo más corto; bajamos el arte 1.5 mm
