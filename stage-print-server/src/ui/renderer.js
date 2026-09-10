@@ -3,6 +3,7 @@ const serverBadge = document.getElementById("serverBadge");
 const message = document.getElementById("message");
 const saveBtn = document.getElementById("saveBtn");
 const testBtn = document.getElementById("testBtn");
+const calibrateBtn = document.getElementById("calibrateBtn");
 const refreshBtn = document.getElementById("refreshBtn");
 
 function showMessage(text, error = false) {
@@ -35,6 +36,7 @@ async function load() {
     serverBadge.textContent = data.status.running ? "● En línea" : "● Con error";
     serverBadge.className = `badge ${data.status.running ? "ok" : "error"}`;
     document.getElementById("serverAddress").textContent = `localhost:${data.status.port}`;
+    document.getElementById("version").textContent = `Versión ${data.status.version} · Etiquetas 4×2 con separación`;
     document.getElementById("lastPrint").textContent = data.status.lastPrint
       ? new Date(data.status.lastPrint.at).toLocaleString("es-DO")
       : "Aún no";
@@ -85,6 +87,22 @@ testBtn.addEventListener("click", async () => {
   } finally {
     testBtn.disabled = false;
     testBtn.textContent = "Imprimir prueba";
+  }
+});
+
+calibrateBtn.addEventListener("click", async () => {
+  if (!printerSelect.value) return showMessage("Selecciona una impresora.", true);
+  calibrateBtn.disabled = true;
+  calibrateBtn.textContent = "Calibrando…";
+  try {
+    await window.stagePrint.calibrateMedia(printerSelect.value);
+    showMessage("Calibración completada. La impresora quedó posicionada en la siguiente etiqueta.");
+    await load();
+  } catch (error) {
+    showMessage(error.message, true);
+  } finally {
+    calibrateBtn.disabled = false;
+    calibrateBtn.textContent = "Calibrar etiquetas 4×2";
   }
 });
 

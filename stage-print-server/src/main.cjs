@@ -8,6 +8,7 @@ const { listPrinters, printRawZpl } = require("./windows-print.cjs");
 
 const PORT = Number(process.env.STAGE_PRINT_PORT || 9100);
 const TOKEN = process.env.STAGE_PRINT_TOKEN || "dps-7f3a9c2e1b4d6f8a0e5c3b7d9a1f4e2c";
+const VERSION = "1.1.0";
 
 let mainWindow = null;
 let tray = null;
@@ -100,6 +101,7 @@ async function startServer() {
     httpServer = await createPrintServer({
       port: PORT,
       token: TOKEN,
+      version: VERSION,
       getDefaultPrinter: () => loadSettings().printerName,
       listPrinters,
       printRawZpl: async ({ zpl, printerName }) => {
@@ -137,16 +139,25 @@ ipcMain.handle("stage:save-printer", async (_event, printerName) => {
 
 ipcMain.handle("stage:test-print", async (_event, printerName) => {
   const zpl =
-    // La impresora está configurada con etiquetas de 4 x 2 pulgadas
-    // (812 x 406 dots a 203 dpi). El modo térmico y la intensidad viajan
-    // en cada trabajo RAW, pues el driver de Windows no los aplica al ZPL.
-    "^XA^PW812^LL406^LH0,0^MNN^MTD^MD15^PR3" +
+    // 2C-LP427B: 4 x 2 pulgadas (812 x 406 dots a 203 dpi). ^MNY hace que
+    // el sensor use el espacio del rollo; sin esto el trabajo RAW se trata
+    // como continuo y puede correr el contenido a la etiqueta siguiente.
+    "^XA^PW812^LL406^LH0,0^MNY^MTD^MD15^PR3" +
     "^FO35,45^A0N,52,52^FDSTAGE AI LABS^FS" +
     "^FO35,120^A0N,34,34^FDPrint Server conectado^FS" +
     "^FO35,190^GB742,3,3^FS^FO35,225^A0N,32,32^FDPRUEBA TERMICA ZPL^FS" +
     `^FO35,285^A0N,26,26^FD${new Date().toLocaleString("es-DO")}^FS^XZ`;
   const chosen = printerName || loadSettings().printerName;
   await printRawZpl(chosen, zpl);
+  return { success: true, printerName: chosen };
+});
+
+ipcMain.handle("stage:calibrate-media", async (_event, printerName) => {
+  const chosen = printerName || loadSettings().printerName;
+  if (!chosen) throw new Error("Selecciona una impresora.");
+  // Guarda el tipo de material con separación y luego mide un ciclo completo
+  // del rollo. ~JC avanza hasta el siguiente espacio sin imprimir contenido.
+  await printRawZpl(chosen, "^XA^MNY^JUS^XZ~JC");
   return { success: true, printerName: chosen };
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "stage-ai-labs-print-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Servidor local de impresión térmica ZPL para STAGE AI LABS",
   "main": "src/main.cjs",
   "author": "STAGE AI LABS",

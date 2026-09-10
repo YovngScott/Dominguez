@@ -27,9 +27,9 @@ function lineas(texto, fontH, anchoDots) {
 // Una etiqueta (un ^XA…^XZ): vehículo + lista de trabajos de esa unidad.
 function etiquetaVehiculo(marca, modelo, anio, trabajos) {
   const items = (trabajos || []).map((t) => ascii(t)).filter(Boolean);
-  // El trabajo RAW debe fijar medio e intensidad: el driver de Windows no
-  // transfiere esta configuración al contenido ZPL enviado directamente.
-  let z = `^XA^PW${W}^LL${H}^LH0,0^MNN^MTD^MD15^PR3`;
+  // Cada trabajo RAW debe pedir etiqueta con separación: así el sensor del
+  // modelo 2C-LP427B corta la página exactamente al terminar sus 2 pulgadas.
+  let z = `^XA^PW${W}^LL${H}^LH0,0^MNY^MTD^MD15^PR3`;
   let y = TOP;
 
   const veh = [marca, modelo, anio].filter(Boolean).join(" ") || "-";

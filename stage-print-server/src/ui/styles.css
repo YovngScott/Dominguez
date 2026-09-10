@@ -26,6 +26,7 @@ body {
 .eyebrow { margin: 0 0 2px; color: #a991ff; font-size: 12px; font-weight: 800; letter-spacing: .2em; }
 h1 { margin: 0; font-size: 32px; letter-spacing: -.04em; }
 .subtitle { margin: 4px 0 0; color: #9299aa; font-size: 14px; }
+.version { margin: 5px 0 0; color: #85f5b0; font-size: 12px; font-weight: 750; }
 .badge { margin-left: auto; padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; }
 .badge.ok { color: #85f5b0; background: rgba(38, 185, 98, .13); border: 1px solid rgba(67, 222, 130, .25); }
 .badge.error { color: #ff8c9b; background: rgba(235, 56, 82, .13); border: 1px solid rgba(235, 56, 82, .25); }
@@ -53,6 +54,7 @@ select:focus { border-color: #8064ff; box-shadow: 0 0 0 3px rgba(128, 100, 255, 
 .secondary { color: #e2e5ef; background: #242936; border: 1px solid #343b4b; }
 .message { min-height: 18px; margin: 12px 0 0; font-size: 13px; color: #85f5b0; }
 .message.error { color: #ff8c9b; }
+.help { margin: 12px 0 0; color: #8991a3; font-size: 12px; }
 .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
 .metric { background: #12151d; border: 1px solid #202531; border-radius: 16px; padding: 16px; min-width: 0; }
 .metric-label { display: block; color: #747d91; font-size: 11px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .08em; }

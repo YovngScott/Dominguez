@@ -1,6 +1,6 @@
 // Genera ZPL (lenguaje de impresoras térmicas) para las etiquetas de piezas,
 // equivalente al PDF de piezasLabelPdf pero para imprimir directo vía el
-// print server (impresora 4BARCODE 4B-2074B, 203 dpi). Una etiqueta de 4x2".
+// print server (2Connect 2C-LP427B, 203 dpi). Una etiqueta de 4x2".
 //
 // Notas:
 //  - 203 dpi = 8 dots/mm → 4" = 812 dots de ancho, 2" = 406 de alto.
@@ -59,9 +59,10 @@ function fechaHoraAhora() {
 // Construye una etiqueta (un ^XA…^XZ) con el encabezado + un grupo de piezas.
 // Si hay qrUrl, dibuja un QR arriba a la derecha (abre el caso al escanearlo).
 function etiqueta(caso, grupo, qrUrl, sello) {
-  // RAW no hereda la densidad/medio del controlador de Windows. Se fuerza
-  // térmica directa, etiqueta con separación, intensidad y velocidad seguras.
-  let z = `^XA^PW${W}^LL${H}^LH0,0^MNN^MTD^MD15^PR3`;
+  // RAW no hereda el medio configurado en el controlador de Windows. ^MNY
+  // obliga a leer el espacio entre etiquetas; ^MNN lo trataba como papel
+  // continuo y por eso una etiqueta invadía la siguiente.
+  let z = `^XA^PW${W}^LL${H}^LH0,0^MNY^MTD^MD15^PR3`;
   let y = TOP;
 
   // QR arriba a la derecha. Magnificación 3 (no 4): con la URL real (que lleva
@@ -156,38 +157,42 @@ function normalizarCajas(cajas, piezas) {
 }
 
 // Reparte una caja en grupos que caben en el alto de la etiqueta.
-function repartir(caso, piezasCaja) {
-  // Estima el alto del encabezado (en dots) tal como lo dibuja etiqueta():
-  let header = TOP;
-  const vehL = Math.min(2, lineas([caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ") || "-", 40, RW));
-  header += vehL * 42 + 6;
-  if (ascii(caso.aseguradora_nombre)) header += Math.min(2, lineas(caso.aseguradora_nombre, 32, RW)) * 34 + 4;
-  if (ascii(caso.numero_reclamo)) header += 36;
+function altoEtiqueta(caso, grupo, qrUrl) {
+  let y = TOP;
+  const qrW = 128;
+  const headW = qrUrl ? RW - (qrW + 20) : RW;
+  const veh = [caso.marca, caso.modelo, caso.anio].filter(Boolean).join(" ") || "-";
+  y += Math.min(2, lineas(veh, 40, headW)) * 42 + 6;
+  if (ascii(caso.aseguradora_nombre)) y += Math.min(2, lineas(caso.aseguradora_nombre, 32, headW)) * 34 + 4;
+  if (ascii(caso.numero_reclamo)) y += 36;
   const sec = [caso.placa, caso.chasis, caso.cliente_nombre].filter(Boolean);
-  if (sec.length) header += Math.min(2, lineas(sec.join("   -   "), 20, RW)) * 22 + 4;
-  header += 28; // línea de fecha/hora
-  header += 12 + 34; // divisor + "PIEZAS (n)"
-
-  const dispo = H - 2 - header; // alto disponible para piezas
-  const textW = W - (LX + 38) - LX - 56;
-
-  const grupos = [];
-  let actual = [];
-  let alto = 0;
-  for (const p of piezasCaja) {
-    // Se estima con fuente 32 (la que usa un grupo de 4) para que los nombres
-    // largos que envuelven a 2 líneas hagan agrupar menos y no se corten.
-    const nl = Math.min(2, lineas(p.nombre, 32, textW));
-    const h = Math.max(34, nl * 34) + 6;
-    if (actual.length && alto + h > dispo) {
-      grupos.push(actual);
-      actual = [];
-      alto = 0;
-    }
-    actual.push(p);
-    alto += h;
+  if (sec.length) {
+    const ancho = y > 150 ? RW : headW;
+    y += Math.min(2, lineas(sec.join("   -   "), 20, ancho)) * 22 + 4;
   }
-  if (actual.length) grupos.push(actual);
+  y += 28 + 12 + 34; // sello, divisor y título de piezas
+
+  const { pieceH, boxS, gap } = sizing(grupo.length);
+  const textX = LX + boxS + 12;
+  const textW = W - textX - LX - 64;
+  grupo.forEach((p) => {
+    const nl = Math.min(2, lineas(p.nombre, pieceH, textW));
+    y += Math.max(boxS, nl * (pieceH + 4)) + gap;
+  });
+  return y;
+}
+
+function repartir(caso, piezasCaja, qrUrl) {
+  const grupos = [];
+  let inicio = 0;
+  while (inicio < piezasCaja.length) {
+    let finQueCabe = inicio + 1;
+    for (let fin = inicio + 1; fin <= piezasCaja.length; fin += 1) {
+      if (altoEtiqueta(caso, piezasCaja.slice(inicio, fin), qrUrl) <= H - 10) finQueCabe = fin;
+    }
+    grupos.push(piezasCaja.slice(inicio, finQueCabe));
+    inicio = finQueCabe;
+  }
   return grupos.length ? grupos : [[]];
 }
 
@@ -200,7 +205,7 @@ export function generarZplEtiquetas({ caso = {}, cajas = null, piezas = null, qr
   const sello = fechaHoraAhora();
   let zpl = "";
   listaCajas.forEach((piezasCaja) => {
-    repartir(caso, piezasCaja).forEach((grupo) => {
+    repartir(caso, piezasCaja, qrUrl).forEach((grupo) => {
       zpl += etiqueta(caso, grupo, qrUrl, sello);
     });
   });
