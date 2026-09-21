@@ -10,8 +10,8 @@ function fechaCorta(iso) {
   return fecha.toLocaleDateString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-// Casos cerrados administrativamente mientras estaban en espera de piezas.
-// No se mezclan con "Vehículos entregados", que requiere firma de entrega.
+// Solo trabajos que se terminaron/colocaron en el taller.
+// Los cierres administrativos se muestran por separado en "Vehículos entregados".
 export default function CasosCompletos() {
   const [casos, setCasos] = useState([]);
   const [busqueda, setBusqueda] = useState("");

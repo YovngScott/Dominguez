@@ -120,7 +120,7 @@ export default function SearchBar({ autoFocus = false }) {
                   {c.cliente?.nombre_completo} · {c.aseguradora?.nombre}
                   {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
                 </p>
-                <p className="text-xs text-slate-400">Ingreso: {c.fecha_ingreso || "—"}{c.numero_poliza ? ` · Póliza: ${c.numero_poliza}` : ""}{["completado", "entregado"].includes(c.estado) ? " · Completo" : ""}</p>
+                <p className="text-xs text-slate-400">Ingreso: {c.fecha_ingreso || "—"}{c.numero_poliza ? ` · Póliza: ${c.numero_poliza}` : ""}{c.estado === "completado" ? " · Completo" : c.estado === "entregado" ? " · Entregado" : ""}</p>
               </button>
             ))}
         </div>

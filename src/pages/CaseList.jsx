@@ -62,7 +62,7 @@ export default function CaseList() {
   // casos creados con estados antiguos como "ingresado").
   const perteneceA = (caso, estado) => {
     if (estado === "completos") {
-      return ["completado", "entregado"].includes(caso.estado);
+      return caso.estado === "completado";
     }
     if (estado === "en_espera_piezas") {
       return !["listo_para_trabajar", "vehiculo_en_taller", "completado", "entregado"].includes(caso.estado);

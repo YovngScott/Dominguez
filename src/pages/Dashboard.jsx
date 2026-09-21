@@ -94,16 +94,16 @@ export default function Dashboard() {
       const activos = [];
       (casos || []).forEach((c) => {
         const esGeneral = idsGenerales.has(c.aseguradora_id);
-        const esCompleto = ["entregado", "completado"].includes(c.estado);
+        const estaCerrado = ["entregado", "completado"].includes(c.estado);
         // General agrupa cotizaciones que con frecuencia no se convierten en
         // trabajo. Se consulta desde su propia tarjeta, no desde el tablero
         // operativo ni los contadores de producción.
-        if (!esGeneral || !esCompleto) {
+        if (!esGeneral || !estaCerrado) {
           counts[c.aseguradora_id] = (counts[c.aseguradora_id] || 0) + 1;
         }
         if (esGeneral) return;
-        if (esCompleto) {
-          // los entregados no cuentan como casos activos
+        if (estaCerrado) {
+          // Los completos y entregados no cuentan como casos operativos.
         } else if (c.estado === "vehiculo_en_taller") {
           m.enTaller += 1;
           activos.push(c);

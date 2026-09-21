@@ -5,9 +5,9 @@
 -- =========================================================
 
 -- Un caso en espera por más de un mes sin ninguna cotización enviada no
--- representa trabajo activo. Sigue disponible en buscadores y completos.
+-- representa trabajo activo. Sigue disponible en buscadores y entregados.
 update casos as c
-set estado = 'completado'
+set estado = 'entregado'
 where c.estado = 'en_espera_piezas'
   and c.fecha_ingreso < current_date - interval '1 month'
   and not exists (
