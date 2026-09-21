@@ -4,11 +4,10 @@ import { supabase } from "../lib/supabaseClient";
 import SearchBar from "../components/SearchBar";
 import Icon from "../components/Icon";
 import { ESTADOS } from "../lib/estados";
-import { diasDesde, nivelAlerta, COLOR_NIVEL } from "../lib/aging";
+import { diasDesde } from "../lib/aging";
 
 // Cada métrica: etiqueta, color y qué casos activos incluye.
 const METRICAS = [
-  { key: "activos", etiqueta: "Casos activos", color: "var(--ink)", filtro: () => true },
   {
     key: "espera",
     etiqueta: "En espera de piezas",
@@ -32,10 +31,9 @@ const METRICAS = [
 export default function Dashboard() {
   const [aseguradoras, setAseguradoras] = useState([]);
   const [conteos, setConteos] = useState({});
-  const [metricas, setMetricas] = useState({ espera: 0, listos: 0, enTaller: 0, activos: 0 });
+  const [metricas, setMetricas] = useState({ espera: 0, listos: 0, enTaller: 0 });
   const [casosActivos, setCasosActivos] = useState([]);
   const [metricaSel, setMetricaSel] = useState(null);
-  const [estancados, setEstancados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [waEstado, setWaEstado] = useState(null); // "open" | "connecting" | "close" | ...
   const [waError, setWaError] = useState(""); // motivo técnico, para saber qué arreglar
@@ -92,7 +90,7 @@ export default function Dashboard() {
 
       const idsGenerales = new Set((asegs || []).filter((a) => a.es_personal).map((a) => a.id));
       const counts = {};
-      const m = { espera: 0, listos: 0, enTaller: 0, activos: 0 };
+      const m = { espera: 0, listos: 0, enTaller: 0 };
       const activos = [];
       (casos || []).forEach((c) => {
         const esGeneral = idsGenerales.has(c.aseguradora_id);
@@ -108,49 +106,21 @@ export default function Dashboard() {
           // los entregados no cuentan como casos activos
         } else if (c.estado === "vehiculo_en_taller") {
           m.enTaller += 1;
-          m.activos += 1;
           activos.push(c);
         } else if (c.estado === "listo_para_trabajar") {
           m.listos += 1;
-          m.activos += 1;
           activos.push(c);
         } else {
           m.espera += 1;
-          m.activos += 1;
           activos.push(c);
         }
       });
-
-      // Antigüedad: cuándo entró cada caso a su estado actual (último cambio en
-      // el historial); si no hay, su fecha de ingreso.
-      const ids = activos.map((c) => c.id);
-      let desdePorCaso = {};
-      if (ids.length) {
-        const { data: hist } = await supabase
-          .from("historial_caso")
-          .select("caso_id, created_at")
-          .in("caso_id", ids)
-          .order("created_at", { ascending: false });
-        (hist || []).forEach((h) => {
-          if (!desdePorCaso[h.caso_id]) desdePorCaso[h.caso_id] = h.created_at;
-        });
-      }
-
-      const conAlerta = activos
-        .map((c) => {
-          const desde = desdePorCaso[c.id] || c.fecha_ingreso || c.created_at;
-          const dias = diasDesde(desde);
-          return { ...c, dias, nivel: nivelAlerta(c.estado, dias) };
-        })
-        .filter((c) => c.nivel !== "ok")
-        .sort((a, b) => b.dias - a.dias);
 
       setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
       setConteos(counts);
       setMetricas(m);
       setCasosActivos(activos);
       setLlavesAsignadas(activos.filter((c) => c.numero_llave));
-      setEstancados(conAlerta);
       setLoading(false);
     }
     load();
@@ -228,7 +198,7 @@ export default function Dashboard() {
         )}
 
         {/* Métricas (botones): al pulsar se despliega la lista de casos */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {METRICAS.map((mt) => (
             <Metrica
               key={mt.key}
@@ -250,7 +220,11 @@ export default function Dashboard() {
         {/* Lista de la métrica seleccionada (deslizable) */}
         {metricaSel && (() => {
           const mt = METRICAS.find((m) => m.key === metricaSel);
-          const lista = casosActivos.filter(mt.filtro);
+          // La antigüedad se ve inmediatamente en la lista: primero los
+          // ingresos más viejos, para que la prioridad sea evidente.
+          const lista = [...casosActivos]
+            .filter(mt.filtro)
+            .sort((a, b) => new Date(a.fecha_ingreso || a.created_at) - new Date(b.fecha_ingreso || b.created_at));
           return (
             <div className="card p-5 mb-10">
               <div className="flex items-center gap-2 mb-3">
@@ -332,51 +306,6 @@ export default function Dashboard() {
                 </span>
               </Link>
             ))}
-          </div>
-        )}
-
-        {/* Alertas de casos estancados (después de las aseguradoras) */}
-        {!loading && estancados.length > 0 && (
-          <div className="card p-5 mt-10 border-l-4" style={{ borderLeftColor: "#dc2626" }}>
-            <div className="flex items-center gap-2 mb-3">
-              <Icon name="clock" className="w-5 h-5 text-[var(--brand-red)]" />
-              <h2 className="text-lg font-bold text-[var(--ink)]">Casos que requieren atención</h2>
-              <span className="text-xs font-semibold text-[var(--ink-soft)] bg-[var(--paper)] px-2 py-0.5 rounded-full">
-                {estancados.length}
-              </span>
-            </div>
-            <div className="divide-y divide-[var(--line)] max-h-96 overflow-y-auto">
-              {estancados.map((c) => {
-                const est = ESTADOS[c.estado];
-                const col = COLOR_NIVEL[c.nivel];
-                return (
-                  <Link
-                    key={c.id}
-                    to={`/casos/${c.id}`}
-                    className="flex items-center justify-between gap-3 py-2.5 hover:bg-[var(--paper)] px-2 rounded-lg"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-[var(--ink)] truncate">
-                        {[c.marca?.nombre, c.modelo?.nombre].filter(Boolean).join(" ") || "Vehículo"}
-                        {c.placa ? ` · ${c.placa}` : ""}
-                      </p>
-                      <p className="text-xs text-[var(--ink-soft)] truncate">
-                        {c.aseguradora?.nombre}
-                        {est ? ` · ${est.label}` : ""}
-                        {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
-                      </p>
-                    </div>
-                    <span
-                      className="text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap inline-flex items-center gap-1.5"
-                      style={{ backgroundColor: col.bg, color: col.text }}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: col.dot }} />
-                      {c.dias} día{c.dias === 1 ? "" : "s"}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
           </div>
         )}
       </div>
