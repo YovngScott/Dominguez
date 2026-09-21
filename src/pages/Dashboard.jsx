@@ -90,12 +90,21 @@ export default function Dashboard() {
            cliente:clientes(nombre_completo)`
         );
 
+      const idsGenerales = new Set((asegs || []).filter((a) => a.es_personal).map((a) => a.id));
       const counts = {};
       const m = { espera: 0, listos: 0, enTaller: 0, activos: 0 };
       const activos = [];
       (casos || []).forEach((c) => {
-        counts[c.aseguradora_id] = (counts[c.aseguradora_id] || 0) + 1;
-        if (["entregado", "completado"].includes(c.estado)) {
+        const esGeneral = idsGenerales.has(c.aseguradora_id);
+        const esCompleto = ["entregado", "completado"].includes(c.estado);
+        // General agrupa cotizaciones que con frecuencia no se convierten en
+        // trabajo. Se consulta desde su propia tarjeta, no desde el tablero
+        // operativo ni los contadores de producción.
+        if (!esGeneral || !esCompleto) {
+          counts[c.aseguradora_id] = (counts[c.aseguradora_id] || 0) + 1;
+        }
+        if (esGeneral) return;
+        if (esCompleto) {
           // los entregados no cuentan como casos activos
         } else if (c.estado === "vehiculo_en_taller") {
           m.enTaller += 1;

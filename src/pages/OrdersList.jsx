@@ -17,7 +17,7 @@ export default function OrdersList() {
     async function load() {
       const { data } = await supabase
         .from("ordenes_reparacion")
-        .select("id, numero, cliente, marca, modelo, placa, chasis, fecha")
+        .select("id, numero, cliente, marca, modelo, placa, chasis, fecha, cia_seguro, caso:casos(aseguradora:aseguradoras(nombre))")
         .order("created_at", { ascending: false });
       setOrdenes(data || []);
       setLoading(false);
@@ -28,7 +28,7 @@ export default function OrdersList() {
   const term = q.trim().toLowerCase();
   const lista = term
     ? ordenes.filter((o) =>
-        [o.numero, o.cliente, o.placa, o.chasis, o.marca, o.modelo]
+        [o.numero, o.cliente, o.placa, o.chasis, o.marca, o.modelo, o.cia_seguro, o.caso?.aseguradora?.nombre]
           .filter(Boolean)
           .some((x) => String(x).toLowerCase().includes(term))
       )
@@ -58,17 +58,21 @@ export default function OrdersList() {
         </div>
       ) : (
         <div className="card divide-y divide-[var(--line)] overflow-hidden">
-          {lista.map((o) => (
-            <Link key={o.id} to={`/ordenes/${o.id}`} className="flex items-center justify-between gap-3 px-4 sm:px-5 py-4 hover:bg-[var(--paper)]">
-              <div className="min-w-0">
-                <p className="font-bold text-[var(--ink)] truncate">Recibo No. {o.numero} · {o.cliente}</p>
-                <p className="text-sm text-[var(--ink-soft)] truncate">
-                  {[o.marca, o.modelo].filter(Boolean).join(" ")}{o.placa ? ` · ${o.placa}` : ""}
-                </p>
-              </div>
-              <span className="text-sm text-[var(--ink-soft)] shrink-0">{ddmmaaaa(o.fecha)}</span>
-            </Link>
-          ))}
+          {lista.map((o) => {
+            const aseguradora = o.cia_seguro || o.caso?.aseguradora?.nombre;
+            return (
+              <Link key={o.id} to={`/ordenes/${o.id}`} className="flex items-center justify-between gap-3 px-4 sm:px-5 py-4 hover:bg-[var(--paper)]">
+                <div className="min-w-0">
+                  <p className="font-bold text-[var(--ink)] truncate">Recibo No. {o.numero} · {o.cliente}</p>
+                  <p className="text-sm text-[var(--ink-soft)] truncate">
+                    {[o.marca, o.modelo].filter(Boolean).join(" ")}{o.placa ? ` · ${o.placa}` : ""}
+                  </p>
+                  {aseguradora && <p className="text-xs text-[var(--ink-soft)] truncate">Aseguradora: {aseguradora}</p>}
+                </div>
+                <span className="text-sm text-[var(--ink-soft)] shrink-0">{ddmmaaaa(o.fecha)}</span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

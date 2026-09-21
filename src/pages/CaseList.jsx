@@ -60,6 +60,9 @@ export default function CaseList() {
   // estado no sea explícitamente otro estado conocido (así también aparecen
   // casos creados con estados antiguos como "ingresado").
   const perteneceA = (caso, estado) => {
+    if (estado === "completos") {
+      return ["completado", "entregado"].includes(caso.estado);
+    }
     if (estado === "en_espera_piezas") {
       return !["listo_para_trabajar", "vehiculo_en_taller", "completado", "entregado"].includes(caso.estado);
     }
@@ -161,17 +164,18 @@ export default function CaseList() {
         })}
       </div>
 
-      {/* Acceso a entregados (oculto al buscar) */}
+      {/* Los casos cerrados se mantienen consultables sin mezclarse con el
+          trabajo activo. En General aquí aparecen las cotizaciones antiguas. */}
       {!buscando && (
         <button
-          onClick={() => setActivo("entregado")}
+          onClick={() => setActivo("completos")}
           className={`mb-4 text-sm font-medium px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 ${
-            activo === "entregado"
+            activo === "completos"
               ? "bg-slate-700 text-white"
               : "bg-slate-200 text-slate-600 hover:bg-slate-300"
           }`}
         >
-          <Icon name="check" className="w-4 h-4" /> Entregados ({conteo("entregado")})
+          <Icon name="check" className="w-4 h-4" /> Casos completos ({conteo("completos")})
         </button>
       )}
 
