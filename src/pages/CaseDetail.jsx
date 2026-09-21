@@ -506,6 +506,7 @@ export default function CaseDetail() {
         <PiezasManager
           casoId={caso.id}
           caso={{
+            estado: caso.estado,
             cliente_nombre: caso.cliente?.nombre_completo,
             aseguradora_nombre: caso.aseguradora?.nombre,
             marca: caso.marca?.nombre,
@@ -513,6 +514,10 @@ export default function CaseDetail() {
             anio: caso.anio,
             placa: caso.placa,
             numero_reclamo: caso.numero_reclamo,
+          }}
+          onEstadoPiezasChange={(estado) => {
+            setCaso((c) => ({ ...c, estado }));
+            loadHistorial();
           }}
         />
       )}

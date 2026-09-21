@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { ESTADOS, ESTADOS_LISTA } from "../lib/estados";
 import { citasPendientesDeCasos } from "../lib/citaCaso";
 import Icon from "../components/Icon";
+import { diasDesde } from "../lib/aging";
 
 function fechaCorta(iso) {
   if (!iso) return "";
@@ -212,6 +213,10 @@ export default function CaseList() {
                   {c.cliente?.nombre_completo} · Placa {c.placa || "—"}
                   {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
                 </p>
+                <p className="text-xs text-[var(--ink-soft)] mt-0.5">
+                  Ingreso: {fechaCorta(c.fecha_ingreso) || "—"}
+                  {c.numero_poliza ? ` · Póliza: ${c.numero_poliza}` : ""}
+                </p>
                 {citas[c.id] && (
                   <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700">
                     <Icon name="clock" className="w-3.5 h-3.5" />
@@ -225,7 +230,14 @@ export default function CaseList() {
                   {est.short}
                 </span>
               ) : (
-                <span className="text-[var(--brand-red)] text-xl">›</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  {diasDesde(c.fecha_ingreso) >= 30 && !["completado", "entregado"].includes(c.estado) && (
+                    <span title={`En espera desde hace ${diasDesde(c.fecha_ingreso)} días`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                      <Icon name="alert" className="w-3.5 h-3.5" /> {diasDesde(c.fecha_ingreso)}d
+                    </span>
+                  )}
+                  <span className="text-[var(--brand-red)] text-xl">›</span>
+                </div>
               )}
             </Link>
             );

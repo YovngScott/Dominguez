@@ -84,7 +84,7 @@ export default function Dashboard() {
       const { data: casos } = await supabase
         .from("casos")
         .select(
-          `id, aseguradora_id, estado, fecha_ingreso, created_at, numero_reclamo, placa, numero_llave,
+          `id, aseguradora_id, estado, fecha_ingreso, created_at, numero_reclamo, numero_poliza, placa, numero_llave,
            aseguradora:aseguradoras(nombre),
            marca:marcas(nombre), modelo:modelos(nombre),
            cliente:clientes(nombre_completo)`
@@ -417,12 +417,17 @@ function CasoRow({ c }) {
           {c.aseguradora?.nombre}
           {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
         </p>
+        <p className="text-xs text-[var(--ink-soft)] truncate">
+          Ingreso: {c.fecha_ingreso ? new Date(`${c.fecha_ingreso}T00:00:00`).toLocaleDateString("es-DO") : "—"}
+          {c.numero_poliza ? ` · Póliza: ${c.numero_poliza}` : ""}
+        </p>
       </div>
-      {est && (
-        <span className={`text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${est.chip}`}>
-          {est.short}
-        </span>
-      )}
+      <div className="flex items-center gap-2 shrink-0">
+        {diasDesde(c.fecha_ingreso) >= 30 && (
+          <span title={`En espera desde hace ${diasDesde(c.fecha_ingreso)} días`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700"><Icon name="alert" className="w-3.5 h-3.5" /> {diasDesde(c.fecha_ingreso)}d</span>
+        )}
+        {est && <span className={`text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${est.chip}`}>{est.short}</span>}
+      </div>
     </Link>
   );
 }

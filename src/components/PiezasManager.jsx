@@ -46,7 +46,7 @@ function mensajeGuardado(e) {
  * del caso (items_piezas); el estado "recibida" se guarda aparte en la
  * tabla piezas_recibidas, así la cotización y su PDF nunca se modifican.
  */
-export default function PiezasManager({ casoId, caso }) {
+export default function PiezasManager({ casoId, caso, onEstadoPiezasChange }) {
   const [piezas, setPiezas] = useState([]); // [{ clave, nombre, cantidad, cotizacion, manual }]
   const [recibidas, setRecibidas] = useState(new Set()); // claves recibidas
   const [entregadas, setEntregadas] = useState(new Set()); // claves entregadas a un reparador
@@ -180,10 +180,11 @@ export default function PiezasManager({ casoId, caso }) {
       ? await supabase.storage.from("fotos-casos").createSignedUrls(paths, 60 * 60)
       : { data: [] };
     const urls = new Map((signed || []).map((s) => [s.path, s.signedUrl]));
-    setPiezas([...map.values()].map((p) => {
+    const listaPiezas = [...map.values()].map((p) => {
       const foto_path = fotoPorPieza.get(p.clave) || p.foto_path;
       return { ...p, foto_path, foto_url: foto_path ? urls.get(foto_path) || "" : "" };
-    }));
+    });
+    setPiezas(listaPiezas);
 
     // Se intenta leer con "entregada_at"; si la columna aún no existe (migración
     // 38 sin correr), se reintenta sin ella para no romper la lista.
@@ -207,14 +208,29 @@ export default function PiezasManager({ casoId, caso }) {
       r.pieza_clave,
       { path: r.foto_recibida_path, url: urlPorPath.get(r.foto_recibida_path) || "" },
     ])));
-    setRecibidas(new Set((rec || []).map((r) => r.pieza_clave)));
+    const recibidasActuales = new Set((rec || []).map((r) => r.pieza_clave));
+    setRecibidas(recibidasActuales);
     setEntregadas(new Set((rec || []).filter((r) => r.entregada_at).map((r) => r.pieza_clave)));
     const tmap = {};
     (rec || []).forEach((r) => {
       if (r.tramo) tmap[r.pieza_clave] = r.tramo;
     });
     setTramos(tmap);
+    await sincronizarEstadoPiezas(listaPiezas, recibidasActuales);
     setLoading(false);
+  }
+
+  // El checklist define el flujo operativo: con todo recibido queda listo;
+  // una pieza pendiente lo devuelve a espera. Nunca altera un vehículo ya en
+  // taller ni un expediente cerrado manualmente.
+  async function sincronizarEstadoPiezas(lista, recibidasSet) {
+    if (!lista.length || ["vehiculo_en_taller", "completado", "entregado"].includes(caso?.estado)) return;
+    const proximo = lista.every((p) => recibidasSet.has(p.clave))
+      ? "listo_para_trabajar"
+      : "en_espera_piezas";
+    if (proximo === caso?.estado) return;
+    const { error: e } = await supabase.from("casos").update({ estado: proximo }).eq("id", casoId);
+    if (!e) onEstadoPiezasChange?.(proximo);
   }
 
   // Catálogo de piezas, para autocompletar al agregar o corregir una.
@@ -282,6 +298,9 @@ export default function PiezasManager({ casoId, caso }) {
       setError(mensajeGuardado(e));
       return;
     }
+    // Una pieza nueva queda pendiente y devuelve el caso a espera (salvo los
+    // estados protegidos que valida sincronizarEstadoPiezas).
+    if (!original) await sincronizarEstadoPiezas([...piezas, { clave: nuevaClave }], recibidas);
     setEditorPieza(null);
     load();
   }
@@ -315,6 +334,10 @@ export default function PiezasManager({ casoId, caso }) {
     }
     // Si ya no está en el caso, tampoco puede estar recibida ni ocupar anaquel.
     await supabase.from("piezas_recibidas").delete().in("caso_id", casosRel).eq("pieza_clave", p.clave);
+    const restantes = piezas.filter((pieza) => pieza.clave !== p.clave);
+    const recibidasRestantes = new Set(recibidas);
+    recibidasRestantes.delete(p.clave);
+    await sincronizarEstadoPiezas(restantes, recibidasRestantes);
     setPiezaAEliminar(null);
     load();
   }
@@ -326,6 +349,9 @@ export default function PiezasManager({ casoId, caso }) {
 
   async function toggle(p) {
     const yaRecibida = recibidas.has(p.clave);
+    const nuevasRecibidas = new Set(recibidas);
+    if (yaRecibida) nuevasRecibidas.delete(p.clave);
+    else nuevasRecibidas.add(p.clave);
     // Actualización optimista
     setRecibidas((prev) => {
       const n = new Set(prev);
@@ -337,6 +363,7 @@ export default function PiezasManager({ casoId, caso }) {
 
     if (yaRecibida) {
       await supabase.from("piezas_recibidas").delete().in("caso_id", casosRel).eq("pieza_clave", p.clave);
+      await sincronizarEstadoPiezas(piezas, nuevasRecibidas);
     } else {
       const { data: userData } = await supabase.auth.getUser();
       // upsert: si la fila ya existía (índice único caso_id+pieza_clave), no falla.
@@ -357,6 +384,8 @@ export default function PiezasManager({ casoId, caso }) {
           return n;
         });
         setError("No se pudo guardar. Ejecuta la migración sql/15_piezas_recibidas.sql en Supabase.");
+      } else {
+        await sincronizarEstadoPiezas(piezas, nuevasRecibidas);
       }
     }
   }

@@ -1,45 +1,45 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
 const CASO_SELECT = `
-  id, placa, chasis, numero_reclamo, anio, color,
+  id, placa, chasis, numero_reclamo, numero_poliza, fecha_ingreso, estado, anio, color,
   cliente:clientes(nombre_completo),
   marca:marcas(nombre),
   modelo:modelos(nombre),
   aseguradora:aseguradoras(nombre)
 `;
 
-// Los casos cerrados se consultan desde sus apartados propios. Así la búsqueda
-// principal muestra solo lo que sigue en proceso.
-const casosActivos = () =>
-  supabase.from("casos").select(CASO_SELECT).not("estado", "in", "(entregado,completado)");
+const buscarCasos = () => supabase.from("casos").select(CASO_SELECT);
 
 export default function SearchBar({ autoFocus = false }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const requestActual = useRef(0);
   const navigate = useNavigate();
 
   async function runSearch(q) {
+    const solicitud = ++requestActual.current;
     if (q.trim().length < 2) {
       setResults([]);
       setOpen(false);
       return;
     }
     setLoading(true);
+    const termino = q.trim().replace(/[(),]/g, "");
 
-    const byVehiculo = casosActivos()
-      .or(`placa.ilike.%${q}%,chasis.ilike.%${q}%,numero_reclamo.ilike.%${q}%`)
+    const byVehiculo = buscarCasos()
+      .or(`placa.ilike.%${termino}%,chasis.ilike.%${termino}%,numero_reclamo.ilike.%${termino}%,numero_poliza.ilike.%${termino}%`)
       .limit(15);
 
     // Coincidencias en tablas relacionadas (cliente, marca, modelo): primero se
     // buscan sus ids y luego los casos que los usan.
     const [clientesMatch, marcasMatch, modelosMatch] = await Promise.all([
-      supabase.from("clientes").select("id").ilike("nombre_completo", `%${q}%`).limit(15),
-      supabase.from("marcas").select("id").ilike("nombre", `%${q}%`).limit(15),
-      supabase.from("modelos").select("id").ilike("nombre", `%${q}%`).limit(15),
+      supabase.from("clientes").select("id").ilike("nombre_completo", `%${termino}%`).limit(15),
+      supabase.from("marcas").select("id").ilike("nombre", `%${termino}%`).limit(15),
+      supabase.from("modelos").select("id").ilike("nombre", `%${termino}%`).limit(15),
     ]);
 
     const clienteIds = (clientesMatch.data || []).map((c) => c.id);
@@ -47,13 +47,13 @@ export default function SearchBar({ autoFocus = false }) {
     const modeloIds = (modelosMatch.data || []).map((m) => m.id);
 
     const byClientePromise = clienteIds.length
-      ? casosActivos().in("cliente_id", clienteIds).limit(15)
+      ? buscarCasos().in("cliente_id", clienteIds).limit(15)
       : Promise.resolve({ data: [] });
     const byMarcaPromise = marcaIds.length
-      ? casosActivos().in("marca_id", marcaIds).limit(15)
+      ? buscarCasos().in("marca_id", marcaIds).limit(15)
       : Promise.resolve({ data: [] });
     const byModeloPromise = modeloIds.length
-      ? casosActivos().in("modelo_id", modeloIds).limit(15)
+      ? buscarCasos().in("modelo_id", modeloIds).limit(15)
       : Promise.resolve({ data: [] });
 
     const [vehiculoRes, clienteRes, marcaRes, modeloRes] = await Promise.all([
@@ -71,7 +71,8 @@ export default function SearchBar({ autoFocus = false }) {
     ];
     const dedup = Array.from(new Map(merged.map((c) => [c.id, c])).values());
 
-    setResults(dedup);
+    if (solicitud !== requestActual.current) return;
+    setResults(dedup.slice(0, 15));
     setOpen(true);
     setLoading(false);
   }
@@ -83,6 +84,7 @@ export default function SearchBar({ autoFocus = false }) {
     clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(() => runSearch(value), 300);
   }
+  useEffect(() => () => clearTimeout(debounceTimer.current), []);
 
   return (
     <div className="relative w-full max-w-xl mx-auto">
@@ -118,6 +120,7 @@ export default function SearchBar({ autoFocus = false }) {
                   {c.cliente?.nombre_completo} · {c.aseguradora?.nombre}
                   {c.numero_reclamo ? ` · Reclamo ${c.numero_reclamo}` : ""}
                 </p>
+                <p className="text-xs text-slate-400">Ingreso: {c.fecha_ingreso || "—"}{c.numero_poliza ? ` · Póliza: ${c.numero_poliza}` : ""}{["completado", "entregado"].includes(c.estado) ? " · Completo" : ""}</p>
               </button>
             ))}
         </div>
