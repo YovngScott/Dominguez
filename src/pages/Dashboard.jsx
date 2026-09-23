@@ -36,12 +36,16 @@ export default function Dashboard() {
   const [conteos, setConteos] = useState({});
   const [metricas, setMetricas] = useState({ espera: 0, listos: 0, enTaller: 0 });
   const [casosActivos, setCasosActivos] = useState([]);
+  const [casosPorMetrica, setCasosPorMetrica] = useState({});
   const [metricaSel, setMetricaSel] = useState(null);
+  const [cargandoMetrica, setCargandoMetrica] = useState(null);
+  const [resumenRapido, setResumenRapido] = useState(false);
   const [loading, setLoading] = useState(true);
   const [waEstado, setWaEstado] = useState(null); // "open" | "connecting" | "close" | ...
   const [waError, setWaError] = useState(""); // motivo técnico, para saber qué arreglar
   const [porReponer, setPorReponer] = useState([]); // insumos agotados o bajo el mínimo
   const [llavesAsignadas, setLlavesAsignadas] = useState([]);
+  const [cantidadLlavesAsignadas, setCantidadLlavesAsignadas] = useState(0);
 
   // Insumos que hay que comprar (el módulo de almacén puede no estar aún
   // migrado: si falla, simplemente no se muestra la alerta).
@@ -75,7 +79,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    async function load() {
+    async function cargarLegado() {
       const { data: asegs } = await supabase
         .from("aseguradoras")
         .select("*")
@@ -124,10 +128,58 @@ export default function Dashboard() {
       setMetricas(m);
       setCasosActivos(activos);
       setLlavesAsignadas(activos.filter((c) => c.numero_llave));
+      setCantidadLlavesAsignadas(activos.filter((c) => c.numero_llave).length);
+      setLoading(false);
+    }
+
+    async function load() {
+      const { data, error } = await supabase.rpc("resumen_tablero_operativo");
+      const resumen = Array.isArray(data) ? data[0] : data;
+      if (error || !resumen?.metricas) {
+        cargarLegado();
+        return;
+      }
+
+      const tarjetas = resumen.aseguradoras || [];
+      setAseguradoras(tarjetas);
+      setConteos(Object.fromEntries(tarjetas.map((a) => [a.id, Number(a.conteo) || 0])));
+      setMetricas({
+        espera: Number(resumen.metricas.espera) || 0,
+        listos: Number(resumen.metricas.listos) || 0,
+        enTaller: Number(resumen.metricas.enTaller) || 0,
+      });
+      setLlavesAsignadas((resumen.llaves_preview || []).map((numero_llave) => ({ numero_llave })));
+      setCantidadLlavesAsignadas(Number(resumen.llaves_asignadas) || 0);
+      setResumenRapido(true);
       setLoading(false);
     }
     load();
   }, []);
+
+  async function alternarMetrica(key) {
+    if (metricaSel === key) {
+      setMetricaSel(null);
+      return;
+    }
+    setMetricaSel(key);
+    if (!resumenRapido || casosPorMetrica[key]) return;
+
+    setCargandoMetrica(key);
+    const { data, error } = await supabase.rpc("casos_tablero_por_estado", { p_categoria: key });
+    if (!error) {
+      setCasosPorMetrica((actual) => ({
+        ...actual,
+        [key]: (data || []).map((c) => ({
+          ...c,
+          aseguradora: { nombre: c.aseguradora_nombre },
+          marca: { nombre: c.marca_nombre },
+          modelo: { nombre: c.modelo_nombre },
+          cliente: { nombre_completo: c.cliente_nombre },
+        })),
+      }));
+    }
+    setCargandoMetrica(null);
+  }
 
   return (
     <div>
@@ -217,14 +269,14 @@ export default function Dashboard() {
               color={mt.color}
               icon={mt.icon}
               activa={metricaSel === mt.key}
-              onClick={() => setMetricaSel((v) => (v === mt.key ? null : mt.key))}
+              onClick={() => alternarMetrica(mt.key)}
             />
           ))}
         </div>
 
         <Link to="/llaves" className="card p-4 mb-6 border-l-4 flex items-center gap-3 hover:shadow-md transition-shadow" style={{ borderLeftColor: "#d97706" }}>
           <span className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"><Icon name="key" className="w-6 h-6" /></span>
-          <div className="min-w-0 flex-1"><p className="font-bold text-[var(--ink)]">Llaves en uso</p><p className="text-sm text-[var(--ink-soft)] truncate">{llavesAsignadas.length} de 64 asignadas{llavesAsignadas.length ? ` · ${llavesAsignadas.slice(0, 6).map((c) => `#${c.numero_llave}`).join(", ")}${llavesAsignadas.length > 6 ? "…" : ""}` : " · Todas disponibles"}</p></div>
+          <div className="min-w-0 flex-1"><p className="font-bold text-[var(--ink)]">Llaves en uso</p><p className="text-sm text-[var(--ink-soft)] truncate">{cantidadLlavesAsignadas} de 64 asignadas{cantidadLlavesAsignadas ? ` · ${llavesAsignadas.slice(0, 6).map((c) => `#${c.numero_llave}`).join(", ")}${cantidadLlavesAsignadas > 6 ? "…" : ""}` : " · Todas disponibles"}</p></div>
           <span className="text-sm font-bold text-[var(--brand-red)]">Ver mapa</span>
         </Link>
 
@@ -233,9 +285,12 @@ export default function Dashboard() {
           const mt = METRICAS.find((m) => m.key === metricaSel);
           // La antigüedad se ve inmediatamente en la lista: primero los
           // ingresos más viejos, para que la prioridad sea evidente.
-          const lista = [...casosActivos]
-            .filter(mt.filtro)
-            .sort((a, b) => new Date(a.fecha_ingreso || a.created_at) - new Date(b.fecha_ingreso || b.created_at));
+          const lista = resumenRapido
+            ? (casosPorMetrica[mt.key] || [])
+            : [...casosActivos]
+                .filter(mt.filtro)
+                .sort((a, b) => new Date(a.fecha_ingreso || a.created_at) - new Date(b.fecha_ingreso || b.created_at));
+          const cargandoLista = resumenRapido && cargandoMetrica === mt.key;
           return (
             <div className="card p-5 mb-10">
               <div className="flex items-center gap-2 mb-3">
@@ -252,7 +307,9 @@ export default function Dashboard() {
                   <Icon name="close" className="w-5 h-5" />
                 </button>
               </div>
-              {lista.length === 0 ? (
+              {cargandoLista ? (
+                <p className="text-sm text-[var(--ink-soft)] py-2">Cargando casos…</p>
+              ) : lista.length === 0 ? (
                 <p className="text-sm text-[var(--ink-soft)] py-2">No hay casos en esta categoría.</p>
               ) : (
                 <div className="divide-y divide-[var(--line)] max-h-80 overflow-y-auto">

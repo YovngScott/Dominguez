@@ -15,6 +15,47 @@ const CASO_SELECT = `
 // operativa del encabezado.
 const buscarCasos = () => supabase.from("casos").select(CASO_SELECT).neq("estado", "entregado");
 
+function normalizarCasoRpc(caso) {
+  return {
+    ...caso,
+    cliente: { nombre_completo: caso.cliente_nombre },
+    marca: { nombre: caso.marca_nombre },
+    modelo: { nombre: caso.modelo_nombre },
+    aseguradora: { nombre: caso.aseguradora_nombre },
+  };
+}
+
+// Respaldo para que una actualización de la web siga funcionando mientras se
+// aplica la migración de rendimiento en Supabase.
+async function buscarLegacy(termino) {
+  const byVehiculo = buscarCasos()
+    .or(`placa.ilike.%${termino}%,chasis.ilike.%${termino}%,numero_reclamo.ilike.%${termino}%,numero_poliza.ilike.%${termino}%`)
+    .limit(15);
+
+  const [clientesMatch, marcasMatch, modelosMatch] = await Promise.all([
+    supabase.from("clientes").select("id").ilike("nombre_completo", `%${termino}%`).limit(15),
+    supabase.from("marcas").select("id").ilike("nombre", `%${termino}%`).limit(15),
+    supabase.from("modelos").select("id").ilike("nombre", `%${termino}%`).limit(15),
+  ]);
+
+  const clienteIds = (clientesMatch.data || []).map((c) => c.id);
+  const marcaIds = (marcasMatch.data || []).map((m) => m.id);
+  const modeloIds = (modelosMatch.data || []).map((m) => m.id);
+  const [vehiculoRes, clienteRes, marcaRes, modeloRes] = await Promise.all([
+    byVehiculo,
+    clienteIds.length ? buscarCasos().in("cliente_id", clienteIds).limit(15) : Promise.resolve({ data: [] }),
+    marcaIds.length ? buscarCasos().in("marca_id", marcaIds).limit(15) : Promise.resolve({ data: [] }),
+    modeloIds.length ? buscarCasos().in("modelo_id", modeloIds).limit(15) : Promise.resolve({ data: [] }),
+  ]);
+  const todos = [
+    ...(vehiculoRes.data || []),
+    ...(clienteRes.data || []),
+    ...(marcaRes.data || []),
+    ...(modeloRes.data || []),
+  ];
+  return Array.from(new Map(todos.map((c) => [c.id, c])).values()).slice(0, 15);
+}
+
 export default function SearchBar({ autoFocus = false }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -28,56 +69,27 @@ export default function SearchBar({ autoFocus = false }) {
     if (q.trim().length < 2) {
       setResults([]);
       setOpen(false);
+      setLoading(false);
       return;
     }
     setLoading(true);
     const termino = q.trim().replace(/[(),]/g, "");
-
-    const byVehiculo = buscarCasos()
-      .or(`placa.ilike.%${termino}%,chasis.ilike.%${termino}%,numero_reclamo.ilike.%${termino}%,numero_poliza.ilike.%${termino}%`)
-      .limit(15);
-
-    // Coincidencias en tablas relacionadas (cliente, marca, modelo): primero se
-    // buscan sus ids y luego los casos que los usan.
-    const [clientesMatch, marcasMatch, modelosMatch] = await Promise.all([
-      supabase.from("clientes").select("id").ilike("nombre_completo", `%${termino}%`).limit(15),
-      supabase.from("marcas").select("id").ilike("nombre", `%${termino}%`).limit(15),
-      supabase.from("modelos").select("id").ilike("nombre", `%${termino}%`).limit(15),
-    ]);
-
-    const clienteIds = (clientesMatch.data || []).map((c) => c.id);
-    const marcaIds = (marcasMatch.data || []).map((m) => m.id);
-    const modeloIds = (modelosMatch.data || []).map((m) => m.id);
-
-    const byClientePromise = clienteIds.length
-      ? buscarCasos().in("cliente_id", clienteIds).limit(15)
-      : Promise.resolve({ data: [] });
-    const byMarcaPromise = marcaIds.length
-      ? buscarCasos().in("marca_id", marcaIds).limit(15)
-      : Promise.resolve({ data: [] });
-    const byModeloPromise = modeloIds.length
-      ? buscarCasos().in("modelo_id", modeloIds).limit(15)
-      : Promise.resolve({ data: [] });
-
-    const [vehiculoRes, clienteRes, marcaRes, modeloRes] = await Promise.all([
-      byVehiculo,
-      byClientePromise,
-      byMarcaPromise,
-      byModeloPromise,
-    ]);
-
-    const merged = [
-      ...(vehiculoRes.data || []),
-      ...(clienteRes.data || []),
-      ...(marcaRes.data || []),
-      ...(modeloRes.data || []),
-    ];
-    const dedup = Array.from(new Map(merged.map((c) => [c.id, c])).values());
-
-    if (solicitud !== requestActual.current) return;
-    setResults(dedup.slice(0, 15));
-    setOpen(true);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase.rpc("buscar_casos_operativos", {
+        p_termino: termino,
+        p_limite: 15,
+      });
+      const resultados = error ? await buscarLegacy(termino) : (data || []).map(normalizarCasoRpc);
+      if (solicitud !== requestActual.current) return;
+      setResults(resultados);
+      setOpen(true);
+    } catch {
+      if (solicitud !== requestActual.current) return;
+      setResults([]);
+      setOpen(true);
+    } finally {
+      if (solicitud === requestActual.current) setLoading(false);
+    }
   }
 
   const debounceTimer = useRef(null);
