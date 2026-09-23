@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import Icon from "./Icon";
 
 const CASO_SELECT = `
   id, placa, chasis, numero_reclamo, numero_poliza, fecha_ingreso, estado, anio, color,
@@ -10,7 +11,9 @@ const CASO_SELECT = `
   aseguradora:aseguradoras(nombre)
 `;
 
-const buscarCasos = () => supabase.from("casos").select(CASO_SELECT);
+// Los entregados se conservan en su historial, pero no distraen la búsqueda
+// operativa del encabezado.
+const buscarCasos = () => supabase.from("casos").select(CASO_SELECT).neq("estado", "entregado");
 
 export default function SearchBar({ autoFocus = false }) {
   const [query, setQuery] = useState("");
@@ -87,17 +90,18 @@ export default function SearchBar({ autoFocus = false }) {
   useEffect(() => () => clearTimeout(debounceTimer.current), []);
 
   return (
-    <div className="relative w-full max-w-xl mx-auto">
+    <div className="relative w-full max-w-2xl mx-auto">
+      <Icon name="search" className="absolute left-5 top-1/2 -translate-y-1/2 z-10 w-5 h-5 text-slate-400 pointer-events-none" />
       <input
         autoFocus={autoFocus}
         value={query}
         onChange={handleChange}
         placeholder="Placa, chasis, reclamo, vehículo o asegurado…"
-        className="w-full text-lg text-[var(--ink)] bg-white border border-transparent rounded-full px-6 py-3.5 shadow-lg focus:outline-none focus:ring-4 focus:ring-[var(--brand-red)]/30"
+        className="w-full text-lg text-[var(--ink)] bg-white border border-white/30 rounded-2xl pl-13 pr-6 py-4 shadow-xl focus:outline-none focus:ring-4 focus:ring-[var(--brand-red)]/30"
       />
 
       {open && (
-        <div className="absolute z-30 mt-2 w-full bg-white rounded-xl shadow-xl border border-slate-200 max-h-96 overflow-y-auto">
+        <div className="absolute z-30 mt-3 w-full bg-white rounded-2xl shadow-2xl border border-slate-200 max-h-96 overflow-y-auto overflow-hidden">
           {loading && <p className="p-4 text-sm text-slate-500">Buscando…</p>}
           {!loading && results.length === 0 && (
             <p className="p-4 text-sm text-slate-500">Sin resultados para "{query}".</p>

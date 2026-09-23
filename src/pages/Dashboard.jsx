@@ -12,18 +12,21 @@ const METRICAS = [
     key: "espera",
     etiqueta: "En espera de piezas",
     color: "#d97706",
+    icon: "package",
     filtro: (c) => !["vehiculo_en_taller", "listo_para_trabajar", "completado", "entregado"].includes(c.estado),
   },
   {
     key: "listos",
     etiqueta: "Listos para trabajar",
     color: "#059669",
+    icon: "wrench",
     filtro: (c) => c.estado === "listo_para_trabajar",
   },
   {
     key: "enTaller",
     etiqueta: "Vehículos en el taller",
     color: "#0284c7",
+    icon: "car",
     filtro: (c) => c.estado === "vehiculo_en_taller",
   },
 ];
@@ -129,15 +132,22 @@ export default function Dashboard() {
   return (
     <div>
       {/* Hero con buscador */}
-      <section className="bg-[var(--ink)] text-white">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 text-center relative">
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+      <section className="bg-[var(--ink)] text-white overflow-hidden">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-12 text-center relative">
+          <div className="absolute w-80 h-80 -top-44 left-1/2 -translate-x-1/2 rounded-full bg-[var(--brand-red)] opacity-15 blur-3xl pointer-events-none" />
+          <div className="relative">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold tracking-[0.16em] text-white/75">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> PANEL OPERATIVO
+            </span>
+          <h1 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight">
             ¿Qué caso buscas hoy?
           </h1>
-          <p className="text-white/60 mt-2 mb-7">
-            Busca por placa, chasis, número de reclamo, vehículo o nombre del asegurado.
+          <p className="text-white/65 mt-2 mb-6">
+            Encuentra los casos en proceso por placa, chasis, reclamo, vehículo o asegurado.
           </p>
           <SearchBar />
+          <p className="mt-3 text-xs text-white/45">Los vehículos entregados no aparecen en esta búsqueda.</p>
+          </div>
         </div>
       </section>
 
@@ -205,6 +215,7 @@ export default function Dashboard() {
               valor={metricas[mt.key]}
               etiqueta={mt.etiqueta}
               color={mt.color}
+              icon={mt.icon}
               activa={metricaSel === mt.key}
               onClick={() => setMetricaSel((v) => (v === mt.key ? null : mt.key))}
             />
@@ -313,7 +324,7 @@ export default function Dashboard() {
   );
 }
 
-function Metrica({ valor, etiqueta, color, activa, onClick }) {
+function Metrica({ valor, etiqueta, color, icon, activa, onClick }) {
   return (
     <button
       type="button"
@@ -322,10 +333,18 @@ function Metrica({ valor, etiqueta, color, activa, onClick }) {
         activa ? "ring-2 ring-[var(--brand-red)] border-[var(--brand-red)]" : "hover:border-[var(--brand-red)]"
       }`}
     >
-      <p className="text-3xl font-extrabold" style={{ color }}>
-        {valor}
-      </p>
-      <p className="text-sm text-[var(--ink-soft)] mt-1">{etiqueta}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-3xl font-extrabold" style={{ color }}>
+            {valor}
+          </p>
+          <p className="text-sm font-semibold text-[var(--ink)] mt-1">{etiqueta}</p>
+        </div>
+        <span className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ color, backgroundColor: `${color}14` }}>
+          <Icon name={icon} className="w-5 h-5" />
+        </span>
+      </div>
+      <p className="text-xs text-[var(--ink-soft)] mt-3">Toca para ver los casos</p>
     </button>
   );
 }

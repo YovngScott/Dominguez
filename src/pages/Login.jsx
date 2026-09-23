@@ -79,7 +79,12 @@ export default function Login() {
             <button type="button" onClick={() => setPin((v) => v.slice(0, -1))} className="h-16 rounded-2xl flex items-center justify-center text-[var(--ink-soft)] hover:bg-[var(--surface-2)]" aria-label="Borrar último dígito" disabled={submitting}><Icon name="backspace" className="w-6 h-6" /></button>
           </div>
 
-          {submitting && <p className="text-center text-sm text-[var(--ink-soft)] mt-5">Verificando acceso…</p>}
+          {submitting && (
+            <p className="text-center text-sm text-[var(--ink-soft)] mt-5 inline-flex items-center justify-center gap-2 w-full">
+              <span className="w-4 h-4 rounded-full border-2 border-[var(--line)] border-t-[var(--brand-red)] animate-spin" />
+              Verificando acceso…
+            </p>
+          )}
           {error && <p className="text-center text-sm font-medium text-[var(--brand-red)] mt-5">{error}</p>}
 
           <button type="button" onClick={() => { setMostrarLegacy((v) => !v); setError(""); }} className="w-full mt-7 text-xs font-semibold text-[var(--ink-soft)] hover:text-[var(--brand-red)]">
