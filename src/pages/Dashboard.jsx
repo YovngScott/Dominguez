@@ -132,7 +132,7 @@ export default function Dashboard() {
   return (
     <div>
       {/* Hero con buscador */}
-      <section className="bg-[var(--ink)] text-white overflow-hidden">
+      <section className="relative z-20 bg-[var(--ink)] text-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-12 text-center relative">
           <div className="absolute w-80 h-80 -top-44 left-1/2 -translate-x-1/2 rounded-full bg-[var(--brand-red)] opacity-15 blur-3xl pointer-events-none" />
           <div className="relative">

@@ -90,7 +90,7 @@ export default function SearchBar({ autoFocus = false }) {
   useEffect(() => () => clearTimeout(debounceTimer.current), []);
 
   return (
-    <div className="relative w-full max-w-2xl mx-auto">
+    <div className="relative z-30 w-full max-w-2xl mx-auto">
       <Icon name="search" className="absolute left-5 top-1/2 -translate-y-1/2 z-10 w-5 h-5 text-slate-400 pointer-events-none" />
       <input
         autoFocus={autoFocus}
@@ -101,7 +101,7 @@ export default function SearchBar({ autoFocus = false }) {
       />
 
       {open && (
-        <div className="absolute z-30 mt-3 w-full bg-white rounded-2xl shadow-2xl border border-slate-200 max-h-96 overflow-y-auto overflow-hidden">
+        <div className="absolute z-50 mt-3 w-full bg-white rounded-2xl shadow-2xl border border-slate-200 max-h-96 overflow-y-auto overflow-hidden">
           {loading && <p className="p-4 text-sm text-slate-500">Buscando…</p>}
           {!loading && results.length === 0 && (
             <p className="p-4 text-sm text-slate-500">Sin resultados para "{query}".</p>
