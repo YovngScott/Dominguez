@@ -4,7 +4,6 @@ import { useAuth } from "./hooks/useAuth";
 import { useRol } from "./hooks/useRol";
 import Logo from "./components/Logo";
 import Icon from "./components/Icon";
-import WhatsappConnectModal from "./components/WhatsappConnectModal";
 import Login from "./pages/Login";
 import { aplicarTema, temaOscuroGuardado } from "./lib/theme";
 import { supabase } from "./lib/supabaseClient";
@@ -47,6 +46,9 @@ const ReporteTrabajadores = lazy(() => import("./pages/ReporteTrabajadores"));
 const Usuarios = lazy(() => import("./pages/Usuarios"));
 const Llaves = lazy(() => import("./pages/Llaves"));
 const Mensajes = lazy(() => import("./pages/Mensajes"));
+// La conexión de WhatsApp solo se necesita si el administrador abre esa acción
+// desde el menú. Mantenerla fuera del arranque reduce el JavaScript inicial.
+const WhatsappConnectModal = lazy(() => import("./components/WhatsappConnectModal"));
 
 // El menú muestra áreas de trabajo. Las pantallas específicas viven dentro de
 // cada área para evitar una lista larga de funciones sin jerarquía.
@@ -317,7 +319,11 @@ function PrivateLayout({ children }) {
         <Suspense fallback={Cargando}>{children}</Suspense>
       </main>
 
-      {waModalOpen && <WhatsappConnectModal onClose={() => setWaModalOpen(false)} />}
+      {waModalOpen && (
+        <Suspense fallback={null}>
+          <WhatsappConnectModal onClose={() => setWaModalOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
