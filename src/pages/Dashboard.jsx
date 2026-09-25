@@ -37,6 +37,9 @@ const PRIORIDAD_ASEGURADORAS = [
   /seguros\s+sura/i,
   /coop[-\s]?seguros/i,
   /atl[aá]ntica/i,
+  /seguro\s+reservas/i,
+  /colonial/i,
+  /internacional/i,
 ];
 
 function ordenarAseguradoras(lista) {
