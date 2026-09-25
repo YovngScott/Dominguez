@@ -141,6 +141,7 @@ export default function NewOrder() {
            marca:marcas(nombre), modelo:modelos(nombre)`
         )
         .eq("id", casoId)
+        .is("archivado_en", null)
         .single();
       if (!data) return;
       setForm((f) => ({
@@ -203,6 +204,7 @@ export default function NewOrder() {
             .from("casos")
             .select("id, estado")
             .ilike("chasis", form.chasis.trim())
+            .is("archivado_en", null)
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();

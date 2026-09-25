@@ -93,7 +93,8 @@ export default function Dashboard() {
            aseguradora:aseguradoras(nombre),
            marca:marcas(nombre), modelo:modelos(nombre),
            cliente:clientes(nombre_completo)`
-        );
+        )
+        .is("archivado_en", null);
 
       const idsGenerales = new Set((asegs || []).filter((a) => a.es_personal).map((a) => a.id));
       const counts = {};

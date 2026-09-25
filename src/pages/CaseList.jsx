@@ -42,6 +42,7 @@ export default function CaseList() {
            modelo:modelos(nombre)`
         )
         .eq("aseguradora_id", aseguradoraId)
+        .is("archivado_en", null)
         .order("created_at", { ascending: false });
 
       setAseguradora(aseg);
@@ -164,21 +165,6 @@ export default function CaseList() {
           );
         })}
       </div>
-
-      {/* Los casos cerrados se mantienen consultables sin mezclarse con el
-          trabajo activo. En General aquí aparecen las cotizaciones antiguas. */}
-      {!buscando && (
-        <button
-          onClick={() => setActivo("completos")}
-          className={`mb-4 text-sm font-medium px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 ${
-            activo === "completos"
-              ? "bg-slate-700 text-white"
-              : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-          }`}
-        >
-          <Icon name="check" className="w-4 h-4" /> Casos completos ({conteo("completos")})
-        </button>
-      )}
 
       {buscando && (
         <p className="mb-3 text-sm text-[var(--ink-soft)]">

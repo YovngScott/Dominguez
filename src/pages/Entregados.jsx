@@ -28,6 +28,7 @@ export default function Entregados() {
            modelo:modelos(nombre)`
         )
         .eq("estado", "entregado")
+        .is("archivado_en", null)
         .order("updated_at", { ascending: false });
       setCasos(data || []);
       setLoading(false);

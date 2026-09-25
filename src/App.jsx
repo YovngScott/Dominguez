@@ -17,7 +17,6 @@ const CaseList = lazy(() => import("./pages/CaseList"));
 const CaseDetail = lazy(() => import("./pages/CaseDetail"));
 const NewCase = lazy(() => import("./pages/NewCase"));
 const EditCase = lazy(() => import("./pages/EditCase"));
-const CaseReport = lazy(() => import("./pages/CaseReport"));
 const QuoteList = lazy(() => import("./pages/QuoteList"));
 const NewQuote = lazy(() => import("./pages/NewQuote"));
 const QuoteView = lazy(() => import("./pages/QuoteView"));
@@ -30,7 +29,7 @@ const EtiquetasPiezas = lazy(() => import("./pages/EtiquetasPiezas"));
 const EtiquetasHistorial = lazy(() => import("./pages/EtiquetasHistorial"));
 const Tramos = lazy(() => import("./pages/Tramos"));
 const Entregados = lazy(() => import("./pages/Entregados"));
-const CasosCompletos = lazy(() => import("./pages/CasosCompletos"));
+const Archivados = lazy(() => import("./pages/Archivados"));
 const Landing = lazy(() => import("./pages/Landing"));
 const ClientList = lazy(() => import("./pages/ClientList"));
 const ContactosList = lazy(() => import("./pages/ContactosList"));
@@ -67,7 +66,7 @@ const NAV_GROUPS = [
       { to: "/ordenes", label: "Recibos", icon: "clipboard" },
       { to: "/llaves", label: "Llaves", icon: "key" },
       { to: "/citas", label: "Citas", icon: "clock" },
-      { to: "/casos/completos", label: "Casos completos", icon: "check" },
+      { to: "/archivados", label: "Archivados", icon: "archive" },
       { to: "/entregados", label: "Vehículos entregados", icon: "check" },
     ],
   },
@@ -211,7 +210,19 @@ function PrivateLayout({ children }) {
 
         {/* Menú desplegable (escritorio y móvil) */}
         {menuOpen && (
-          <nav className="absolute right-4 sm:right-6 top-full mt-1 z-40 w-[min(20rem,calc(100vw-2rem))] bg-white rounded-2xl shadow-xl border border-[var(--line)] p-2 flex flex-col gap-1 max-h-[80vh] overflow-y-auto">
+          <nav aria-label="Menú principal" className="absolute right-4 sm:right-6 top-full mt-1 z-40 w-[min(20rem,calc(100vw-2rem))] bg-white rounded-2xl shadow-xl border border-[var(--line)] p-2 flex flex-col gap-1 max-h-[80vh] overflow-y-auto">
+            <NavLink
+              to="/"
+              onClick={() => setMenuOpen(false)}
+              end
+              className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-3 font-semibold transition-colors ${isActive ? "bg-[var(--brand-red)] text-white shadow-sm" : "text-[var(--ink)] hover:bg-[var(--paper)]"}`}
+            >
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[var(--brand-red-50)] text-[var(--brand-red)]">
+                <Icon name="home" className="w-5 h-5" />
+              </span>
+              Inicio
+            </NavLink>
+            <div className="h-px bg-[var(--line)] my-1" />
             {navegacion.map((group) => {
               const abierta = seccionAbierta === group.id;
               const activa = groupForPath(location.pathname) === group.id;
@@ -398,10 +409,10 @@ export default function App() {
         }
       />
       <Route
-        path="/casos/completos"
+        path="/archivados"
         element={
           <PrivateLayout>
-            <CasosCompletos />
+            <Archivados />
           </PrivateLayout>
         }
       />
@@ -419,15 +430,6 @@ export default function App() {
           <PrivateLayout>
             <EditCase />
           </PrivateLayout>
-        }
-      />
-      {/* Reporte imprimible: sin encabezado para una impresión limpia */}
-      <Route
-        path="/casos/:casoId/reporte"
-        element={
-          <PrivateBare>
-            <CaseReport />
-          </PrivateBare>
         }
       />
       <Route

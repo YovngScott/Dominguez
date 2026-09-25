@@ -241,10 +241,34 @@ export default function CaseDetail() {
     navigate(`/aseguradoras/${caso.aseguradora_id}`);
   }
 
+  async function cambiarArchivo(archivar) {
+    const accion = archivar ? "archivar" : "restaurar";
+    const mensaje = archivar
+      ? "¿Archivar este caso? Se ocultará de la operación, pero no se eliminará."
+      : "¿Restaurar este caso a la vista operativa?";
+    if (!confirm(mensaje)) return;
+
+    setEstadoError("");
+    const cambios = archivar
+      ? { archivado_en: new Date().toISOString(), numero_llave: null }
+      : { archivado_en: null };
+    const { error } = await supabase.from("casos").update(cambios).eq("id", casoId);
+    if (error) {
+      setEstadoError(`No se pudo ${accion} el caso. Ejecuta sql/62_archivar_casos.sql en Supabase.`);
+      return;
+    }
+    if (archivar) {
+      navigate("/archivados");
+      return;
+    }
+    setCaso((actual) => ({ ...actual, archivado_en: null, numero_llave: null }));
+  }
+
   if (loading) return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
   if (!caso) return <p className="p-10 text-center text-[var(--ink-soft)]">Caso no encontrado.</p>;
 
   const completado = caso.estado === "completado";
+  const archivado = Boolean(caso.archivado_en);
   const estadoActivo =
     completado
       ? null
@@ -289,9 +313,14 @@ export default function CaseDetail() {
           <Link to={`/ordenes/nueva?caso=${casoId}`} className="btn-ghost text-sm py-2 px-3 gap-1.5">
             <Icon name="clipboard" className="w-4 h-4" /> Recibo
           </Link>
-          <Link to={`/casos/${casoId}/reporte`} className="btn-ghost text-sm py-2 px-3 gap-1.5">
-            <Icon name="printer" className="w-4 h-4" /> Reporte
-          </Link>
+          <button
+            type="button"
+            onClick={() => cambiarArchivo(!archivado)}
+            className="btn-ghost text-sm py-2 px-3 gap-1.5"
+          >
+            <Icon name={archivado ? "restore" : "archive"} className="w-4 h-4" />
+            {archivado ? "Restaurar" : "Archivar"}
+          </button>
           <Link to={`/casos/${casoId}/editar`} className="btn-ghost text-sm py-2 px-3 gap-1.5">
             <Icon name="pencil" className="w-4 h-4" /> Editar
           </Link>
@@ -306,6 +335,12 @@ export default function CaseDetail() {
       </div>
 
       <div className="card p-6 mt-3 mb-6">
+        {archivado && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+            <Icon name="archive" className="mt-0.5 w-5 h-5 shrink-0 text-slate-500" />
+            <p><strong>Este caso está archivado.</strong> No aparece en la operación diaria. Puedes restaurarlo cuando vuelva a trabajarse.</p>
+          </div>
+        )}
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">
@@ -332,11 +367,11 @@ export default function CaseDetail() {
                 <button
                   key={estado}
                   onClick={() => actualizarEstado(estado)}
-                  disabled={completado}
+                  disabled={completado || archivado}
                   className={`flex-1 min-w-[8.5rem] px-3 py-2 rounded-lg text-sm font-semibold transition-all inline-flex items-center justify-center gap-1.5 ${
                     activo ? "bg-white shadow-sm" : "text-[var(--ink-soft)] hover:bg-white/60"
                   } ${
-                    completado ? "opacity-50 cursor-not-allowed" : ""
+                    completado || archivado ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                   style={activo ? { color: e.accent } : {}}
                 >

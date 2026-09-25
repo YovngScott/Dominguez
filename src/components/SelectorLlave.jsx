@@ -16,6 +16,7 @@ export default function SelectorLlave({ casoId, numeroLlave, estado, onChange })
       .select("id, numero_llave")
       .not("numero_llave", "is", null)
       .not("estado", "in", "(entregado,completado)")
+      .is("archivado_en", null)
       .neq("id", casoId);
     if (!e) setOcupadas(new Set((data || []).map((c) => c.numero_llave)));
   }

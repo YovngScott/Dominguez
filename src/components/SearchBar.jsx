@@ -11,9 +11,9 @@ const CASO_SELECT = `
   aseguradora:aseguradoras(nombre)
 `;
 
-// Los entregados se conservan en su historial, pero no distraen la búsqueda
-// operativa del encabezado.
-const buscarCasos = () => supabase.from("casos").select(CASO_SELECT).neq("estado", "entregado");
+// Los entregados y archivados se conservan en su historial, pero no distraen
+// la búsqueda operativa del encabezado.
+const buscarCasos = () => supabase.from("casos").select(CASO_SELECT).neq("estado", "entregado").is("archivado_en", null);
 
 function normalizarCasoRpc(caso) {
   return {

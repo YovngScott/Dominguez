@@ -122,6 +122,7 @@ export default function NewQuote() {
            marca:marcas(nombre), modelo:modelos(nombre)`
         )
         .eq("id", casoId)
+        .is("archivado_en", null)
         .maybeSingle();
       if (!data) return;
       setForm((f) => ({
@@ -468,6 +469,7 @@ export default function NewQuote() {
             .from("casos")
             .select("id")
             .ilike("chasis", form.chasis.trim())
+            .is("archivado_en", null)
             .order("created_at", { ascending: false })
             .limit(1);
           casoId = casos?.[0]?.id || null;

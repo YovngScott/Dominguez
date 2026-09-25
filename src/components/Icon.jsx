@@ -65,6 +65,19 @@ const PATHS = {
       <path d="M10 11v6M14 11v6" />
     </>
   ),
+  archive: (
+    <>
+      <path d="M3 7h18v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M2 3h20v4H2zM10 12h4" />
+    </>
+  ),
+  restore: (
+    <>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v5h5" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
   camera: (
     <>
       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
@@ -108,6 +121,12 @@ const PATHS = {
     <>
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M9 22v-6h6v6" />
     </>
   ),
   car: (

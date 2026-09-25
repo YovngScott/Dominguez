@@ -277,6 +277,7 @@ export default function EtiquetasPiezas() {
         .from("casos")
         .select("id")
         .ilike("numero_reclamo", form.reclamo.trim())
+        .is("archivado_en", null)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();

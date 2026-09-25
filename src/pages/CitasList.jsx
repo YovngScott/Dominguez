@@ -56,11 +56,11 @@ export default function CitasList() {
       .select(
         `*,
          cliente:clientes(nombre_completo),
-         caso:casos(placa, marca:marcas(nombre), modelo:modelos(nombre))`
+         caso:casos(placa, archivado_en, marca:marcas(nombre), modelo:modelos(nombre))`
       )
       .order("fecha", { ascending: true })
       .order("hora", { ascending: true });
-    setCitas(data || []);
+    setCitas((data || []).filter((cita) => !cita.caso?.archivado_en));
     setLoading(false);
   }
 
@@ -303,6 +303,7 @@ function CitaModal({ cita, onCancel, onSaved }) {
       .select("id, placa, estado, marca:marcas(nombre), modelo:modelos(nombre)")
       .eq("cliente_id", clienteId)
       .not("estado", "in", "(entregado,completado)")
+      .is("archivado_en", null)
       .order("created_at", { ascending: false });
     const lista = data || [];
     setCasos(lista);

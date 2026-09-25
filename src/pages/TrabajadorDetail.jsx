@@ -6,7 +6,7 @@ import { FASES_REPARACION } from "../lib/estados";
 
 const vehiculo = (c) => [c?.marca?.nombre, c?.modelo?.nombre, c?.anio].filter(Boolean).join(" ") || "Vehículo";
 const coincide = (c, q) => [c.numero_llave && `llave ${c.numero_llave}`, c.placa, c.chasis, c.numero_reclamo, c.cliente?.nombre_completo, vehiculo(c)].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
-const CASO_SELECT = "id, numero_llave, placa, chasis, numero_reclamo, estado, anio, fase_reparacion, cliente:clientes(nombre_completo), marca:marcas(nombre), modelo:modelos(nombre)";
+const CASO_SELECT = "id, numero_llave, placa, chasis, numero_reclamo, estado, archivado_en, anio, fase_reparacion, cliente:clientes(nombre_completo), marca:marcas(nombre), modelo:modelos(nombre)";
 
 export default function TrabajadorDetail() {
   const { trabajadorId } = useParams();
@@ -23,9 +23,9 @@ export default function TrabajadorDetail() {
     const [t, a, c] = await Promise.all([
       supabase.from("trabajadores_taller").select("*").eq("id", trabajadorId).maybeSingle(),
       supabase.from("casos_trabajadores").select(`id, estado, asignado_at, completado_at, caso:casos(${CASO_SELECT})`).eq("trabajador_id", trabajadorId).order("asignado_at", { ascending: false }),
-      supabase.from("casos").select(CASO_SELECT).eq("estado", "vehiculo_en_taller").order("updated_at", { ascending: false }),
+      supabase.from("casos").select(CASO_SELECT).eq("estado", "vehiculo_en_taller").is("archivado_en", null).order("updated_at", { ascending: false }),
     ]);
-    setTrabajador(t.data || null); setAsignaciones(a.data || []); setCasos(c.data || []);
+    setTrabajador(t.data || null); setAsignaciones((a.data || []).filter((asignacion) => !asignacion.caso?.archivado_en)); setCasos(c.data || []);
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
