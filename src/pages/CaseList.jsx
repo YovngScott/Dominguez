@@ -62,11 +62,8 @@ export default function CaseList() {
   // estado no sea explícitamente otro estado conocido (así también aparecen
   // casos creados con estados antiguos como "ingresado").
   const perteneceA = (caso, estado) => {
-    if (estado === "completos") {
-      return caso.estado === "completado";
-    }
     if (estado === "en_espera_piezas") {
-      return !["listo_para_trabajar", "vehiculo_en_taller", "completado", "entregado"].includes(caso.estado);
+      return !["listo_para_trabajar", "vehiculo_en_taller", "entregado"].includes(caso.estado);
     }
     return caso.estado === estado;
   };
@@ -217,7 +214,7 @@ export default function CaseList() {
                 </span>
               ) : (
                 <div className="flex items-center gap-3 shrink-0">
-                  {diasDesde(c.fecha_ingreso) >= 30 && !["completado", "entregado"].includes(c.estado) && (
+                  {diasDesde(c.fecha_ingreso) >= 30 && c.estado !== "entregado" && (
                     <span title={`En espera desde hace ${diasDesde(c.fecha_ingreso)} días`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
                       <Icon name="alert" className="w-3.5 h-3.5" /> {diasDesde(c.fecha_ingreso)}d
                     </span>

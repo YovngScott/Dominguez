@@ -15,7 +15,7 @@ export default function SelectorLlave({ casoId, numeroLlave, estado, onChange })
       .from("casos")
       .select("id, numero_llave")
       .not("numero_llave", "is", null)
-      .not("estado", "in", "(entregado,completado)")
+      .neq("estado", "entregado")
       .is("archivado_en", null)
       .neq("id", casoId);
     if (!e) setOcupadas(new Set((data || []).map((c) => c.numero_llave)));
@@ -41,7 +41,7 @@ export default function SelectorLlave({ casoId, numeroLlave, estado, onChange })
     setAbierto(false);
   }
 
-  if (["entregado", "completado"].includes(estado)) {
+  if (estado === "entregado") {
     return <p className="text-xs text-[var(--ink-soft)]">Llave liberada al cerrar el caso.</p>;
   }
 

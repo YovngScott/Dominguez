@@ -217,7 +217,7 @@ export default function NewOrder() {
             .from("casos")
             .update({ estado: "vehiculo_en_taller" })
             .eq("id", casoFinal)
-            .not("estado", "in", "(entregado,completado)");
+            .neq("estado", "entregado");
         } else {
           setEstado("Creando caso…");
           const { data: cliente, error: clienteErr } = await supabase

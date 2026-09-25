@@ -267,12 +267,9 @@ export default function CaseDetail() {
   if (loading) return <p className="p-10 text-center text-[var(--ink-soft)]">Cargando…</p>;
   if (!caso) return <p className="p-10 text-center text-[var(--ink-soft)]">Caso no encontrado.</p>;
 
-  const completado = caso.estado === "completado";
   const archivado = Boolean(caso.archivado_en);
   const estadoActivo =
-    completado
-      ? null
-      : caso.estado === "vehiculo_en_taller"
+    caso.estado === "vehiculo_en_taller"
       ? "listo_para_trabajar"
       : caso.estado !== "listo_para_trabajar" && caso.estado !== "entregado"
         ? "en_espera_piezas"
@@ -367,11 +364,11 @@ export default function CaseDetail() {
                 <button
                   key={estado}
                   onClick={() => actualizarEstado(estado)}
-                  disabled={completado || archivado}
+                  disabled={archivado}
                   className={`flex-1 min-w-[8.5rem] px-3 py-2 rounded-lg text-sm font-semibold transition-all inline-flex items-center justify-center gap-1.5 ${
                     activo ? "bg-white shadow-sm" : "text-[var(--ink-soft)] hover:bg-white/60"
                   } ${
-                    completado || archivado ? "opacity-50 cursor-not-allowed" : ""
+                    archivado ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                   style={activo ? { color: e.accent } : {}}
                 >
@@ -381,24 +378,6 @@ export default function CaseDetail() {
             })}
           </div>
           {estadoError && <p className="text-sm text-[var(--brand-red)] mt-2">{estadoError}</p>}
-
-          {completado && (
-            <p className="mt-3 inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800">
-              <Icon name="check" className="w-4 h-4" /> Trabajo colocado y marcado como completo
-            </p>
-          )}
-
-          {enTaller && caso.fase_reparacion === "listo_entrega" && (
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm("¿Confirmas que el trabajo ya fue colocado y está terminado?")) actualizarEstado("completado");
-              }}
-              className="mt-3 btn-ghost border-violet-300 !text-violet-700 hover:!border-violet-500"
-            >
-              <Icon name="check" className="w-4 h-4" /> Marcar trabajo como completo
-            </button>
-          )}
 
           {estadoActivo === "listo_para_trabajar" && (
             <label
@@ -515,20 +494,6 @@ export default function CaseDetail() {
       {tab === "documentos" && (
         <div className="space-y-4">
           <DocumentManager casoId={caso.id} />
-          {completado && (
-            <div className="card border-violet-200 bg-violet-50/40 p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-              <p className="text-sm text-violet-800">Este trabajo ya fue colocado y está cerrado como completo.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm("¿Reabrir este caso en espera de piezas?")) actualizarEstado("en_espera_piezas");
-                }}
-                className="btn-ghost whitespace-nowrap"
-              >
-                Reabrir caso
-              </button>
-            </div>
-          )}
         </div>
       )}
       {tab === "cotizaciones" && <Cotizaciones lista={cotizaciones} casoId={casoId} />}

@@ -14,7 +14,7 @@ create index if not exists idx_casos_archivados_en
 create index if not exists idx_casos_operativos_sin_archivar
   on casos (estado, aseguradora_id, fecha_ingreso)
   where archivado_en is null
-    and estado not in ('entregado', 'completado');
+    and estado <> 'entregado';
 
 -- Actualiza las funciones ligeras del tablero y buscador. SECURITY INVOKER
 -- mantiene las mismas políticas RLS de cada usuario autenticado.
@@ -99,13 +99,13 @@ as $$
     join aseguradoras_activas a on a.id = c.aseguradora_id
     where coalesce(a.es_personal, false) = false
       and c.archivado_en is null
-      and c.estado not in ('entregado', 'completado')
+      and c.estado <> 'entregado'
   ),
   tarjetas_fila as (
     select
       a.id, a.nombre, a.logo_url, a.es_personal, a.orden,
       count(c.id) filter (
-        where c.estado not in ('entregado', 'completado')
+        where c.estado <> 'entregado'
       ) as conteo
     from aseguradoras_activas a
     left join casos c on c.aseguradora_id = a.id and c.archivado_en is null
@@ -177,7 +177,7 @@ as $$
   left join modelos mo on mo.id = c.modelo_id
   where coalesce(a.es_personal, false) = false
     and c.archivado_en is null
-    and c.estado not in ('entregado', 'completado')
+    and c.estado <> 'entregado'
     and case p_categoria
       when 'espera' then c.estado not in ('vehiculo_en_taller', 'listo_para_trabajar')
       when 'listos' then c.estado = 'listo_para_trabajar'

@@ -13,7 +13,7 @@ const METRICAS = [
     etiqueta: "En espera de piezas",
     color: "#d97706",
     icon: "package",
-    filtro: (c) => !["vehiculo_en_taller", "listo_para_trabajar", "completado", "entregado"].includes(c.estado),
+    filtro: (c) => !["vehiculo_en_taller", "listo_para_trabajar", "entregado"].includes(c.estado),
   },
   {
     key: "listos",
@@ -121,16 +121,16 @@ export default function Dashboard() {
       const m = { espera: 0, listos: 0, enTaller: 0 };
       const activos = [];
       (casos || []).forEach((c) => {
-        const estaCerrado = ["entregado", "completado"].includes(c.estado);
+        const estaCerrado = c.estado === "entregado";
         // La tarjeta debe coincidir con lo que aparece al entrar: solo casos
-        // activos, nunca entregados, completos ni archivados.
+        // activos, nunca entregados ni archivados.
         if (!estaCerrado) {
           counts[c.aseguradora_id] = (counts[c.aseguradora_id] || 0) + 1;
         }
         const esGeneral = idsGenerales.has(c.aseguradora_id);
         if (esGeneral) return;
         if (estaCerrado) {
-          // Los completos y entregados no cuentan como casos operativos.
+          // Los entregados no cuentan como casos operativos.
         } else if (c.estado === "vehiculo_en_taller") {
           m.enTaller += 1;
           activos.push(c);

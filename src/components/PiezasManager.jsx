@@ -224,7 +224,7 @@ export default function PiezasManager({ casoId, caso, onEstadoPiezasChange }) {
   // una pieza pendiente lo devuelve a espera. Nunca altera un vehículo ya en
   // taller ni un expediente cerrado manualmente.
   async function sincronizarEstadoPiezas(lista, recibidasSet) {
-    if (!lista.length || ["vehiculo_en_taller", "completado", "entregado"].includes(caso?.estado)) return;
+    if (!lista.length || ["vehiculo_en_taller", "entregado"].includes(caso?.estado)) return;
     const proximo = lista.every((p) => recibidasSet.has(p.clave))
       ? "listo_para_trabajar"
       : "en_espera_piezas";
