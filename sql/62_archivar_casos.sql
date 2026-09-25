@@ -105,8 +105,7 @@ as $$
     select
       a.id, a.nombre, a.logo_url, a.es_personal, a.orden,
       count(c.id) filter (
-        where not coalesce(a.es_personal, false)
-           or c.estado not in ('entregado', 'completado')
+        where c.estado not in ('entregado', 'completado')
       ) as conteo
     from aseguradoras_activas a
     left join casos c on c.aseguradora_id = a.id and c.archivado_en is null

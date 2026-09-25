@@ -31,6 +31,26 @@ const METRICAS = [
   },
 ];
 
+// El orden evita que las aseguradoras más usadas queden mezcladas entre las
+// demás, incluso si cambia el orden administrativo en la base de datos.
+const PRIORIDAD_ASEGURADORAS = [
+  /seguros\s+sura/i,
+  /coop[-\s]?seguros/i,
+  /atl[aá]ntica/i,
+];
+
+function ordenarAseguradoras(lista) {
+  const prioridad = (nombre = "") => {
+    const indice = PRIORIDAD_ASEGURADORAS.findIndex((patron) => patron.test(nombre));
+    return indice === -1 ? 99 : indice;
+  };
+  return [...lista].sort((a, b) =>
+    prioridad(a.nombre) - prioridad(b.nombre) ||
+    (Number(a.orden) || 9999) - (Number(b.orden) || 9999) ||
+    String(a.nombre || "").localeCompare(String(b.nombre || ""), "es")
+  );
+}
+
 export default function Dashboard() {
   const [aseguradoras, setAseguradoras] = useState([]);
   const [conteos, setConteos] = useState({});
@@ -101,14 +121,13 @@ export default function Dashboard() {
       const m = { espera: 0, listos: 0, enTaller: 0 };
       const activos = [];
       (casos || []).forEach((c) => {
-        const esGeneral = idsGenerales.has(c.aseguradora_id);
         const estaCerrado = ["entregado", "completado"].includes(c.estado);
-        // General agrupa cotizaciones que con frecuencia no se convierten en
-        // trabajo. Se consulta desde su propia tarjeta, no desde el tablero
-        // operativo ni los contadores de producción.
-        if (!esGeneral || !estaCerrado) {
+        // La tarjeta debe coincidir con lo que aparece al entrar: solo casos
+        // activos, nunca entregados, completos ni archivados.
+        if (!estaCerrado) {
           counts[c.aseguradora_id] = (counts[c.aseguradora_id] || 0) + 1;
         }
+        const esGeneral = idsGenerales.has(c.aseguradora_id);
         if (esGeneral) return;
         if (estaCerrado) {
           // Los completos y entregados no cuentan como casos operativos.
@@ -124,7 +143,7 @@ export default function Dashboard() {
         }
       });
 
-      setAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
+      setAseguradoras(ordenarAseguradoras((asegs || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || ""))));
       setConteos(counts);
       setMetricas(m);
       setCasosActivos(activos);
@@ -141,7 +160,7 @@ export default function Dashboard() {
         return;
       }
 
-      const tarjetas = resumen.aseguradoras || [];
+      const tarjetas = ordenarAseguradoras(resumen.aseguradoras || []);
       setAseguradoras(tarjetas);
       setConteos(Object.fromEntries(tarjetas.map((a) => [a.id, Number(a.conteo) || 0])));
       setMetricas({
