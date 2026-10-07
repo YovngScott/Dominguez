@@ -6,29 +6,47 @@
 // tiene en su lista (app.dominguezautopintura.com, etc.). Desde otro dominio
 // el navegador las bloquea por CORS; en ese caso caemos al PDF automáticamente.
 
-// Cada puesto imprime en la impresora conectada a ESA computadora. No se debe
-// fijar una IP LAN: al migrar de PC, el navegador terminaría enviando las
-// etiquetas al equipo anterior. Se usa IPv4 explícito porque "localhost"
-// puede resolverse primero como ::1, mientras Electron escucha en IPv4.
-export const BASE = "http://127.0.0.1:9100";
+// La PC 10.0.0.73 es el servidor central del taller: ahí está conectada la
+// impresora de etiquetas. En esa misma PC se prefiere loopback; desde las demás
+// computadoras de la LAN se usa automáticamente la dirección central.
+export const SERVIDORES = ["http://127.0.0.1:9100", "http://10.0.0.73:9100"];
 const TOKEN = "dps-7f3a9c2e1b4d6f8a0e5c3b7d9a1f4e2c"; // token estático del print server
 const LS_PRINTER = "impresoraEtiquetas";
+let baseActiva = "";
 
-// ¿El print server está corriendo y nos acepta? (timeout corto)
-export async function servidorDisponible() {
+async function probarServidor(base) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 3000);
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 3000);
-    const r = await fetch(`${BASE}/health`, { signal: ctrl.signal });
-    clearTimeout(t);
+    const r = await fetch(`${base}/health`, { signal: ctrl.signal, cache: "no-store" });
     return r.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(t);
   }
 }
 
+async function resolverServidor() {
+  for (const base of SERVIDORES) {
+    if (await probarServidor(base)) {
+      baseActiva = base;
+      return base;
+    }
+  }
+  baseActiva = "";
+  return "";
+}
+
+// ¿El print server está corriendo y nos acepta? (timeout corto)
+export async function servidorDisponible() {
+  return Boolean(await resolverServidor());
+}
+
 export async function listarImpresoras() {
-  const r = await fetch(`${BASE}/printers`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  const base = baseActiva || (await resolverServidor());
+  if (!base) throw new Error("No se encontró el servidor de etiquetas del taller.");
+  const r = await fetch(`${base}/printers`, { headers: { Authorization: `Bearer ${TOKEN}` } });
   const j = await r.json();
   return j.printers || [];
 }
@@ -53,7 +71,9 @@ export function elegirImpresoraEtiquetas(printers) {
 }
 
 async function imprimirZpl(zpl, printerName) {
-  const r = await fetch(`${BASE}/print/label`, {
+  const base = baseActiva || (await resolverServidor());
+  if (!base) throw new Error("No se encontró el servidor de etiquetas del taller.");
+  const r = await fetch(`${base}/print/label`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify({ zpl, printerName }),
@@ -71,8 +91,9 @@ async function imprimirZpl(zpl, printerName) {
 export async function imprimirEtiquetas(payload) {
   if (!(await servidorDisponible())) {
     throw new Error(
-      "No se pudo conectar con STAGE AI LABS Print Server en 127.0.0.1:9100. " +
-        "Confirma que la aplicación muestre En línea y permite el acceso a la red local en Edge."
+      "No se pudo conectar con STAGE AI LABS Print Server. Se probaron " +
+        "127.0.0.1:9100 y el servidor central 10.0.0.73:9100. " +
+        "Permite el acceso a la red local en Edge."
     );
   }
 
@@ -98,8 +119,9 @@ export async function imprimirEtiquetas(payload) {
 export async function imprimirVehiculo(payload) {
   if (!(await servidorDisponible())) {
     throw new Error(
-      "No se pudo conectar con STAGE AI LABS Print Server en 127.0.0.1:9100. " +
-        "Confirma que la aplicación muestre En línea y permite el acceso a la red local en Edge."
+      "No se pudo conectar con STAGE AI LABS Print Server. Se probaron " +
+        "127.0.0.1:9100 y el servidor central 10.0.0.73:9100. " +
+        "Permite el acceso a la red local en Edge."
     );
   }
 
