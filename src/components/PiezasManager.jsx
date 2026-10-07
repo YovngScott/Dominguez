@@ -890,7 +890,7 @@ function EtiquetasModal({
             <Icon name="tag" className="w-5 h-5 text-[var(--brand-red)]" /> Imprimir etiquetas
           </h3>
           <p className="text-xs text-[var(--ink-soft)] mt-1">
-            Selecciona qué piezas llevarán etiqueta. Cada una sale en una hoja de 4×6&quot;
+            Selecciona qué piezas llevarán etiqueta. Cada una sale en una hoja de 4×2&quot;
             con los datos del asegurado, vehículo y seguro, lista para pegar en la caja.
           </p>
         </div>

@@ -1,6 +1,6 @@
 // Cliente del STAGE AI LABS Print Server (app local propia que imprime ZPL directo en la
 // impresora térmica de etiquetas, sin pasar por el diálogo de impresión de la
-// PC). Corre en http://localhost:9100.
+// PC). Corre en http://127.0.0.1:9100.
 //
 // IMPORTANTE: el print server solo acepta peticiones desde los dominios que
 // tiene en su lista (app.dominguezautopintura.com, etc.). Desde otro dominio
@@ -8,9 +8,9 @@
 
 // Cada puesto imprime en la impresora conectada a ESA computadora. No se debe
 // fijar una IP LAN: al migrar de PC, el navegador terminaría enviando las
-// etiquetas al equipo anterior. Los navegadores consideran localhost un origen
-// local confiable incluso cuando la aplicación está publicada por HTTPS.
-export const BASE = "http://localhost:9100";
+// etiquetas al equipo anterior. Se usa IPv4 explícito porque "localhost"
+// puede resolverse primero como ::1, mientras Electron escucha en IPv4.
+export const BASE = "http://127.0.0.1:9100";
 const TOKEN = "dps-7f3a9c2e1b4d6f8a0e5c3b7d9a1f4e2c"; // token estático del print server
 const LS_PRINTER = "impresoraEtiquetas";
 
@@ -69,26 +69,26 @@ async function imprimirZpl(zpl, printerName) {
  * imprimir a mano. Devuelve { modo: "directo", printer } o { modo: "pdf", blob }.
  */
 export async function imprimirEtiquetas(payload) {
-  if (await servidorDisponible()) {
-    const { generarZplEtiquetas } = await import("./piezasLabelZpl");
-    const zpl = generarZplEtiquetas(payload);
-
-    let printer = impresoraGuardada();
-    if (!printer) {
-      const ps = await listarImpresoras().catch(() => []);
-      printer = elegirImpresoraEtiquetas(ps);
-      guardarImpresora(printer);
-    }
-    if (!printer) throw new Error("El print server no tiene una impresora de etiquetas configurada.");
-
-    await imprimirZpl(zpl, printer);
-    return { modo: "directo", printer };
+  if (!(await servidorDisponible())) {
+    throw new Error(
+      "No se pudo conectar con STAGE AI LABS Print Server en 127.0.0.1:9100. " +
+        "Confirma que la aplicación muestre En línea y permite el acceso a la red local en Edge."
+    );
   }
 
-  // Sin print server: PDF para imprimir manualmente
-  const { generarPdfEtiquetas } = await import("./piezasLabelPdf");
-  const blob = await generarPdfEtiquetas(payload);
-  return { modo: "pdf", blob };
+  const { generarZplEtiquetas } = await import("./piezasLabelZpl");
+  const zpl = generarZplEtiquetas(payload);
+
+  let printer = impresoraGuardada();
+  if (!printer) {
+    const ps = await listarImpresoras().catch(() => []);
+    printer = elegirImpresoraEtiquetas(ps);
+    guardarImpresora(printer);
+  }
+  if (!printer) throw new Error("El print server no tiene una impresora de etiquetas configurada.");
+
+  await imprimirZpl(zpl, printer);
+  return { modo: "directo", printer };
 }
 
 /**
@@ -96,23 +96,24 @@ export async function imprimirEtiquetas(payload) {
  * payload = { marca, modelo, anio, trabajos: [string] }
  */
 export async function imprimirVehiculo(payload) {
-  if (await servidorDisponible()) {
-    const { generarZplVehiculo } = await import("./vehiculoLabelZpl");
-    const zpl = generarZplVehiculo(payload);
-
-    let printer = impresoraGuardada();
-    if (!printer) {
-      const ps = await listarImpresoras().catch(() => []);
-      printer = elegirImpresoraEtiquetas(ps);
-      guardarImpresora(printer);
-    }
-    if (!printer) throw new Error("El print server no tiene una impresora de etiquetas configurada.");
-
-    await imprimirZpl(zpl, printer);
-    return { modo: "directo", printer };
+  if (!(await servidorDisponible())) {
+    throw new Error(
+      "No se pudo conectar con STAGE AI LABS Print Server en 127.0.0.1:9100. " +
+        "Confirma que la aplicación muestre En línea y permite el acceso a la red local en Edge."
+    );
   }
 
-  const { generarPdfVehiculo } = await import("./vehiculoLabelPdf");
-  const blob = await generarPdfVehiculo(payload);
-  return { modo: "pdf", blob };
+  const { generarZplVehiculo } = await import("./vehiculoLabelZpl");
+  const zpl = generarZplVehiculo(payload);
+
+  let printer = impresoraGuardada();
+  if (!printer) {
+    const ps = await listarImpresoras().catch(() => []);
+    printer = elegirImpresoraEtiquetas(ps);
+    guardarImpresora(printer);
+  }
+  if (!printer) throw new Error("El print server no tiene una impresora de etiquetas configurada.");
+
+  await imprimirZpl(zpl, printer);
+  return { modo: "directo", printer };
 }
