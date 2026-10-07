@@ -1,28 +1,16 @@
 // Cliente del STAGE AI LABS Print Server (app local propia que imprime ZPL directo en la
 // impresora térmica de etiquetas, sin pasar por el diálogo de impresión de la
-// PC). Corre en http://127.0.0.1:9100.
+// PC). Corre en http://localhost:9100.
 //
 // IMPORTANTE: el print server solo acepta peticiones desde los dominios que
 // tiene en su lista (app.dominguezautopintura.com, etc.). Desde otro dominio
 // el navegador las bloquea por CORS; en ese caso caemos al PDF automáticamente.
 
-// IP de la PC del taller donde está conectada físicamente la 4BARCODE.
-// Así cualquier compañero, aun entrando por Vercel, envía la etiqueta a una
-// sola impresora central dentro de la red local del taller.
-const SERVIDOR_TALLER = "10.0.0.13";
-
-// El print server corre en la PC de la impresora, puerto 9100. La app abierta
-// desde Vercel no puede usar su propio hostname (la nube); debe usar la IP LAN
-// del servidor central. El servidor STAGE autoriza Vercel por CORS/PNA para
-// imprimir sin abrir el diálogo de Windows.
-const HOST = typeof location !== "undefined" && location.hostname ? location.hostname : "127.0.0.1";
-const ES_ORIGEN_LOCAL =
-  HOST === "localhost" ||
-  HOST === "127.0.0.1" ||
-  HOST === "::1" ||
-  /^(?:10|192\.168|172\.(?:1[6-9]|2\d|3[0-1]))\./.test(HOST);
-const SERVIDOR_HOST = ES_ORIGEN_LOCAL ? HOST : SERVIDOR_TALLER;
-const BASE = `http://${SERVIDOR_HOST}:9100`;
+// Cada puesto imprime en la impresora conectada a ESA computadora. No se debe
+// fijar una IP LAN: al migrar de PC, el navegador terminaría enviando las
+// etiquetas al equipo anterior. Los navegadores consideran localhost un origen
+// local confiable incluso cuando la aplicación está publicada por HTTPS.
+export const BASE = "http://localhost:9100";
 const TOKEN = "dps-7f3a9c2e1b4d6f8a0e5c3b7d9a1f4e2c"; // token estático del print server
 const LS_PRINTER = "impresoraEtiquetas";
 
@@ -30,7 +18,7 @@ const LS_PRINTER = "impresoraEtiquetas";
 export async function servidorDisponible() {
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 1500);
+    const t = setTimeout(() => ctrl.abort(), 3000);
     const r = await fetch(`${BASE}/health`, { signal: ctrl.signal });
     clearTimeout(t);
     return r.ok;
