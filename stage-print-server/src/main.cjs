@@ -13,7 +13,7 @@ const VERSION = "1.1.0";
 let mainWindow = null;
 let tray = null;
 let httpServer = null;
-let status = { running: false, port: PORT, lastError: "", lastPrint: null };
+let status = { running: false, port: PORT, version: VERSION, lastError: "", lastPrint: null };
 
 function settingsPath() {
   return path.join(app.getPath("userData"), "settings.json");
