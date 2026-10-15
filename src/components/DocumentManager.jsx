@@ -4,6 +4,14 @@ import { uuid } from "../lib/uuid";
 import Icon from "./Icon";
 
 const SIGNED_URL_TTL = 60 * 60; // 1 hora
+const TIPOS_DOCUMENTO_REQUERIDOS = [
+  { nombre: "Cotización del taller", orden: 1 },
+  { nombre: "Cotización del seguro", orden: 2 },
+  { nombre: "ORDEN DE PIEZAS DAP", orden: 3 },
+  { nombre: "ORDEN DE PIEZAS SUPLIDOR", orden: 4 },
+  { nombre: "ORDEN DE MANO DE OBRA DAP", orden: 5 },
+  { nombre: "Otro", orden: 6 },
+];
 
 export default function DocumentManager({ casoId }) {
   const [tipos, setTipos] = useState([]);
@@ -16,7 +24,41 @@ export default function DocumentManager({ casoId }) {
 
   useEffect(() => {
     async function loadTipos() {
-      const { data } = await supabase.from("tipos_documento").select("*").order("orden");
+      let { data, error: tiposError } = await supabase
+        .from("tipos_documento")
+        .select("*")
+        .order("orden");
+
+      if (tiposError) {
+        setError(tiposError.message || "No se pudieron cargar los tipos de documento.");
+        return;
+      }
+
+      const actuales = new Map((data || []).map((tipo) => [tipo.nombre, tipo.orden]));
+      const requiereSincronizacion = TIPOS_DOCUMENTO_REQUERIDOS.some(
+        (tipo) => actuales.get(tipo.nombre) !== tipo.orden
+      );
+
+      // Mantiene el catálogo disponible aunque el despliegue web ocurra antes
+      // de aplicar la migración de base de datos.
+      if (requiereSincronizacion) {
+        const { error: syncError } = await supabase
+          .from("tipos_documento")
+          .upsert(TIPOS_DOCUMENTO_REQUERIDOS, { onConflict: "nombre" });
+
+        if (syncError) {
+          setError(syncError.message || "No se pudieron actualizar los tipos de documento.");
+          return;
+        }
+
+        const resultado = await supabase.from("tipos_documento").select("*").order("orden");
+        if (resultado.error) {
+          setError(resultado.error.message || "No se pudieron cargar los tipos de documento.");
+          return;
+        }
+        data = resultado.data;
+      }
+
       setTipos(data || []);
       if (data?.length) setTipoSubida(data[0].id);
     }
