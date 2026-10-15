@@ -10,7 +10,8 @@ const TIPOS_DOCUMENTO_REQUERIDOS = [
   { nombre: "ORDEN DE PIEZAS DAP", orden: 3 },
   { nombre: "ORDEN DE PIEZAS SUPLIDOR", orden: 4 },
   { nombre: "ORDEN DE MANO DE OBRA DAP", orden: 5 },
-  { nombre: "Otro", orden: 6 },
+  { nombre: "CONDUCE", orden: 6 },
+  { nombre: "Otro", orden: 7 },
 ];
 
 export default function DocumentManager({ casoId }) {
