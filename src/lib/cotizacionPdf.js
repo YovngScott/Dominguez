@@ -216,8 +216,10 @@ export async function generarPdfCotizacion(cot) {
   const tbX = 130;
   const tbW = 70;
   const lineas = [];
-  if (totalesGrupo.piezas.total > 0) lineas.push(["Piezas:", fmt(totalesGrupo.piezas.total), false]);
-  if (totalesGrupo.manoObra.total > 0) lineas.push(["Mano de Obra:", fmt(totalesGrupo.manoObra.total), false]);
+  // En el recuadro, el desglose por grupo se muestra sin ITBIS. El impuesto
+  // aparece por separado y los pies de las tablas sí conservan el total bruto.
+  if (totalesGrupo.piezas.subtotal > 0) lineas.push(["Piezas:", fmt(totalesGrupo.piezas.subtotal), false]);
+  if (totalesGrupo.manoObra.subtotal > 0) lineas.push(["Mano de Obra:", fmt(totalesGrupo.manoObra.subtotal), false]);
   lineas.push(["Sub-Total:", fmt(totales.subtotal), false]);
   lineas.push(["Descuento (0%):", fmt(0), false]);
 

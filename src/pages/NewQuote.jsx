@@ -842,8 +842,8 @@ export default function NewQuote() {
               <span className="text-white"><Icon name="coins" className="w-6 h-6" /></span>
             </div>
             <div className="p-5">
-              <ResumenLinea label={`Piezas (${form.items_piezas.length})`} valor={rd(totalesGrupo.piezas.total)} />
-              <ResumenLinea label={`Mano de obra (${form.items_mano_obra.length})`} valor={rd(totalesGrupo.manoObra.total)} />
+              <ResumenLinea label={`Piezas (${form.items_piezas.length})`} valor={rd(totalesGrupo.piezas.subtotal)} />
+              <ResumenLinea label={`Mano de obra (${form.items_mano_obra.length})`} valor={rd(totalesGrupo.manoObra.subtotal)} />
               <div className="border-t border-[var(--line)] my-3" />
               <ResumenLinea label="Subtotal" valor={rd(totales.subtotal)} />
               <ResumenLinea label="ITBIS (18%)" valor={rd(totales.itbis)} />
