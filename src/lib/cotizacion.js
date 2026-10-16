@@ -57,6 +57,14 @@ export function calcularTotales(piezas = [], manoObra = []) {
   };
 }
 
+/** Totales independientes, con ITBIS, para el desglose de cada sección. */
+export function calcularTotalesPorGrupo(piezas = [], manoObra = []) {
+  return {
+    piezas: calcularTotales(piezas, []),
+    manoObra: calcularTotales([], manoObra),
+  };
+}
+
 // Abreviaturas únicas que se usan en el catálogo y al escribir una pieza.
 // Mantenerlas aquí permite que las cotizaciones históricas (que tenían los
 // campos lado/sub_lado) también se vean con el formato nuevo, sin tocar sus

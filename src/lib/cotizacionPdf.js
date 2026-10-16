@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { calcularItem, nombrePieza, calcularTotales } from "./cotizacion.js";
+import { calcularItem, nombrePieza, calcularTotales, calcularTotalesPorGrupo } from "./cotizacion.js";
 
 // Datos fijos del taller (encabezado del documento)
 const TALLER = {
@@ -174,7 +174,7 @@ export async function generarPdfCotizacion(cot) {
     6: { halign: "right", cellWidth: 18, fontStyle: "bold" },
   };
 
-  function tabla(titulo, filas, netoTotal, startY) {
+  function tabla(titulo, filas, totalConItbis, startY) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.setTextColor(...GRIS);
@@ -186,7 +186,7 @@ export async function generarPdfCotizacion(cot) {
       body: filas.length
         ? filas.map((f) => (f.length === 7 ? f : f))
         : [["—", "", "", "", "", "", ""]],
-      foot: [["TOTAL", "", "", "", "", "", fmt(netoTotal)]],
+      foot: [["TOTAL", "", "", "", "", "", fmt(totalConItbis)]],
       theme: "plain",
       margin: { left: M, right: M },
       // Menos aire vertical, conservando una letra legible al imprimir.
@@ -205,20 +205,19 @@ export async function generarPdfCotizacion(cot) {
     return doc.lastAutoTable.finalY;
   }
 
-  const netoPiezas = calcularTotales(piezas, []).subtotal;
-  const netoMano = calcularTotales([], mano).subtotal;
+  const totalesGrupo = calcularTotalesPorGrupo(piezas, mano);
 
   let y = boxY + boxH + 6;
-  y = tabla("PIEZAS", filasPieza, netoPiezas, y) + 6;
-  y = tabla("MANO DE OBRA", filasMano, netoMano, y) + 7;
+  y = tabla("PIEZAS", filasPieza, totalesGrupo.piezas.total, y) + 6;
+  y = tabla("MANO DE OBRA", filasMano, totalesGrupo.manoObra.total, y) + 7;
 
   // ===== Caja de totales (derecha) =====
   const totales = calcularTotales(piezas, mano);
   const tbX = 130;
   const tbW = 70;
   const lineas = [];
-  if (netoPiezas > 0) lineas.push(["Piezas:", fmt(netoPiezas), false]);
-  if (netoMano > 0) lineas.push(["Mano de Obra:", fmt(netoMano), false]);
+  if (totalesGrupo.piezas.total > 0) lineas.push(["Piezas:", fmt(totalesGrupo.piezas.total), false]);
+  if (totalesGrupo.manoObra.total > 0) lineas.push(["Mano de Obra:", fmt(totalesGrupo.manoObra.total), false]);
   lineas.push(["Sub-Total:", fmt(totales.subtotal), false]);
   lineas.push(["Descuento (0%):", fmt(0), false]);
 

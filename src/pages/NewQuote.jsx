@@ -19,6 +19,7 @@ import DocumentAiUploader from "../components/DocumentAiUploader";
 import {
   calcularItem,
   calcularTotales,
+  calcularTotalesPorGrupo,
   nombrePieza,
   normalizarNombrePieza,
   rd,
@@ -381,6 +382,7 @@ export default function NewQuote() {
   }
 
   const totales = calcularTotales(form.items_piezas, form.items_mano_obra);
+  const totalesGrupo = calcularTotalesPorGrupo(form.items_piezas, form.items_mano_obra);
 
   async function generar() {
     // Seguro contra doble clic/doble toque: bloquea de inmediato, antes de
@@ -605,15 +607,31 @@ export default function NewQuote() {
         aseguradora_direccion: aseg?.direccion,
         aseguradora_telefono: aseg?.telefono,
       });
-      const pdfPath = `${cot.id}/cotizacion.pdf`;
+      // Cada regeneración usa una ruta nueva para que el navegador no reciba
+      // una copia anterior desde la caché de Storage/CDN.
+      const pdfAnterior = cot.pdf_path || null;
+      const pdfPath = `${cot.id}/cotizacion-${uuid()}.pdf`;
       await reintentar(async () => {
         const { error: uploadError } = await supabase.storage
           .from("cotizaciones")
           .upload(pdfPath, blob, { contentType: "application/pdf", upsert: true });
         if (uploadError) throw uploadError;
-        const { error: updateError } = await supabase.from("cotizaciones").update({ pdf_path: pdfPath }).eq("id", cot.id);
-        if (updateError) throw updateError;
       });
+      try {
+        await reintentar(async () => {
+          const { error: updateError } = await supabase
+            .from("cotizaciones")
+            .update({ pdf_path: pdfPath })
+            .eq("id", cot.id);
+          if (updateError) throw updateError;
+        });
+      } catch (updateError) {
+        await supabase.storage.from("cotizaciones").remove([pdfPath]);
+        throw updateError;
+      }
+      if (pdfAnterior && pdfAnterior !== pdfPath) {
+        await supabase.storage.from("cotizaciones").remove([pdfAnterior]);
+      }
 
       clearFormDraft("newquote");
       navigate(`/cotizaciones/${cot.id}`);
@@ -824,8 +842,8 @@ export default function NewQuote() {
               <span className="text-white"><Icon name="coins" className="w-6 h-6" /></span>
             </div>
             <div className="p-5">
-              <ResumenLinea label={`Piezas (${form.items_piezas.length})`} valor={rd(sumaNeta(form.items_piezas))} />
-              <ResumenLinea label={`Mano de obra (${form.items_mano_obra.length})`} valor={rd(sumaNeta(form.items_mano_obra))} />
+              <ResumenLinea label={`Piezas (${form.items_piezas.length})`} valor={rd(totalesGrupo.piezas.total)} />
+              <ResumenLinea label={`Mano de obra (${form.items_mano_obra.length})`} valor={rd(totalesGrupo.manoObra.total)} />
               <div className="border-t border-[var(--line)] my-3" />
               <ResumenLinea label="Subtotal" valor={rd(totales.subtotal)} />
               <ResumenLinea label="ITBIS (18%)" valor={rd(totales.itbis)} />
@@ -882,11 +900,6 @@ export default function NewQuote() {
       )}
     </div>
   );
-}
-
-// Suma neta (sin ITBIS) de un grupo de ítems, para el desglose del resumen.
-function sumaNeta(items) {
-  return (items || []).reduce((acc, it) => acc + calcularItem(it).neto, 0);
 }
 
 function ItemsCard({ icon, titulo, boton, onAdd, items, columnas, fila, onEdit, onDelete, voiceSlot }) {

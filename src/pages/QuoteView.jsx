@@ -187,6 +187,7 @@ export default function QuoteView() {
 
 function Tabla({ titulo, items, esPieza }) {
   if (!items?.length) return null;
+  const totalGrupo = items.reduce((total, item) => total + calcularItem(item).total, 0);
   return (
     <div className="card p-6 mb-5">
       <h2 className="font-bold text-[var(--ink)] mb-3">{titulo}</h2>
@@ -222,6 +223,12 @@ function Tabla({ titulo, items, esPieza }) {
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-t border-[var(--line)] font-bold text-[var(--ink)]">
+              <td className="py-2 pr-2" colSpan="5">TOTAL CON ITBIS</td>
+              <td className="py-2">{rd(totalGrupo)}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
