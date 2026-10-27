@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { ESTADOS, ESTADOS_LISTA } from "../lib/estados";
 import { citasPendientesDeCasos } from "../lib/citaCaso";
 import Icon from "../components/Icon";
 import { diasDesde } from "../lib/aging";
+import { casoAdmiteEtiqueta, etiquetaDeCaso, ETIQUETAS_CASO } from "../lib/etiquetasCaso";
 
 function fechaCorta(iso) {
   if (!iso) return "";
@@ -24,6 +25,8 @@ export default function CaseList() {
   const [activo, setActivo] = useState("en_espera_piezas");
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(true);
+  const [etiquetaError, setEtiquetaError] = useState("");
+  const [guardandoEtiqueta, setGuardandoEtiqueta] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -36,7 +39,7 @@ export default function CaseList() {
       const { data: casosData } = await supabase
         .from("casos")
         .select(
-          `id, placa, chasis, color, anio, numero_reclamo, numero_poliza, estado, fecha_ingreso,
+          `id, placa, chasis, color, anio, numero_reclamo, numero_poliza, estado, fecha_ingreso, etiqueta_organizacion,
            cliente:clientes(nombre_completo),
            marca:marcas(nombre),
            modelo:modelos(nombre)`
@@ -89,6 +92,40 @@ export default function CaseList() {
   const listaMostrada = buscando
     ? casos.filter(coincide)
     : casos.filter((c) => perteneceA(c, activo));
+
+  async function actualizarEtiqueta(casoId, etiqueta) {
+    const anterior = casos.find((caso) => caso.id === casoId)?.etiqueta_organizacion || null;
+    setEtiquetaError("");
+    setGuardandoEtiqueta(casoId);
+    setCasos((actuales) =>
+      actuales.map((caso) =>
+        caso.id === casoId ? { ...caso, etiqueta_organizacion: etiqueta } : caso
+      )
+    );
+
+    const { data, error } = await supabase
+      .from("casos")
+      .update({ etiqueta_organizacion: etiqueta })
+      .eq("id", casoId)
+      .select("id, etiqueta_organizacion")
+      .single();
+
+    if (error) {
+      setCasos((actuales) =>
+        actuales.map((caso) =>
+          caso.id === casoId ? { ...caso, etiqueta_organizacion: anterior } : caso
+        )
+      );
+      setEtiquetaError("No se pudo guardar la etiqueta. Intenta otra vez.");
+    } else {
+      setCasos((actuales) =>
+        actuales.map((caso) =>
+          caso.id === casoId ? { ...caso, etiqueta_organizacion: data.etiqueta_organizacion } : caso
+        )
+      );
+    }
+    setGuardandoEtiqueta("");
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -169,6 +206,12 @@ export default function CaseList() {
         </p>
       )}
 
+      {etiquetaError && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {etiquetaError}
+        </div>
+      )}
+
       {/* Lista (categoría activa o resultados de búsqueda) */}
       {loading ? (
         <p className="text-[var(--ink-soft)]">Cargando…</p>
@@ -179,16 +222,12 @@ export default function CaseList() {
             : `No hay casos en "${ESTADOS[activo].label}" todavía.`}
         </div>
       ) : (
-        <div className="card divide-y divide-[var(--line)] overflow-hidden">
+        <div className="card divide-y divide-[var(--line)] overflow-visible">
           {listaMostrada.map((c) => {
             const est = ESTADOS[c.estado] || ESTADOS.en_espera_piezas;
             return (
-            <Link
-              key={c.id}
-              to={`/casos/${c.id}`}
-              className="flex items-center justify-between px-5 py-4 hover:bg-[var(--paper)] transition-colors"
-            >
-              <div>
+            <div key={c.id} className="relative flex flex-col sm:flex-row sm:items-center hover:bg-[var(--paper)] transition-colors first:rounded-t-xl last:rounded-b-xl">
+              <Link to={`/casos/${c.id}`} className="min-w-0 flex-1 px-5 pt-4 pb-2 sm:py-4">
                 <p className="font-bold text-[var(--ink)]">
                   {c.marca?.nombre} {c.modelo?.nombre} {c.color ? `· ${c.color}` : ""}
                 </p>
@@ -207,24 +246,112 @@ export default function CaseList() {
                     {citas[c.id].hora ? ` · ${citas[c.id].hora}` : ""}
                   </p>
                 )}
-              </div>
-              {buscando ? (
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${est.chip}`}>
-                  {est.short}
-                </span>
-              ) : (
-                <div className="flex items-center gap-3 shrink-0">
+              </Link>
+              <div className="flex items-center justify-between gap-2 px-5 pb-4 sm:py-4 sm:pl-2 sm:pr-4 shrink-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {buscando && (
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${est.chip}`}>
+                      {est.short}
+                    </span>
+                  )}
                   {diasDesde(c.fecha_ingreso) >= 30 && c.estado !== "entregado" && (
                     <span title={`En espera desde hace ${diasDesde(c.fecha_ingreso)} días`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
                       <Icon name="alert" className="w-3.5 h-3.5" /> {diasDesde(c.fecha_ingreso)}d
                     </span>
                   )}
-                  <span className="text-[var(--brand-red)] text-xl">›</span>
+                  {casoAdmiteEtiqueta(c.estado) && (
+                    <EtiquetaPicker
+                      caso={c}
+                      guardando={guardandoEtiqueta === c.id}
+                      onSelect={(etiqueta) => actualizarEtiqueta(c.id, etiqueta)}
+                    />
+                  )}
                 </div>
-              )}
-            </Link>
+                <Link to={`/casos/${c.id}`} className="pl-2 text-[var(--brand-red)] text-xl" aria-label="Abrir caso">›</Link>
+              </div>
+            </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EtiquetaPicker({ caso, guardando, onSelect }) {
+  const [abierto, setAbierto] = useState(false);
+  const contenedor = useRef(null);
+  const actual = etiquetaDeCaso(caso);
+
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const cerrar = (event) => {
+      if (!contenedor.current?.contains(event.target)) setAbierto(false);
+    };
+    document.addEventListener("mousedown", cerrar);
+    return () => document.removeEventListener("mousedown", cerrar);
+  }, [abierto]);
+
+  const seleccionar = (valor) => {
+    setAbierto(false);
+    onSelect(valor);
+  };
+
+  return (
+    <div ref={contenedor} className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto((valor) => !valor)}
+        disabled={guardando}
+        aria-expanded={abierto}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-bold transition-all disabled:opacity-60 ${
+          actual
+            ? actual.chip
+            : "border-dashed border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"
+        }`}
+      >
+        <Icon name={actual?.icon || "tag"} className="w-3.5 h-3.5" />
+        {guardando ? "Guardando…" : actual?.label || "Etiqueta"}
+        <Icon name="chevronDown" className={`w-3.5 h-3.5 transition-transform ${abierto ? "rotate-180" : ""}`} />
+      </button>
+
+      {abierto && (
+        <div className="absolute left-0 top-full z-30 mt-2 w-[19rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10 sm:left-auto sm:right-0">
+          <div className="px-3 pb-2 pt-1">
+            <p className="text-sm font-extrabold text-[var(--ink)]">Organizar este caso</p>
+            <p className="text-xs text-[var(--ink-soft)]">Elige la situación actual.</p>
+          </div>
+          <div className="space-y-1">
+            {ETIQUETAS_CASO.map((etiqueta) => {
+              const seleccionada = actual?.id === etiqueta.id;
+              return (
+                <button
+                  type="button"
+                  key={etiqueta.id}
+                  onClick={() => seleccionar(etiqueta.id)}
+                  className={`flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors ${etiqueta.hover}`}
+                >
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white ${etiqueta.dot}`}>
+                    <Icon name={etiqueta.icon} className="w-4.5 h-4.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-bold text-[var(--ink)]">{etiqueta.label}</span>
+                    <span className="block text-xs text-[var(--ink-soft)]">{etiqueta.description}</span>
+                  </span>
+                  {seleccionada && <Icon name="check" className="h-5 w-5 shrink-0 text-emerald-600" />}
+                </button>
+              );
+            })}
+          </div>
+          {actual && (
+            <button
+              type="button"
+              onClick={() => seleccionar(null)}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border-t border-slate-100 px-3 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+            >
+              <Icon name="close" className="h-3.5 w-3.5" /> Quitar etiqueta
+            </button>
+          )}
         </div>
       )}
     </div>

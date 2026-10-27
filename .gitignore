@@ -37,3 +37,4 @@ index.js
 tmp/
 .vercel
 .env*
+supabase/.temp/
