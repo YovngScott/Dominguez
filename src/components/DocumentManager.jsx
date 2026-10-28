@@ -1,18 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { uuid } from "../lib/uuid";
+import {
+  nombreTipoDocumento,
+  prepararTiposDocumento,
+  tiposDocumentoParaUpsert,
+  tiposDocumentoRequierenSincronizacion,
+} from "../lib/tiposDocumento";
 import Icon from "./Icon";
 
 const SIGNED_URL_TTL = 60 * 60; // 1 hora
-const TIPOS_DOCUMENTO_REQUERIDOS = [
-  { nombre: "Cotización del taller", orden: 1 },
-  { nombre: "Cotización del seguro", orden: 2 },
-  { nombre: "ORDEN DE PIEZAS DAP", orden: 3 },
-  { nombre: "ORDEN DE PIEZAS SUPLIDOR", orden: 4 },
-  { nombre: "ORDEN DE MANO DE OBRA DAP", orden: 5 },
-  { nombre: "CONDUCE", orden: 6 },
-  { nombre: "Otro", orden: 7 },
-];
 
 export default function DocumentManager({ casoId }) {
   const [tipos, setTipos] = useState([]);
@@ -35,17 +32,14 @@ export default function DocumentManager({ casoId }) {
         return;
       }
 
-      const actuales = new Map((data || []).map((tipo) => [tipo.nombre, tipo.orden]));
-      const requiereSincronizacion = TIPOS_DOCUMENTO_REQUERIDOS.some(
-        (tipo) => actuales.get(tipo.nombre) !== tipo.orden
-      );
+      const requiereSincronizacion = tiposDocumentoRequierenSincronizacion(data);
 
       // Mantiene el catálogo disponible aunque el despliegue web ocurra antes
       // de aplicar la migración de base de datos.
       if (requiereSincronizacion) {
         const { error: syncError } = await supabase
           .from("tipos_documento")
-          .upsert(TIPOS_DOCUMENTO_REQUERIDOS, { onConflict: "nombre" });
+          .upsert(tiposDocumentoParaUpsert(), { onConflict: "nombre" });
 
         if (syncError) {
           setError(syncError.message || "No se pudieron actualizar los tipos de documento.");
@@ -60,8 +54,9 @@ export default function DocumentManager({ casoId }) {
         data = resultado.data;
       }
 
-      setTipos(data || []);
-      if (data?.length) setTipoSubida(data[0].id);
+      const tiposVisibles = prepararTiposDocumento(data);
+      setTipos(tiposVisibles);
+      if (tiposVisibles.length) setTipoSubida(tiposVisibles[0].id);
     }
     loadTipos();
   }, []);
@@ -123,37 +118,6 @@ export default function DocumentManager({ casoId }) {
         uploaded_by: userData?.user?.id,
       });
 
-      // Si el tipo de documento es "Cotización del seguro", invocamos a la IA en segundo plano
-      const tipoSeleccionado = tipos.find((t) => t.id === tipoSubida);
-      if (tipoSeleccionado?.nombre === "Cotización del seguro") {
-        try {
-          const reader = new FileReader();
-          const base64Promise = new Promise((resolve) => {
-            reader.onload = () => resolve(reader.result.split(",")[1]);
-          });
-          reader.readAsDataURL(file);
-          const base64Data = await base64Promise;
-
-          // Enviar a procesar con IA
-          await fetch("/api/procesar-seguro", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              casoId,
-              attachments: [
-                {
-                  name: file.name,
-                  data: base64Data,
-                  contentType: "application/pdf"
-                }
-              ]
-            })
-          });
-        } catch (iaErr) {
-          console.warn("Error al procesar la cotización con IA:", iaErr);
-        }
-      }
-
       loadDocumentos();
     } catch (err) {
       setError(err.message || "Error subiendo el documento.");
@@ -176,34 +140,20 @@ export default function DocumentManager({ casoId }) {
           <Icon name="file" className="w-5 h-5" />
         </span>
         <div>
-          <h2 className="text-base sm:text-lg font-semibold text-[var(--ink)]">Cotizaciones y documentos</h2>
-          <p className="text-xs text-[var(--ink-soft)] mt-0.5">PDF del taller, seguro y documentos del caso.</p>
+          <h2 className="text-base sm:text-lg font-semibold text-[var(--ink)]">DOCUMENTOS DEL CASO</h2>
+          <p className="text-xs text-[var(--ink-soft)] mt-0.5">Selecciona el tipo exacto antes de subir el PDF.</p>
         </div>
       </div>
 
       <div className="mb-4 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
-        {/* Lista cerrada, no campo de escritura: los tipos de documento son
-            fijos y escribir aquí solo se prestaba a confusión. */}
-        <select
-          value={tipoSubida}
-          onChange={(e) => setTipoSubida(e.target.value)}
-          className="input"
-          aria-label="Tipo de documento"
-        >
-          {!tipos.length && <option value="">Cargando…</option>}
-          {tipos.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.nombre}
-            </option>
-          ))}
-        </select>
+        <TipoDocumentoPicker tipos={tipos} value={tipoSubida} onChange={setTipoSubida} />
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={subiendo}
           className="bg-[var(--ink)] text-white px-5 py-2.5 rounded-lg font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          <Icon name="file" className="w-4 h-4" /> {subiendo ? "Subiendo…" : "Subir PDF"}
+          <Icon name="file" className="w-4 h-4" /> {subiendo ? "SUBIENDO…" : "SUBIR PDF"}
         </button>
         <input
           ref={fileInputRef}
@@ -228,7 +178,7 @@ export default function DocumentManager({ casoId }) {
                 </span>
                 <span className="min-w-0">
                   <span className="block font-medium text-sm sm:text-base text-[var(--ink)] break-words leading-snug line-clamp-2">{d.nombre_archivo}</span>
-                  <span className="block text-xs sm:text-sm text-[var(--ink-soft)] mt-0.5">{d.tipo?.nombre || "Documento PDF"}</span>
+                  <span className="block text-xs sm:text-sm font-semibold tracking-wide text-[var(--ink-soft)] mt-0.5">{nombreTipoDocumento(d.tipo?.nombre)}</span>
                 </span>
               </button>
               <button
@@ -259,6 +209,79 @@ export default function DocumentManager({ casoId }) {
               </button>
             </div>
             <iframe src={visor.signedUrl} title={visor.nombre_archivo} className="flex-1 w-full" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TipoDocumentoPicker({ tipos, value, onChange }) {
+  const [abierto, setAbierto] = useState(false);
+  const contenedor = useRef(null);
+  const seleccionado = tipos.find((tipo) => tipo.id === value) || tipos[0];
+
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const cerrar = (event) => {
+      if (!contenedor.current?.contains(event.target)) setAbierto(false);
+    };
+    document.addEventListener("mousedown", cerrar);
+    return () => document.removeEventListener("mousedown", cerrar);
+  }, [abierto]);
+
+  return (
+    <div ref={contenedor} className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto((valor) => !valor)}
+        disabled={!tipos.length}
+        aria-expanded={abierto}
+        className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-left transition-all hover:border-slate-400 focus:border-[var(--brand-red)] focus:outline-none focus:ring-2 focus:ring-red-100 disabled:opacity-60"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-red-50)] text-[var(--brand-red)]">
+          <Icon name={seleccionado?.icon || "file"} className="h-4.5 w-4.5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-extrabold tracking-wide text-[var(--ink)]">
+            {seleccionado?.label || "CARGANDO TIPOS…"}
+          </span>
+          {seleccionado && <span className="block truncate text-xs text-[var(--ink-soft)]">{seleccionado.description}</span>}
+        </span>
+        <Icon name="chevronDown" className={`h-4 w-4 shrink-0 text-[var(--ink-soft)] transition-transform ${abierto ? "rotate-180" : ""}`} />
+      </button>
+
+      {abierto && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10">
+          <p className="px-3 pb-2 pt-1 text-xs font-bold uppercase tracking-wider text-[var(--ink-soft)]">Tipo de documento</p>
+          <div className="space-y-1">
+            {tipos.map((tipo) => {
+              const activo = tipo.id === seleccionado?.id;
+              return (
+                <button
+                  type="button"
+                  key={tipo.id}
+                  onClick={() => {
+                    onChange(tipo.id);
+                    setAbierto(false);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                    activo
+                      ? "border-red-100 bg-[var(--brand-red-50)]"
+                      : "border-transparent hover:border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${activo ? "bg-[var(--brand-red)] text-white" : "bg-slate-100 text-slate-600"}`}>
+                    <Icon name={tipo.icon} className="h-4.5 w-4.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-extrabold tracking-wide text-[var(--ink)]">{tipo.label}</span>
+                    <span className="block text-xs text-[var(--ink-soft)]">{tipo.description}</span>
+                  </span>
+                  {activo && <Icon name="check" className="h-5 w-5 shrink-0 text-[var(--brand-red)]" />}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
