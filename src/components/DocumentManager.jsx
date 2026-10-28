@@ -246,7 +246,6 @@ function TipoDocumentoPicker({ tipos, value, onChange }) {
           <span className="block text-sm font-extrabold tracking-wide text-[var(--ink)]">
             {seleccionado?.label || "CARGANDO TIPOS…"}
           </span>
-          {seleccionado && <span className="block truncate text-xs text-[var(--ink-soft)]">{seleccionado.description}</span>}
         </span>
         <Icon name="chevronDown" className={`h-4 w-4 shrink-0 text-[var(--ink-soft)] transition-transform ${abierto ? "rotate-180" : ""}`} />
       </button>
@@ -276,7 +275,6 @@ function TipoDocumentoPicker({ tipos, value, onChange }) {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-extrabold tracking-wide text-[var(--ink)]">{tipo.label}</span>
-                    <span className="block text-xs text-[var(--ink-soft)]">{tipo.description}</span>
                   </span>
                   {activo && <Icon name="check" className="h-5 w-5 shrink-0 text-[var(--brand-red)]" />}
                 </button>
