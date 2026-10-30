@@ -443,7 +443,7 @@ export default function CaseDetail() {
           <Info label="Reclamo" value={caso.numero_reclamo} />
           <Info label="Póliza" value={caso.numero_poliza} />
           <Info label="Teléfono" value={caso.cliente?.telefono} />
-          <Info label="Suplidor" value={caso.suplidor} />
+          <Info label="Deducible" value={caso.suplidor} />
         </div>
 
         {caso.notas && (

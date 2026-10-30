@@ -192,6 +192,9 @@ export default function CaseForm({ initial, onSubmit, submitLabel = "Guardar cas
           <Field label="Número de póliza">
             <input value={form.numero_poliza} onChange={(e) => update("numero_poliza", e.target.value)} className="input" />
           </Field>
+          <Field label="Deducible">
+            <input value={form.suplidor} onChange={(e) => update("suplidor", e.target.value)} className="input" placeholder="Ej.: RD$ 10,000.00" />
+          </Field>
         </div>
       </Section>
 
@@ -227,9 +230,6 @@ export default function CaseForm({ initial, onSubmit, submitLabel = "Guardar cas
           </Field>
           <Field label="Chasis">
             <input value={form.chasis} onChange={(e) => update("chasis", e.target.value)} className="input" />
-          </Field>
-          <Field label="Suplidor (de las piezas)">
-            <input value={form.suplidor} onChange={(e) => update("suplidor", e.target.value)} className="input" />
           </Field>
         </div>
         <div className="mt-4">
