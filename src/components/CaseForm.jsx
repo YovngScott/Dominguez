@@ -193,7 +193,10 @@ export default function CaseForm({ initial, onSubmit, submitLabel = "Guardar cas
             <input value={form.numero_poliza} onChange={(e) => update("numero_poliza", e.target.value)} className="input" />
           </Field>
           <Field label="Deducible">
-            <input value={form.suplidor} onChange={(e) => update("suplidor", e.target.value)} className="input" placeholder="Ej.: RD$ 10,000.00" />
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-semibold text-[var(--ink-soft)]" aria-hidden="true">RD$</span>
+              <input type="number" min="0" step="0.01" inputMode="decimal" value={form.suplidor} onChange={(e) => update("suplidor", e.target.value)} className="input" style={{ paddingLeft: "3.5rem" }} placeholder="0.00" aria-label="Deducible en pesos dominicanos" />
+            </div>
           </Field>
         </div>
       </Section>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import CaseForm from "../components/CaseForm";
+import { cantidadDeducible } from "../lib/deducible";
 import { findOrCreateMarca, findOrCreateModelo } from "../lib/catalogo";
 
 export default function EditCase() {
@@ -35,7 +36,7 @@ export default function EditCase() {
           placa: data.placa || "",
           numero_reclamo: data.numero_reclamo || "",
           numero_poliza: data.numero_poliza || "",
-          suplidor: data.suplidor || "",
+          suplidor: cantidadDeducible(data.suplidor),
           notas: data.notas || "",
         });
       }

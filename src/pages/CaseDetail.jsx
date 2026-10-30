@@ -10,6 +10,7 @@ import FichaTallerModal from "../components/FichaTallerModal";
 import Icon from "../components/Icon";
 import { ESTADOS, FASES_REPARACION } from "../lib/estados";
 import { rd } from "../lib/cotizacion";
+import { mostrarDeducible } from "../lib/deducible";
 import { marcarCitasAtendidas } from "../lib/citaCaso";
 
 const ESTADO_ORDEN = ["en_espera_piezas", "listo_para_trabajar", "entregado"];
@@ -443,7 +444,7 @@ export default function CaseDetail() {
           <Info label="Reclamo" value={caso.numero_reclamo} />
           <Info label="Póliza" value={caso.numero_poliza} />
           <Info label="Teléfono" value={caso.cliente?.telefono} />
-          <Info label="Deducible" value={caso.suplidor} />
+          <div className="print:hidden"><Info label="Deducible" value={mostrarDeducible(caso.suplidor)} /></div>
         </div>
 
         {caso.notas && (
