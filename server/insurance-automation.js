@@ -31,13 +31,13 @@ function timingSafeEqual(left, right) {
 async function authorizeRequest(supabase, req, res, action) {
   const configured = process.env.STAGE_INSURANCE_SHARED_SECRET;
   const supplied = req.headers["x-stage-insurance-secret"];
-  if (configured && supplied && timingSafeEqual(configured, supplied)) return "integration";
+  if (!action.startsWith("index_") && configured && supplied && timingSafeEqual(configured, supplied)) return "integration";
 
   // Supabase Cron ejecuta la lectura de Gmail aunque no haya nadie con el
   // Centro de mensajes abierto. Esta credencial solo autoriza esa operación.
   const cronSecret = process.env.GMAIL_POLL_SECRET;
   const suppliedCronSecret = req.headers["x-supabase-cron-secret"];
-  if (action === "gmail_poll" && cronSecret && suppliedCronSecret && timingSafeEqual(cronSecret, suppliedCronSecret)) {
+  if (["gmail_poll", "index_tick"].includes(action) && cronSecret && suppliedCronSecret && timingSafeEqual(cronSecret, suppliedCronSecret)) {
     return "scheduler";
   }
 
@@ -991,6 +991,13 @@ export default async function handler(req, res) {
       return res.redirect(302, `/mensajes?correo=conectado&email=${encodeURIComponent(email)}`);
     }
     if (!await authorizeRequest(clients.supabase, req, res, action)) return;
+    if (req.method === "POST" && ["index_tick", "index_status", "index_search", "index_orders", "index_review", "index_retry"].includes(action)) {
+      const { runIndex, indexView } = await import("./chassis-index.js");
+      const data = action === "index_tick"
+        ? await runIndex(clients.supabase, clients.ai, { gmailAccessToken, googleRequest, generateStructured })
+        : await indexView(clients.supabase, action, req.body || {});
+      return json(res, 200, data);
+    }
     if (action === "ingest" && req.method === "POST") return json(res, 200, await ingest(clients.supabase, clients.ai, req.body || {}));
     if (action === "gmail_accounts" && req.method === "GET") return json(res, 200, { data: await listGmailAccounts(clients.supabase), oauthConfigured: Boolean((process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID) && process.env.GOOGLE_OAUTH_CLIENT_SECRET) });
     if (action === "gmail_oauth_url" && req.method === "POST") return json(res, 200, { url: gmailAuthUrl(req, String(req.body?.email || "").trim().toLowerCase()) });

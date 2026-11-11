@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../components/Icon";
+import ArchivoCorreo from "../components/ArchivoCorreo";
 import { supabase } from "../lib/supabaseClient";
 import { dedupeDashboardMessages } from "../lib/emailInbox";
 
@@ -48,6 +49,7 @@ async function seguroApi(action, { id, method = "GET", payload } = {}) {
 }
 
 export default function Mensajes() {
+  const [vista, setVista] = useState("avisos");
   const [mensajes, setMensajes] = useState([]);
   const [estado, setEstado] = useState("pendientes");
   const [tipo, setTipo] = useState("todos");
@@ -180,6 +182,12 @@ export default function Mensajes() {
 
       {error && <div role="alert" className="mt-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
+      <nav aria-label="Bandejas de correo" className="mt-6 flex flex-wrap gap-2">
+        {[["avisos", "Avisos"], ["chasis", "Buscar por chasis"], ["ordenes", "Órdenes por revisar"]].map(([key, label]) =>
+          <button key={key} aria-pressed={vista === key} className={vista === key ? "btn-primary" : "btn-ghost"} onClick={() => setVista(key)}>{label}</button>
+        )}
+      </nav>
+      {vista !== "avisos" ? <ArchivoCorreo key={vista} tab={vista} api={seguroApi} /> : <>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <Metrica label="Sin leer" value={nuevos} tone="red" />
         <Metrica label="Prioridad alta" value={altos} tone="amber" />
@@ -223,6 +231,7 @@ export default function Mensajes() {
         ))}
       </div>
 
+      </>}
       {detalle && <DetalleModal data={detalle} busy={busy} onClose={() => setDetalle(null)} onResolve={resolver} />}
       {configurador && <AssistantConfigModal initialTab={configurador} onClose={() => setConfigurador(null)} />}
       {cuentasCorreo && <EmailAccountsModal onClose={() => setCuentasCorreo(false)} onProcessed={cargar} />}
