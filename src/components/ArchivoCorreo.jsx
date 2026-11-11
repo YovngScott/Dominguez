@@ -113,7 +113,13 @@ export default function ArchivoCorreo({ api, tab }) {
           <h3 className="mt-1 font-bold">{row.asunto || "Correo sin asunto"}</h3>
           {row.archivo && <p className="mt-1 break-all text-sm">PDF · {row.archivo}</p>}
           {row.adjuntos?.length > 0 && <ul aria-label="PDF adjuntos al correo" className="mt-2 space-y-1 text-sm">
-            {row.adjuntos.map((a, i) => <li key={i} className="break-all">PDF · {a.archivo} · {a.estado === "listo" ? "Leído" : a.estado === "incidencia" ? "Requiere revisión" : Date.parse(a.disponible) === 0 ? "Lectura priorizada" : "Lectura pendiente"}</li>)}
+            {row.adjuntos.map((a, i) => {
+              const leidos = [...new Set(a.evidencia.filter(e => e.pagina || e.fuente === "Revisión manual").map(e => e.chasis))];
+              const distinto = leidos.length > 0 && !leidos.includes(chassis);
+              return <li key={i} className="break-all">PDF · {a.archivo} · {a.estado === "listo" ? "Leído" : a.estado === "incidencia" ? "Requiere revisión" : Date.parse(a.disponible) === 0 ? "Lectura priorizada" : "Lectura pendiente"}
+                {leidos.length > 0 && <div className={distinto ? "font-semibold text-amber-700" : "text-[var(--ink-soft)]"}>{distinto ? "Verificar chasis del PDF" : "Chasis del PDF"} · {leidos.join(", ")}</div>}
+              </li>;
+            })}
           </ul>}
           {evidence.map(e => <p key={e.chasis + e.fuente + e.pagina} className="mt-1 text-sm"><b>{e.chasis}</b> · {e.fuente}{e.pagina ? " · pág. " + e.pagina : ""}</p>)}
           {row.detalle && <p className="mt-2 text-sm text-amber-700">{row.detalle}</p>}

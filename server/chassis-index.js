@@ -213,7 +213,7 @@ export async function indexView(db, action, body) {
   if (action === "index_search") {
     const messages = visible.filter(row => row.parte === "correo");
     if (messages.length) {
-      const attachments = await result(db.from(JOBS).select("cuenta,gmail_id,archivo,estado,intentos,disponible")
+      const attachments = await result(db.from(JOBS).select("cuenta,gmail_id,archivo,estado,intentos,disponible,evidencia")
         .in("gmail_id", [...new Set(messages.map(row => row.gmail_id))]).neq("parte", "correo").order("id"));
       for (const row of messages) row.adjuntos = attachments.filter(a => a.cuenta === row.cuenta && a.gmail_id === row.gmail_id);
     }
