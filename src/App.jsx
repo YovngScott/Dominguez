@@ -35,6 +35,7 @@ const ClientList = lazy(() => import("./pages/ClientList"));
 const ContactosList = lazy(() => import("./pages/ContactosList"));
 const CitasList = lazy(() => import("./pages/CitasList"));
 const Reportes = lazy(() => import("./pages/Reportes"));
+const ResumenVehiculos = lazy(() => import("./pages/ResumenVehiculos"));
 const Suministros = lazy(() => import("./pages/Suministros"));
 const Nevera = lazy(() => import("./pages/Nevera"));
 const KioskSuministros = lazy(() => import("./pages/KioskSuministros"));
@@ -91,6 +92,7 @@ const NAV_GROUPS = [
     id: "reportes", label: "Reportes", icon: "file",
     items: [
       { to: "/reportes", label: "Reportes generales", icon: "file" },
+      { to: "/resumen-vehiculos", label: "Resumen de vehículos pendientes", icon: "clipboard" },
       { to: "/taller/reporte", label: "Reporte de taller", icon: "wrench" },
     ],
   },
@@ -615,6 +617,10 @@ export default function App() {
             <CitasList />
           </PrivateLayout>
         }
+      />
+      <Route
+        path="/resumen-vehiculos"
+        element={<PrivateLayout><ResumenVehiculos /></PrivateLayout>}
       />
       <Route
         path="/reportes"

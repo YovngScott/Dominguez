@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "../components/Icon";
-import ResumenOperativo from "../components/ResumenOperativo";
 
 // ---- Fechas (en hora local, sin desfases de zona horaria) ----
 function ymd(d) {
@@ -174,8 +173,6 @@ export default function Reportes() {
           <Icon name="file" className="w-4 h-4" /> {descargando ? "Generando…" : "Descargar Excel"}
         </button>
       </div>
-
-      <ResumenOperativo aseguradoras={aseguradoras} />
 
       {/* Filtros */}
       <div className="card p-5 mb-5 grid sm:grid-cols-[1fr_auto_auto] gap-4 items-end">
