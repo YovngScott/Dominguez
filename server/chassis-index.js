@@ -31,10 +31,14 @@ export function initialWindows(account, now) {
 export async function prioritizeChassis(db, chassis, { gmailAccessToken, googleRequest }) {
   const id = normalizeChassis(chassis);
   if (!validChassis(id)) throw new Error("Escribe un chasis válido.");
+  const cases = await result(db.from("casos").select("placa,numero_poliza,numero_reclamo").ilike("chasis", id));
+  const terms = [...new Set([id, ...cases.flatMap(c => [c.placa, c.numero_poliza, c.numero_reclamo])])]
+    .filter(v => typeof v === "string" && v.trim().length >= 5)
+    .map(v => '"' + v.replace(/["\\]/g, "").trim() + '"');
   const accounts = await result(db.from("asistente_correo_cuentas").select("id,email,refresh_token_cifrado").eq("activa", true));
   const outcomes = await Promise.allSettled(accounts.map(async account => {
     const token = await gmailAccessToken(account);
-    const params = new URLSearchParams({ q: '"' + id + '" after:' + Math.floor(Date.now() / 1000 - 93 * DAY), maxResults: "100" });
+    const params = new URLSearchParams({ q: "{ " + terms.join(" ") + " } after:" + Math.floor(Date.now() / 1000 - 93 * DAY), maxResults: "100" });
     const found = await googleRequest(gmail + "?" + params, { headers: { authorization: "Bearer " + token }, signal: AbortSignal.timeout(20000) });
     const rows = (found.messages || []).map(m => ({
       cuenta: account.id, gmail_id: m.id, hilo: m.threadId, parte: "correo", historico: true, disponible: "1900-01-01T00:00:00Z",
