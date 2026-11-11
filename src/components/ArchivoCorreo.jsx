@@ -19,6 +19,7 @@ export default function ArchivoCorreo({ api, tab }) {
   const [ids, setIds] = useState("");
   const [error, setError] = useState("");
   const request = useRef(0);
+  const pendingSearch = useRef(false);
   const orders = tab === "ordenes";
 
   useEffect(() => {
@@ -34,7 +35,9 @@ export default function ArchivoCorreo({ api, tab }) {
     setBusy(true); setError("");
     try {
       const action = orders ? "index_orders" : chassis ? "index_search" : "index_status";
-      const next = await api(action, { method: "POST", payload: { chasis: chassis, aseguradora: insurer, page } });
+      const buscarEnCorreo = action === "index_search" && pendingSearch.current;
+      pendingSearch.current = false;
+      const next = await api(action, { method: "POST", payload: { chasis: chassis, aseguradora: insurer, page, buscarEnCorreo } });
       if (request.current === stamp) setData(next);
     } catch (err) {
       if (request.current === stamp) {
@@ -63,6 +66,7 @@ export default function ArchivoCorreo({ api, tab }) {
     event.preventDefault();
     const id = normalize(input.trim());
     if (!/^[A-Z0-9]{8,20}$/.test(id) || !/\d/.test(id)) return setError("Escribe el chasis completo, de 8 a 20 caracteres.");
+    pendingSearch.current = true;
     setPage(0); setChassis(id);
     if (chassis === id && page === 0) refresh();
   }
@@ -95,7 +99,8 @@ export default function ArchivoCorreo({ api, tab }) {
       <button type="button" className="btn-ghost mt-3 text-xs" disabled={working || busy} onClick={() => action("index_tick", {})}>{working ? "Procesando…" : "Procesar siguiente lote"}</button>
     </div>
     {error && <p role="alert" className="card mt-3 p-4 text-red-600">{error}</p>}
-    {busy && <p className="mt-3 text-sm" role="status">Consultando el historial…</p>}
+    {busy && <p className="mt-3 text-sm" role="status">Buscando en el historial y priorizando los correos del vehículo…</p>}
+    {data?.warnings?.map((warning, i) => <p key={i} role="alert" className="mt-3 text-sm text-amber-700">Una cuenta no pudo completar la consulta a Gmail · {warning}</p>)}
     {data && !orders && chassis && !data.ready && <div className="card mt-3 p-4">
       <p>Mostrando las coincidencias disponibles. La revisión de los 93 días continúa en segundo plano y añadirá más resultados.</p>
     </div>}

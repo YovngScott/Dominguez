@@ -28,6 +28,26 @@ export function initialWindows(account, now) {
   ];
 }
 
+export async function prioritizeChassis(db, chassis, { gmailAccessToken, googleRequest }) {
+  const id = normalizeChassis(chassis);
+  if (!validChassis(id)) throw new Error("Escribe un chasis válido.");
+  const accounts = await result(db.from("asistente_correo_cuentas").select("id,email,refresh_token_cifrado").eq("activa", true));
+  const outcomes = await Promise.allSettled(accounts.map(async account => {
+    const token = await gmailAccessToken(account);
+    const params = new URLSearchParams({ q: '"' + id + '" after:' + Math.floor(Date.now() / 1000 - 93 * DAY), maxResults: "100" });
+    const found = await googleRequest(gmail + "?" + params, { headers: { authorization: "Bearer " + token }, signal: AbortSignal.timeout(20000) });
+    const rows = (found.messages || []).map(m => ({
+      cuenta: account.id, gmail_id: m.id, hilo: m.threadId, parte: "correo", historico: true, disponible: "1900-01-01T00:00:00Z",
+    }));
+    if (rows.length) {
+      await result(db.from(JOBS).upsert(rows, { onConflict: "cuenta,gmail_id,parte", ignoreDuplicates: true }));
+      await result(db.from(JOBS).update({ disponible: "1900-01-01T00:00:00Z" }).eq("cuenta", account.id)
+        .in("gmail_id", rows.map(r => r.gmail_id)).eq("estado", "pendiente").eq("intentos", 0));
+    }
+  }));
+  return outcomes.filter(o => o.status === "rejected").map(o => o.reason.message);
+}
+
 async function discover(db, account, now, get) {
   await result(db.from(WINDOWS).upsert(initialWindows(account.id, now), { onConflict: "cuenta,tipo", ignoreDuplicates: true }));
   const windows = await result(db.from(WINDOWS).select("*").eq("cuenta", account.id).eq("terminado", false));
@@ -96,7 +116,7 @@ async function processJob({ db, account, job, get, scan, contacts }) {
     if (files.length) {
       await result(db.from(JOBS).upsert(files.map(({ part, path }) => ({
         cuenta: job.cuenta, gmail_id: job.gmail_id, historico: job.historico, parte: path,
-        archivo: part.filename || "Documento.pdf", disponible: job.fecha || meta.fecha, ...meta,
+        archivo: part.filename || "Documento.pdf", disponible: Date.parse(job.disponible) < 0 ? job.disponible : job.fecha || meta.fecha, ...meta,
       })), { onConflict: "cuenta,gmail_id,parte", ignoreDuplicates: true }));
     }
     order = orderText(subject + "\n" + body);

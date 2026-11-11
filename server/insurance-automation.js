@@ -996,7 +996,13 @@ export default async function handler(req, res) {
     }
     if (!await authorizeRequest(clients.supabase, req, res, action)) return;
     if (req.method === "POST" && ["index_tick", "index_status", "index_search", "index_orders", "index_review", "index_retry", "index_prioritize"].includes(action)) {
-      const { runIndex, indexView } = await import("./chassis-index.js");
+      const { runIndex, indexView, prioritizeChassis } = await import("./chassis-index.js");
+      if (action === "index_search" && req.body?.buscarEnCorreo === true) {
+        const warnings = await prioritizeChassis(clients.supabase, req.body.chasis, { gmailAccessToken, googleRequest });
+        await runIndex(clients.supabase, clients.ai, { gmailAccessToken, googleRequest, generateStructured });
+        const data = await indexView(clients.supabase, action, req.body);
+        return json(res, 200, { ...data, warnings });
+      }
       const data = action === "index_tick"
         ? await runIndex(clients.supabase, clients.ai, { gmailAccessToken, googleRequest, generateStructured })
         : await indexView(clients.supabase, action, req.body || {});
