@@ -201,12 +201,21 @@ export async function indexView(db, action, body) {
   if (action === "index_search") {
     const id = normalizeChassis(body.chasis);
     if (!validChassis(id)) throw new Error("Escribe un chasis válido de 8 a 20 caracteres.");
-    if (!ready && body.provisional !== true) return { coverage, ready, rows: [], more: false };
     query = query.contains("chasis", [id]);
   } else {
     query = query.or("orden.eq.true,estado.eq.incidencia").is("revisado", null);
   }
-  if (body.aseguradora) query = query.eq("aseguradora", String(body.aseguradora));
+  if (body.aseguradora) {
+    let caseMatches = false;
+    if (action === "index_search") {
+      const cases = await result(db.from("casos").select("aseguradora:aseguradoras(nombre)")
+        .ilike("chasis", normalizeChassis(body.chasis)));
+      caseMatches = cases.some(c => c.aseguradora?.nombre === String(body.aseguradora));
+    }
+    // El correo puede llegar de un ajustador o suplidor que no está registrado
+    // como contacto del seguro. El caso identifica la aseguradora del vehículo.
+    if (!caseMatches) query = query.eq("aseguradora", String(body.aseguradora));
+  }
   const rows = coverage.length ? await result(query.order("fecha", { ascending: false, nullsFirst: false }).order("id")
     .range(page * 40, page * 40 + 40)) : [];
   const visible = rows.slice(0, 40);

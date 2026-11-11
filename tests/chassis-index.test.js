@@ -38,15 +38,27 @@ test("acepta el identificador literal con separadores y recorre adjuntos MIME an
   assert.deepEqual(messageParts({ parts: [{ parts: [{ mimeType: "application/pdf" }] }] }).map(e => e.path), ["0", "0.0", "0.0.0"]);
 });
 
-test("la carga comienza 93 días atrás y la búsqueda espera los PDF y las incidencias históricas", async () => {
+test("la carga conserva 93 días y permite ver resultados durante la revisión de otras cuentas", async () => {
   const [past, live] = initialWindows("cuenta", 1800000000);
   assert.equal(live.desde - past.desde, 93 * 86400);
   assert.equal(live.desde, past.hasta);
   for (const issue of [{ terminado: false }, { pendientes_historicos: 4 }, { incidencias_historicas_abiertas: 1 }]) {
     const coverage = [{ id: "cuenta", terminado: true, pendientes_historicos: 0, incidencias_historicas_abiertas: 0, ...issue }];
-    const db = { from: () => ({ select: () => ({ order: () => ({ data: coverage }), in: () => ({}) }) }) };
-    const view = await indexView(db, "index_search", { chasis: chassis });
+    const hit = { id: 1, parte: "0.1", chasis: [chassis], aseguradora: null };
+    const db = { from(table) {
+      const builder = {
+        select() { return this; }, order() { return this; }, in() { return this; },
+        contains(_column, ids) { assert.deepEqual(ids, [chassis]); return this; },
+        ilike() { return this; },
+        eq() { assert.fail("El seguro del caso también incluye correos de ajustadores sin contacto registrado"); },
+        range() { return this; },
+        then(resolve) { resolve({ data: table === "correo_cobertura" ? coverage
+          : table === "casos" ? [{ aseguradora: { nombre: "SEGURO RESERVAS" } }] : [hit] }); },
+      };
+      return builder;
+    } };
+    const view = await indexView(db, "index_search", { chasis: chassis, aseguradora: "SEGURO RESERVAS" });
     assert.equal(view.ready, false);
-    assert.deepEqual(view.rows, []);
+    assert.deepEqual(view.rows, [hit]);
   }
 });

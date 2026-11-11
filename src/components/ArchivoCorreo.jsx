@@ -9,7 +9,6 @@ const normalize = value => value.toUpperCase().replace(/[\s-]/g, "");
 export default function ArchivoCorreo({ api, tab }) {
   const [input, setInput] = useState("");
   const [chassis, setChassis] = useState("");
-  const [provisional, setProvisional] = useState(false);
   const [insurer, setInsurer] = useState("");
   const [insurers, setInsurers] = useState([]);
   const [page, setPage] = useState(0);
@@ -35,7 +34,7 @@ export default function ArchivoCorreo({ api, tab }) {
     setBusy(true); setError("");
     try {
       const action = orders ? "index_orders" : chassis ? "index_search" : "index_status";
-      const next = await api(action, { method: "POST", payload: { chasis: chassis, aseguradora: insurer, page, provisional } });
+      const next = await api(action, { method: "POST", payload: { chasis: chassis, aseguradora: insurer, page } });
       if (request.current === stamp) setData(next);
     } catch (err) {
       if (request.current === stamp) {
@@ -45,7 +44,7 @@ export default function ArchivoCorreo({ api, tab }) {
     } finally {
       if (request.current === stamp) setBusy(false);
     }
-  }, [api, orders, chassis, insurer, page, provisional]);
+  }, [api, orders, chassis, insurer, page]);
 
   useEffect(() => {
     setData(null);
@@ -64,7 +63,7 @@ export default function ArchivoCorreo({ api, tab }) {
     event.preventDefault();
     const id = normalize(input.trim());
     if (!/^[A-Z0-9]{8,20}$/.test(id) || !/\d/.test(id)) return setError("Escribe el chasis completo, de 8 a 20 caracteres.");
-    setPage(0); setChassis(id); setProvisional(false);
+    setPage(0); setChassis(id);
     if (chassis === id && page === 0) refresh();
   }
 
@@ -75,7 +74,7 @@ export default function ArchivoCorreo({ api, tab }) {
         {!orders && <label className="min-w-48 flex-1 text-xs font-bold">Chasis del vehículo
           <input className="input mt-1 font-mono uppercase" placeholder="Ej. 5XYPGA3XHG270421" value={input} onChange={e => setInput(e.target.value)} />
         </label>}
-        <label className="text-xs font-bold">Aseguradora del remitente
+        <label className="text-xs font-bold">{orders ? "Aseguradora del remitente" : "Aseguradora"}
           <select className="input mt-1" value={insurer} onChange={e => { setPage(0); setInsurer(e.target.value); }}>
             <option value="">Todas las aseguradoras</option>
             {insurers.map(i => <option key={i.nombre}>{i.nombre}</option>)}
@@ -98,10 +97,9 @@ export default function ArchivoCorreo({ api, tab }) {
     {error && <p role="alert" className="card mt-3 p-4 text-red-600">{error}</p>}
     {busy && <p className="mt-3 text-sm" role="status">Consultando el historial…</p>}
     {data && !orders && chassis && !data.ready && <div className="card mt-3 p-4">
-      <p>La búsqueda completa estará disponible cuando terminen los 93 días de revisión en todas las cuentas.</p>
-      {!provisional && <button className="btn-ghost mt-2" onClick={() => setProvisional(true)}>Ver coincidencias ya procesadas</button>}
+      <p>Mostrando las coincidencias disponibles. La revisión de los 93 días continúa en segundo plano y añadirá más resultados.</p>
     </div>}
-    {data && (orders || (chassis && (data.ready || provisional))) && <>
+    {data && (orders || chassis) && <>
       <p className="my-4 text-sm font-bold">{orders ? "Órdenes y lecturas que requieren atención" : (data.ready ? "Coincidencias para " : "Coincidencias provisionales para ") + chassis}</p>
       {data.coverage.some(c => Number(c.incidencias) || Number(c.pendientes) || c.error_reciente || c.error_historico) && <p className="mb-3 text-sm text-amber-700">Hay lecturas pendientes o incompletas. Puedes ver el detalle por cuenta.</p>}
       {(data.rows || []).map(row => {
