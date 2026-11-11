@@ -5,6 +5,7 @@ import SearchBar from "../components/SearchBar";
 import Icon from "../components/Icon";
 import { ESTADOS } from "../lib/estados";
 import { diasDesde } from "../lib/aging";
+import { ordenarAseguradoras } from "../lib/aseguradorasOrden";
 
 // Cada métrica: etiqueta, color y qué casos activos incluye.
 const METRICAS = [
@@ -30,29 +31,6 @@ const METRICAS = [
     filtro: (c) => c.estado === "vehiculo_en_taller",
   },
 ];
-
-// El orden evita que las aseguradoras más usadas queden mezcladas entre las
-// demás, incluso si cambia el orden administrativo en la base de datos.
-const PRIORIDAD_ASEGURADORAS = [
-  /seguros\s+sura/i,
-  /coop[-\s]?seguros/i,
-  /atl[aá]ntica/i,
-  /seguro\s+reservas/i,
-  /colonial/i,
-  /internacional/i,
-];
-
-function ordenarAseguradoras(lista) {
-  const prioridad = (nombre = "") => {
-    const indice = PRIORIDAD_ASEGURADORAS.findIndex((patron) => patron.test(nombre));
-    return indice === -1 ? 99 : indice;
-  };
-  return [...lista].sort((a, b) =>
-    prioridad(a.nombre) - prioridad(b.nombre) ||
-    (Number(a.orden) || 9999) - (Number(b.orden) || 9999) ||
-    String(a.nombre || "").localeCompare(String(b.nombre || ""), "es")
-  );
-}
 
 export default function Dashboard() {
   const [aseguradoras, setAseguradoras] = useState([]);
@@ -360,21 +338,25 @@ export default function Dashboard() {
         {loading ? (
           <p className="text-[var(--ink-soft)]">Cargando…</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {aseguradoras.map((a) => (
               <Link
                 key={a.id}
                 to={`/aseguradoras/${a.id}`}
-                className="group card p-6 flex flex-col items-center gap-3 hover:-translate-y-0.5 hover:shadow-lg hover:border-[var(--brand-red)] transition-all"
+                className="group card p-5 flex flex-row items-center gap-4 hover:shadow-md hover:border-[var(--brand-red)] focus-visible:outline-2 focus-visible:outline-red-500 transition-colors"
               >
                 <div
-                  className={`w-20 h-20 rounded-2xl flex items-center justify-center overflow-hidden ${
+                  className={`w-16 h-16 shrink-0 rounded-2xl flex items-center justify-center overflow-hidden ${
                     a.es_personal ? "bg-[var(--brand-red-50)]" : "bg-[var(--paper)]"
                   }`}
                 >
                   {a.logo_url ? (
                     <img
                       src={a.logo_url}
+                      loading="lazy"
+                      decoding="async"
+                      width="64"
+                      height="64"
                       alt={a.nombre}
                       className="w-full h-full object-contain p-2"
                     />
@@ -389,12 +371,13 @@ export default function Dashboard() {
                     </span>
                   )}
                 </div>
-                <p className="font-bold text-[var(--ink)] text-center group-hover:text-[var(--brand-red)]">
+                <div className="min-w-0 flex-1"><p className="font-bold text-[var(--ink)] group-hover:text-[var(--brand-red)]">
                   {a.nombre}
                 </p>
                 <span className="text-xs font-medium text-[var(--ink-soft)] bg-[var(--paper)] px-2.5 py-1 rounded-full">
-                  {conteos[a.id] || 0} caso(s)
+                  {conteos[a.id] || 0} casos activos
                 </span>
+                </div><Icon name="chevronRight" className="w-4 h-4 text-[var(--ink-soft)]" />
               </Link>
             ))}
           </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import ResumenOperativo from "../components/ResumenOperativo";
+import { ordenarAseguradoras } from "../lib/aseguradorasOrden";
 
 export default function ResumenVehiculos() {
   const [aseguradoras, setAseguradoras] = useState([]);
@@ -13,7 +14,7 @@ export default function ResumenVehiculos() {
         .select("id, nombre").eq("activo", true).order("orden");
       if (!activo) return;
       if (err) { setError("No se pudieron cargar las aseguradoras. Actualiza la página para reintentar."); return; }
-      setAseguradoras((data || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || "")));
+      setAseguradoras(ordenarAseguradoras((data || []).filter((a) => !/dominguez\s*auto\s*pintura/i.test(a.nombre || ""))));
     }
     cargar();
     return () => { activo = false; };

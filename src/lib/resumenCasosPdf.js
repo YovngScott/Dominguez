@@ -1,8 +1,9 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { ETIQUETAS_CASO } from "./etiquetasCaso.js";
+import { compararAseguradoras } from "./aseguradorasOrden.js";
 
-export function generarResumenCasosPdf({ casos, citas, titulo, aseguradora }) {
+export function generarResumenCasosPdf({ casos, citas, titulo, aseguradora, actualizado }) {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const grupos = new Map();
   casos.forEach((c) => {
@@ -15,8 +16,9 @@ export function generarResumenCasosPdf({ casos, citas, titulo, aseguradora }) {
   doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(95, 102, 114);
   doc.text(`${titulo}  |  ${aseguradora}  |  ${casos.length} vehículos`, 14, 26);
   doc.text(`Generado: ${new Date().toLocaleString("es-DO")}`, 14, 32);
+  if (actualizado) { doc.setFontSize(8); doc.text(`Datos consultados: ${new Date(actualizado).toLocaleString("es-DO")}`, 190, 32); }
   let y = 40;
-  for (const [nombre, lista] of [...grupos].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [nombre, lista] of [...grupos].sort(([a], [b]) => compararAseguradoras({ nombre: a }, { nombre: b }))) {
     if (y > 175) { doc.addPage(); y = 16; }
     doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(185, 20, 20);
     doc.text(`${nombre.toUpperCase()}  (${lista.length})`, 14, y);
