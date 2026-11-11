@@ -112,9 +112,13 @@ export default function ArchivoCorreo({ api, tab }) {
           <p className="text-xs text-[var(--ink-soft)]">{date(row.fecha)} · {row.aseguradora || row.remitente || email}</p>
           <h3 className="mt-1 font-bold">{row.asunto || "Correo sin asunto"}</h3>
           {row.archivo && <p className="mt-1 break-all text-sm">PDF · {row.archivo}</p>}
+          {row.adjuntos?.length > 0 && <ul aria-label="PDF adjuntos al correo" className="mt-2 space-y-1 text-sm">
+            {row.adjuntos.map((a, i) => <li key={i} className="break-all">PDF · {a.archivo} · {a.estado === "listo" ? "Leído" : a.estado === "incidencia" ? "Requiere revisión" : Date.parse(a.disponible) === 0 ? "Lectura priorizada" : "Lectura pendiente"}</li>)}
+          </ul>}
           {evidence.map(e => <p key={e.chasis + e.fuente + e.pagina} className="mt-1 text-sm"><b>{e.chasis}</b> · {e.fuente}{e.pagina ? " · pág. " + e.pagina : ""}</p>)}
           {row.detalle && <p className="mt-2 text-sm text-amber-700">{row.detalle}</p>}
           <div className="mt-3 flex flex-wrap gap-2"><a href={link} target="_blank" rel="noreferrer" className="btn-ghost">Abrir en Gmail</a>
+            {row.adjuntos?.some(a => a.estado === "pendiente" && a.intentos === 0 && Date.parse(a.disponible) > 0) && <button disabled={working} className="btn-ghost" onClick={() => action("index_prioritize", { id: row.id })}>Priorizar lectura de estos PDF</button>}
             {orders && row.estado === "incidencia" && <button disabled={working} className="btn-ghost" onClick={() => action("index_retry", { id: row.id })}>Reintentar lectura</button>}
             {orders && <button disabled={working} className="btn-primary" onClick={() => {
               if (row.estado === "incidencia") { setManual(row.id); setIds(""); }

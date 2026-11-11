@@ -995,7 +995,7 @@ export default async function handler(req, res) {
       return res.redirect(302, `/mensajes?correo=conectado&email=${encodeURIComponent(email)}`);
     }
     if (!await authorizeRequest(clients.supabase, req, res, action)) return;
-    if (req.method === "POST" && ["index_tick", "index_status", "index_search", "index_orders", "index_review", "index_retry"].includes(action)) {
+    if (req.method === "POST" && ["index_tick", "index_status", "index_search", "index_orders", "index_review", "index_retry", "index_prioritize"].includes(action)) {
       const { runIndex, indexView } = await import("./chassis-index.js");
       const data = action === "index_tick"
         ? await runIndex(clients.supabase, clients.ai, { gmailAccessToken, googleRequest, generateStructured })

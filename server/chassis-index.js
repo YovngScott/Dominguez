@@ -172,6 +172,12 @@ export async function indexView(db, action, body) {
   const ready = coverage.length > 0 && coverage.every(c => c.terminado && Number(c.pendientes_historicos) === 0
     && Number(c.incidencias_historicas_abiertas) === 0);
   if (action === "index_status") return { coverage, ready };
+  if (action === "index_prioritize") {
+    const row = await result(db.from(JOBS).select("cuenta,gmail_id").eq("id", body.id).eq("parte", "correo").single());
+    await result(db.from(JOBS).update({ disponible: "1970-01-01T00:00:00Z" }).eq("cuenta", row.cuenta)
+      .eq("gmail_id", row.gmail_id).neq("parte", "correo").eq("estado", "pendiente").eq("intentos", 0));
+    return { ok: true };
+  }
   if (action === "index_retry") {
     await result(db.from(JOBS).update({ estado: "pendiente", intentos: 0, disponible: new Date().toISOString(), revisado: null })
       .eq("id", body.id).eq("estado", "incidencia"));
@@ -203,5 +209,14 @@ export async function indexView(db, action, body) {
   if (body.aseguradora) query = query.eq("aseguradora", String(body.aseguradora));
   const rows = coverage.length ? await result(query.order("fecha", { ascending: false, nullsFirst: false }).order("id")
     .range(page * 40, page * 40 + 40)) : [];
-  return { coverage, ready, rows: rows.slice(0, 40), more: rows.length > 40 };
+  const visible = rows.slice(0, 40);
+  if (action === "index_search") {
+    const messages = visible.filter(row => row.parte === "correo");
+    if (messages.length) {
+      const attachments = await result(db.from(JOBS).select("cuenta,gmail_id,archivo,estado,intentos,disponible")
+        .in("gmail_id", [...new Set(messages.map(row => row.gmail_id))]).neq("parte", "correo").order("id"));
+      for (const row of messages) row.adjuntos = attachments.filter(a => a.cuenta === row.cuenta && a.gmail_id === row.gmail_id);
+    }
+  }
+  return { coverage, ready, rows: visible, more: rows.length > 40 };
 }
