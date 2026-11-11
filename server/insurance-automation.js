@@ -132,7 +132,11 @@ function decodeOauthState(state) {
 async function googleRequest(url, init = {}) {
   const response = await fetch(url, init);
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.error_description || body?.error?.message || `Google respondió ${response.status}.`);
+  if (!response.ok) {
+    const error = new Error(body?.error_description || body?.error?.message || `Google respondió ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 

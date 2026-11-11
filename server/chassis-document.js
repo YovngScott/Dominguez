@@ -28,6 +28,8 @@ export function identifiers(text) {
 }
 
 export function orderText(value) {
+  if (/\b[oó]rden\s*(?:(?:n[uú]m(?:ero)?|no|n[º°])\.?\s*)?[#:\s-]*\d{3,}\b/i.test(value)
+    || /\borden(?:de)?(?:compra|trabajo|servicio|piezas)/i.test(value)) return true;
   return /\b(?:[oó]rden(?:es)?\s+(?:(?:de|del)\s+)?(?:compras?|trabajo|piezas?|repuestos?|servicio|reparaci[oó]n|mano\s+de\s+obra)|autorizaci[oó]n\s+(?:de\s+)?(?:reparaci[oó]n|pago|trabajos?|piezas?)|purchase\s+order|work\s+order)\b/i.test(String(value).replace(/[_-]+/g, " "));
 }
 

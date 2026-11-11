@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { jsPDF } from "jspdf";
-import { identifiers, normalizeChassis, readPdf } from "../server/chassis-document.js";
+import { identifiers, normalizeChassis, orderText, readPdf } from "../server/chassis-document.js";
 import { initialWindows, indexView, messageParts } from "../server/chassis-index.js";
 
 const chassis = "5XYPGA3XHG270421";
@@ -34,6 +34,7 @@ test("pide lectura visual para una página sin texto y una lectura dudosa queda 
 test("acepta el identificador literal con separadores y recorre adjuntos MIME anidados", () => {
   assert.equal(normalizeChassis("5xy pga3x-hg270421"), chassis);
   assert.ok(identifiers("CHASIS: 5XY PGA3X HG270421").includes(chassis));
+  assert.equal(orderText("ORDEN 14926 DOMINGUEZ.pdf"), true);
   assert.deepEqual(messageParts({ parts: [{ parts: [{ mimeType: "application/pdf" }] }] }).map(e => e.path), ["0", "0.0", "0.0.0"]);
 });
 

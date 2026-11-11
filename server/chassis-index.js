@@ -96,7 +96,7 @@ async function processJob({ db, account, job, get, scan, contacts }) {
     if (files.length) {
       await result(db.from(JOBS).upsert(files.map(({ part, path }) => ({
         cuenta: job.cuenta, gmail_id: job.gmail_id, historico: job.historico, parte: path,
-        archivo: part.filename || "Documento.pdf", ...meta,
+        archivo: part.filename || "Documento.pdf", disponible: job.fecha || meta.fecha, ...meta,
       })), { onConflict: "cuenta,gmail_id,parte", ignoreDuplicates: true }));
     }
     order = orderText(subject + "\n" + body);
@@ -155,8 +155,10 @@ export async function runIndex(db, ai, { gmailAccessToken, googleRequest, genera
         const account = accounts.find(a => a.id === job.cuenta);
         values = await processJob({ db, account, job, get, scan, contacts });
       } catch (error) {
-        values = { detalle: error.message?.slice(0, 450) || "No se pudo leer.", estado: job.intentos >= 3 ? "incidencia" : "pendiente",
-          disponible: new Date(Date.now() + job.intentos * 60000).toISOString() };
+        const temporary = error.status === 429 || error.status >= 500 || /quota|resource.exhausted|rate.limit|timed? ?out|unavailable|overloaded|fetch failed|timeout/i.test(error.message);
+        const delayMinutes = Math.min(60, 2 ** Math.min(job.intentos, 6));
+        values = { detalle: error.message?.slice(0, 450) || "No se pudo leer.", estado: !temporary && job.intentos >= 3 ? "incidencia" : "pendiente",
+          disponible: new Date(Date.now() + delayMinutes * 60000).toISOString() };
       }
       await result(db.from(JOBS).update({ ...values, turno: null }).eq("id", job.id).eq("turno", lease));
     }));
@@ -193,7 +195,7 @@ export async function indexView(db, action, body) {
   if (action === "index_search") {
     const id = normalizeChassis(body.chasis);
     if (!validChassis(id)) throw new Error("Escribe un chasis válido de 8 a 20 caracteres.");
-    if (!ready) return { coverage, ready, rows: [], more: false };
+    if (!ready && body.provisional !== true) return { coverage, ready, rows: [], more: false };
     query = query.contains("chasis", [id]);
   } else {
     query = query.or("orden.eq.true,estado.eq.incidencia").is("revisado", null);

@@ -9,6 +9,7 @@ const normalize = value => value.toUpperCase().replace(/[\s-]/g, "");
 export default function ArchivoCorreo({ api, tab }) {
   const [input, setInput] = useState("");
   const [chassis, setChassis] = useState("");
+  const [provisional, setProvisional] = useState(false);
   const [insurer, setInsurer] = useState("");
   const [insurers, setInsurers] = useState([]);
   const [page, setPage] = useState(0);
@@ -34,7 +35,7 @@ export default function ArchivoCorreo({ api, tab }) {
     setBusy(true); setError("");
     try {
       const action = orders ? "index_orders" : chassis ? "index_search" : "index_status";
-      const next = await api(action, { method: "POST", payload: { chasis: chassis, aseguradora: insurer, page } });
+      const next = await api(action, { method: "POST", payload: { chasis: chassis, aseguradora: insurer, page, provisional } });
       if (request.current === stamp) setData(next);
     } catch (err) {
       if (request.current === stamp) {
@@ -44,7 +45,7 @@ export default function ArchivoCorreo({ api, tab }) {
     } finally {
       if (request.current === stamp) setBusy(false);
     }
-  }, [api, orders, chassis, insurer, page]);
+  }, [api, orders, chassis, insurer, page, provisional]);
 
   useEffect(() => {
     setData(null);
@@ -63,7 +64,7 @@ export default function ArchivoCorreo({ api, tab }) {
     event.preventDefault();
     const id = normalize(input.trim());
     if (!/^[A-Z0-9]{8,20}$/.test(id) || !/\d/.test(id)) return setError("Escribe el chasis completo, de 8 a 20 caracteres.");
-    setPage(0); setChassis(id);
+    setPage(0); setChassis(id); setProvisional(false);
     if (chassis === id && page === 0) refresh();
   }
 
@@ -96,9 +97,12 @@ export default function ArchivoCorreo({ api, tab }) {
     </div>
     {error && <p role="alert" className="card mt-3 p-4 text-red-600">{error}</p>}
     {busy && <p className="mt-3 text-sm" role="status">Consultando el historial…</p>}
-    {data && !orders && chassis && !data.ready && <p className="card mt-3 p-4">La búsqueda se habilitará cuando termine el recorrido inicial de todas las cuentas y se procesen los correos y PDF de esos 93 días.</p>}
-    {data && (orders || (chassis && data.ready)) && <>
-      <p className="my-4 text-sm font-bold">{orders ? "Órdenes y lecturas que requieren atención" : "Coincidencias para " + chassis}</p>
+    {data && !orders && chassis && !data.ready && <div className="card mt-3 p-4">
+      <p>La búsqueda completa estará disponible cuando terminen los 93 días de revisión en todas las cuentas.</p>
+      {!provisional && <button className="btn-ghost mt-2" onClick={() => setProvisional(true)}>Ver coincidencias ya procesadas</button>}
+    </div>}
+    {data && (orders || (chassis && (data.ready || provisional))) && <>
+      <p className="my-4 text-sm font-bold">{orders ? "Órdenes y lecturas que requieren atención" : (data.ready ? "Coincidencias para " : "Coincidencias provisionales para ") + chassis}</p>
       {data.coverage.some(c => Number(c.incidencias) || Number(c.pendientes) || c.error_reciente || c.error_historico) && <p className="mb-3 text-sm text-amber-700">Hay lecturas pendientes o incompletas. Puedes ver el detalle por cuenta.</p>}
       {(data.rows || []).map(row => {
         const email = data.coverage.find(c => c.id === row.cuenta)?.email || "";
