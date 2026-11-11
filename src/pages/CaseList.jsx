@@ -259,6 +259,16 @@ export default function CaseList() {
                       <Icon name="alert" className="w-3.5 h-3.5" /> {diasDesde(c.fecha_ingreso)}d
                     </span>
                   )}
+                  {c.estado === "vehiculo_en_taller" && (
+                    <button type="button" disabled={guardandoEtiqueta === c.id}
+                      aria-pressed={c.etiqueta_organizacion === "suplir_piezas"}
+                      title={c.etiqueta_organizacion === "suplir_piezas" ? "Quitar Suplir piezas" : "Marcar Suplir piezas"}
+                      onClick={() => actualizarEtiqueta(c.id, c.etiqueta_organizacion === "suplir_piezas" ? null : "suplir_piezas")}
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50 ${c.etiqueta_organizacion === "suplir_piezas" ? "border-violet-200 bg-violet-50 text-violet-700" : "border-[var(--line)] text-[var(--ink-soft)] hover:border-violet-300 hover:text-violet-700"}`}>
+                      <Icon name="truck" className="w-4 h-4" />
+                      {guardandoEtiqueta === c.id ? "Guardando…" : "Suplir piezas"}
+                    </button>
+                  )}
                   {casoAdmiteEtiqueta(c.estado) && (
                     <EtiquetaPicker
                       caso={c}

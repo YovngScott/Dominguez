@@ -40,6 +40,9 @@ export function casoAdmiteEtiqueta(estado) {
 }
 
 export function etiquetaDeCaso(caso) {
+  if (caso?.estado === "vehiculo_en_taller") {
+    return caso.etiqueta_organizacion === "suplir_piezas" ? ETIQUETAS_CASO[0] : null;
+  }
   if (!caso || !casoAdmiteEtiqueta(caso.estado)) return null;
   return ETIQUETAS_CASO.find((etiqueta) => etiqueta.id === caso.etiqueta_organizacion) || null;
 }

@@ -101,6 +101,7 @@ export default function ResumenOperativo({ aseguradoras }) {
             <div className="min-w-0"><p className="font-bold">{[c.marca?.nombre, c.modelo?.nombre, c.anio].filter(Boolean).join(" ") || "Vehículo"} <span className="font-normal text-[var(--ink-soft)]">{c.color || ""}</span></p>
               <p className="text-sm text-[var(--ink-soft)]">{c.cliente?.nombre_completo || "Sin asegurado"} · Placa {c.placa || "—"}</p>
               <p className="text-xs text-[var(--ink-soft)] mt-1">Chasis {c.chasis || "—"} · Póliza {c.numero_poliza || "—"} · Reclamo {c.numero_reclamo || "—"}</p>
+              {c.estado === "vehiculo_en_taller" && <p className="mt-1 text-xs font-semibold text-sky-600">Vehículo en el taller</p>}
             </div>
             <div className="shrink-0 text-xs"><span className={`inline-block rounded-full px-3 py-1.5 border font-semibold ${listo ? "border-emerald-200 bg-emerald-50 text-emerald-700" : etiqueta?.chip || "border-amber-200 bg-amber-50 text-amber-700"}`}>{listo ? "Listo para trabajar" : etiqueta?.label || "En espera · Sin etiqueta"}</span>
               {listo && <p className="mt-2 text-[var(--ink-soft)]">{cita ? `Cita ${cita.fecha} · ${cita.hora?.slice(0, 5) || ""}` : "Sin cita programada"}</p>}
