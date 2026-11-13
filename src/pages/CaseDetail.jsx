@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import PhotoManager from "../components/PhotoManager";
@@ -12,6 +12,7 @@ import { ESTADOS, FASES_REPARACION } from "../lib/estados";
 import { rd } from "../lib/cotizacion";
 import { mostrarDeducible } from "../lib/deducible";
 import { marcarCitasAtendidas } from "../lib/citaCaso";
+import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
 
 const ESTADO_ORDEN = ["en_espera_piezas", "listo_para_trabajar", "entregado"];
 
@@ -608,15 +609,59 @@ function CitasCaso({ lista, casoId, caso, onRefresh }) {
   const [citaNueva, setCitaNueva] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+  const [aviso, setAviso] = useState(null);
+  const enviando = useRef(false);
+
+  async function notificarCita(cita) {
+    if (!cita.telefono) {
+      setAviso({ texto: "Cita guardada. Agrega un teléfono para poder avisar por WhatsApp.", tipo: "info" });
+      return;
+    }
+    try {
+      const [anio, mes, dia] = cita.fecha.split("-");
+      const fecha = new Date(Number(anio), Number(mes) - 1, Number(dia)).toLocaleDateString("es-DO", {
+        weekday: "short", day: "2-digit", month: "short", year: "numeric",
+      });
+      const hoy = new Date();
+      const esHoy = Number(anio) === hoy.getFullYear() && Number(mes) === hoy.getMonth() + 1 && Number(dia) === hoy.getDate();
+      await enviarWhatsappCita({
+        to: cita.telefono, nombre: cita.nombre, fecha, hora: cita.hora || "por confirmar",
+        vehiculo: [caso?.marca?.nombre, caso?.modelo?.nombre, caso?.placa].filter(Boolean).join(" "),
+        servicio: cita.motivo || "Cita", esHoy,
+      });
+      setAviso({ texto: `Cita guardada. WhatsApp enviado a ${cita.telefono}.`, tipo: "ok" });
+    } catch (err) {
+      setAviso({ texto: `La cita quedó guardada, pero no se pudo enviar el WhatsApp. ${err.message || "Intenta nuevamente."}`, tipo: "fail", cita });
+    }
+  }
+
+  async function reintentarEnvio() {
+    if (enviando.current || !aviso?.cita) return;
+    enviando.current = true; setGuardando(true);
+    try {
+      const { data: cita, error } = await supabase.from("citas")
+        .select("id,fecha,hora,nombre,telefono,motivo,estado").eq("id", aviso.cita.id).single();
+      if (error) throw error;
+      if (!["pendiente", "confirmada"].includes(cita.estado)) {
+        setAviso({ texto: "La cita ya está atendida o cancelada.", tipo: "info" });
+        return;
+      }
+      await notificarCita(cita);
+    } catch {
+      setAviso(prev => ({ ...prev, texto: "No se pudo consultar la cita para reintentar el envío. Revisa la conexión." }));
+    }
+    finally { enviando.current = false; setGuardando(false); }
+  }
   async function marcar(cita, estado) {
     const { error } = await supabase.from("citas").update({ estado }).eq("id", cita.id);
     if (!error) onRefresh();
   }
   async function guardarNueva(e) {
     e.preventDefault();
-    if (!citaNueva?.fecha || !citaNueva?.nombre?.trim()) return;
-    setGuardando(true); setError("");
-    const { error: eInsert } = await supabase.from("citas").insert({
+    if (enviando.current || !citaNueva?.fecha || !citaNueva?.nombre?.trim()) return;
+    enviando.current = true;
+    setGuardando(true); setError(""); setAviso(null);
+    const nueva = {
       caso_id: casoId,
       fecha: citaNueva.fecha,
       hora: citaNueva.hora || null,
@@ -626,20 +671,33 @@ function CitasCaso({ lista, casoId, caso, onRefresh }) {
       motivo: citaNueva.motivo?.trim() || null,
       nota: citaNueva.nota?.trim() || null,
       estado: "pendiente",
-    });
-    setGuardando(false);
-    if (eInsert) return setError("No se pudo guardar la cita. Revisa la conexión e inténtalo de nuevo.");
-    setCitaNueva(null); onRefresh();
+    };
+    try {
+      const { data: creada, error: eInsert } = await supabase.from("citas").insert(nueva).select("id").single();
+      if (eInsert) throw eInsert;
+      setCitaNueva(null);
+      await notificarCita({ ...nueva, id: creada.id });
+      onRefresh();
+    } catch {
+      setError("No se pudo guardar la cita. Revisa la conexión e inténtalo de nuevo.");
+    } finally {
+      enviando.current = false; setGuardando(false);
+    }
   }
   return (
     <div className="card p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3 mb-3">
         <div><h2 className="font-bold text-[var(--ink)]">Citas de este caso</h2><p className="text-xs text-[var(--ink-soft)] mt-0.5">Actualiza el estado sin salir del vehículo.</p></div>
-        <button type="button" onClick={() => setCitaNueva({ nombre: caso?.cliente?.nombre_completo || "", fecha: new Date().toISOString().slice(0, 10), hora: "", telefono: caso?.cliente?.telefono || "", motivo: "", nota: "" })} className="btn-primary text-sm py-2 px-3">+ Nueva cita</button>
+        <button type="button" disabled={guardando} onClick={() => setCitaNueva({ nombre: caso?.cliente?.nombre_completo || "", fecha: new Date().toISOString().slice(0, 10), hora: "", telefono: caso?.cliente?.telefono || "", motivo: "", nota: "" })} className="btn-primary text-sm py-2 px-3">+ Nueva cita</button>
       </div>
       {error && <p className="text-sm text-[var(--brand-red)] mb-3">{error}</p>}
+      {guardando && !citaNueva && <p role="status" className="text-sm text-[var(--ink-soft)] mb-3">Enviando aviso por WhatsApp…</p>}
+      {aviso && <div role="status" className={`rounded-xl border p-3 mb-3 text-sm ${aviso.tipo === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+        <p>{aviso.texto}</p>
+        {aviso.cita && <button type="button" disabled={guardando} onClick={reintentarEnvio} className="btn-ghost mt-2 text-xs">{guardando ? "Enviando…" : "Reintentar WhatsApp"}</button>}
+      </div>}
       {lista.length === 0 ? <p className="text-sm text-[var(--ink-soft)]">No hay citas enlazadas a este caso.</p> : <div className="space-y-2">{lista.map((cita) => <div key={cita.id} className="rounded-xl border border-[var(--line)] p-3 flex flex-wrap items-center justify-between gap-3"><div className="min-w-0"><p className="font-semibold text-[var(--ink)]">{cita.nombre}</p><p className="text-sm text-[var(--ink-soft)]">{cita.fecha}{cita.hora ? ` · ${cita.hora}` : ""}{cita.telefono ? ` · ${cita.telefono}` : ""}</p>{cita.motivo && <p className="text-xs text-[var(--ink-soft)] mt-1">{cita.motivo}</p>}</div><select value={cita.estado || "pendiente"} onChange={(e) => marcar(cita, e.target.value)} className="input text-sm py-1.5 px-2 w-auto">{["pendiente", "confirmada", "atendida", "cancelada"].map((estado) => <option key={estado} value={estado}>{estado}</option>)}</select></div>)}</div>}
-      {citaNueva && <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"><form onSubmit={guardarNueva} className="card w-full max-w-lg p-5 sm:p-6 space-y-3"><div className="flex items-center justify-between"><h3 className="text-lg font-bold text-[var(--ink)]">Nueva cita para este caso</h3><button type="button" onClick={() => setCitaNueva(null)} className="text-xl text-[var(--ink-soft)]" aria-label="Cerrar">✕</button></div><div className="grid grid-cols-2 gap-3"><label className="block"><span className="field-label">Fecha *</span><input type="date" required value={citaNueva.fecha} onChange={(e) => setCitaNueva((c) => ({ ...c, fecha: e.target.value }))} className="input" /></label><label className="block"><span className="field-label">Hora</span><input type="time" value={citaNueva.hora} onChange={(e) => setCitaNueva((c) => ({ ...c, hora: e.target.value }))} className="input" /></label></div><label className="block"><span className="field-label">Nombre *</span><input required value={citaNueva.nombre} onChange={(e) => setCitaNueva((c) => ({ ...c, nombre: e.target.value }))} className="input" placeholder="Nombre del cliente" /></label><label className="block"><span className="field-label">Teléfono</span><input value={citaNueva.telefono} onChange={(e) => setCitaNueva((c) => ({ ...c, telefono: e.target.value }))} className="input" placeholder="809..." /></label><label className="block"><span className="field-label">Motivo</span><input value={citaNueva.motivo} onChange={(e) => setCitaNueva((c) => ({ ...c, motivo: e.target.value }))} className="input" placeholder="Revisión, entrega…" /></label><label className="block"><span className="field-label">Nota</span><textarea value={citaNueva.nota} onChange={(e) => setCitaNueva((c) => ({ ...c, nota: e.target.value }))} className="input min-h-20 resize-y" /></label><div className="flex justify-end gap-2 pt-1"><button type="button" onClick={() => setCitaNueva(null)} className="btn-ghost">Cancelar</button><button disabled={guardando} className="btn-primary">{guardando ? "Guardando…" : "Guardar cita"}</button></div></form></div>}
+      {citaNueva && <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"><form onSubmit={guardarNueva} className="card w-full max-w-lg p-5 sm:p-6 space-y-3"><fieldset disabled={guardando} className="contents"><div className="flex items-center justify-between"><h3 className="text-lg font-bold text-[var(--ink)]">Nueva cita para este caso</h3><button type="button" onClick={() => setCitaNueva(null)} className="text-xl text-[var(--ink-soft)]" aria-label="Cerrar">✕</button></div><div className="grid grid-cols-2 gap-3"><label className="block"><span className="field-label">Fecha *</span><input type="date" required value={citaNueva.fecha} onChange={(e) => setCitaNueva((c) => ({ ...c, fecha: e.target.value }))} className="input" /></label><label className="block"><span className="field-label">Hora</span><input type="time" value={citaNueva.hora} onChange={(e) => setCitaNueva((c) => ({ ...c, hora: e.target.value }))} className="input" /></label></div><label className="block"><span className="field-label">Nombre *</span><input required value={citaNueva.nombre} onChange={(e) => setCitaNueva((c) => ({ ...c, nombre: e.target.value }))} className="input" placeholder="Nombre del cliente" /></label><label className="block"><span className="field-label">Teléfono</span><input value={citaNueva.telefono} onChange={(e) => setCitaNueva((c) => ({ ...c, telefono: e.target.value }))} className="input" placeholder="809..." /></label><label className="block"><span className="field-label">Motivo</span><input value={citaNueva.motivo} onChange={(e) => setCitaNueva((c) => ({ ...c, motivo: e.target.value }))} className="input" placeholder="Revisión, entrega…" /></label><label className="block"><span className="field-label">Nota</span><textarea value={citaNueva.nota} onChange={(e) => setCitaNueva((c) => ({ ...c, nota: e.target.value }))} className="input min-h-20 resize-y" /></label><div className="flex justify-end gap-2 pt-1"><button type="button" onClick={() => setCitaNueva(null)} className="btn-ghost">Cancelar</button><button disabled={guardando} className="btn-primary">{guardando ? "Guardando y enviando…" : "Guardar cita"}</button></div></fieldset></form></div>}
     </div>
   );
 }
