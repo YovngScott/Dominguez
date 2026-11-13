@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import Combobox from "../components/Combobox";
 import Icon from "../components/Icon";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ReporteCitasModal from "../components/ReporteCitasModal";
 import { enviarWhatsappCita } from "../lib/enviarWhatsapp";
 import { avisarCitaConfirmada } from "../lib/confirmarCita";
 import { ESTADOS as ESTADOS_CASO } from "../lib/estados";
@@ -34,6 +35,7 @@ export default function CitasList() {
   const [citas, setCitas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [citaModal, setCitaModal] = useState(null);
+  const [reporteAbierto, setReporteAbierto] = useState(false);
   const [error, setError] = useState("");
   const [aviso, setAviso] = useState(null); // { tipo: "ok"|"fail"|"info", texto }
 
@@ -125,9 +127,14 @@ export default function CitasList() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)]">Citas</h1>
+        <div className="flex flex-wrap gap-2">
+        <button onClick={() => setReporteAbierto(true)} className="btn-ghost">
+          <Icon name="download" className="w-4 h-4" /> Reporte de pendientes
+        </button>
         <button onClick={() => setCitaModal({})} className="btn-primary">
           <span className="text-lg leading-none">+</span> Nueva cita
         </button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -243,6 +250,7 @@ export default function CitasList() {
         </div>
       )}
 
+      {reporteAbierto && <ReporteCitasModal onClose={() => setReporteAbierto(false)} />}
       {citaModal && (
         <CitaModal
           cita={citaModal.id ? citaModal : null}
