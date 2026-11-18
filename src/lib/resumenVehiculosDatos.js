@@ -8,9 +8,22 @@ export function esEspera(caso) {
 }
 
 export function filtrarVehiculos(casos, aseguradora, tipo) {
-  return casos.filter(c => (aseguradora === "todas" || c.aseguradora_id === aseguradora)
-    && (tipo === "todos" ? true : tipo === "listos" ? c.estado === "listo_para_trabajar"
-      : tipo === "espera" ? esEspera(c) : (esEspera(c) || (tipo === "suplir_piezas" && c.estado === "vehiculo_en_taller")) && c.etiqueta_organizacion === tipo));
+  return casos.filter(c => {
+    if (aseguradora !== "todas" && c.aseguradora_id !== aseguradora) return false;
+    const taller = c.estado === "vehiculo_en_taller";
+    switch (tipo) {
+      case "todos":
+        return esEspera(c) || c.estado === "listo_para_trabajar" || (taller && c.etiqueta_organizacion === "suplir_piezas");
+      case "taller":
+        return taller;
+      case "listos":
+        return c.estado === "listo_para_trabajar";
+      case "espera":
+        return esEspera(c);
+      default:
+        return (esEspera(c) || (tipo === "suplir_piezas" && taller)) && c.etiqueta_organizacion === tipo;
+    }
+  });
 }
 
 async function consultar() {
@@ -18,7 +31,7 @@ async function consultar() {
   for (let inicio = 0; ; inicio += 500) {
     const { data, error } = await supabase.from("casos")
       .select("id,estado,etiqueta_organizacion,aseguradora_id,anio,color,placa,chasis,numero_poliza,numero_reclamo,aseguradora:aseguradoras(nombre),cliente:clientes(nombre_completo),marca:marcas(nombre),modelo:modelos(nombre)")
-      .is("archivado_en", null).or("estado.is.null,estado.not.in.(vehiculo_en_taller,entregado,completado),and(estado.eq.vehiculo_en_taller,etiqueta_organizacion.eq.suplir_piezas)")
+      .is("archivado_en", null).or("estado.is.null,estado.not.in.(entregado,completado)")
       .order("id").range(inicio, inicio + 499);
     if (error) throw error;
     casos.push(...data);

@@ -26,7 +26,7 @@ export function generarResumenCasosPdf({ casos, citas, titulo, aseguradora, actu
       const cita = citas[c.id];
       const situacion = c.estado === "listo_para_trabajar"
         ? cita ? `LISTO - CON CITA: ${cita.fecha}${cita.hora ? ` ${cita.hora.slice(0, 5)}` : ""}` : "LISTO - SIN CITA"
-        : c.estado === "vehiculo_en_taller" ? "EN EL TALLER - SUPLIR PIEZAS"
+        : c.estado === "vehiculo_en_taller" ? c.etiqueta_organizacion === "suplir_piezas" ? "EN EL TALLER - SUPLIR PIEZAS" : "EN EL TALLER"
         : ETIQUETAS_CASO.find((e) => e.id === c.etiqueta_organizacion)?.label || "SIN ETIQUETA";
       return [[c.marca?.nombre, c.modelo?.nombre, c.anio].filter(Boolean).join(" ") || "-", c.color || "-", c.placa || "-", c.chasis || "-", c.cliente?.nombre_completo || "-", c.numero_poliza || "-", c.numero_reclamo || "-", situacion];
     });

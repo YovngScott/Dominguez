@@ -8,6 +8,7 @@ import { ETIQUETAS_CASO } from "../lib/etiquetasCaso";
 const TIPOS = [
   ["todos", "Todos los pendientes", "car"],
   ["listos", "Listos para trabajar", "wrench"],
+  ["taller", "Vehículos en el taller", "car"],
   ["espera", "En espera", "package"],
   ["suplir_piezas", "Suplir piezas", "truck"],
   ["espera_piezas", "Espera de piezas", "package"],
@@ -44,6 +45,7 @@ export default function ResumenOperativo({ aseguradoras }) {
       || String(a.placa || "").localeCompare(b.placa || "")), [datos, aseg, tipo]);
   const base = filtrarVehiculos(datos?.casos || [], aseg, "todos");
   const listos = base.filter(c => c.estado === "listo_para_trabajar");
+  const enTaller = filtrarVehiculos(datos?.casos || [], aseg, "taller");
   const sinCita = listos.filter(c => !datos?.citas[c.id]).length;
   const nombre = aseg === "todas" ? "Todas las aseguradoras" : aseguradoras.find(a => a.id === aseg)?.nombre || "Aseguradora";
   const titulo = TIPOS.find(([id]) => id === tipo)[1];
@@ -74,8 +76,8 @@ export default function ResumenOperativo({ aseguradoras }) {
           <button className="btn-primary" disabled={!datos || exportando || cargando} onClick={descargar}><Icon name="download" className="w-4 h-4" />{exportando ? "Generando…" : `Descargar PDF`}</button>
         </div>
       </div>
-      <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[[base.length, "Vehículos pendientes", "text-[var(--ink)]"], [listos.length, "Listos para trabajar", "text-emerald-600"], [base.filter(esEspera).length, "En espera", "text-amber-600"], [sinCita, "Listos sin cita", "text-sky-600"]].map(([n, label, color]) =>
+      <div className="mt-5 grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[[base.length, "Vehículos pendientes", "text-[var(--ink)]"], [listos.length, "Listos para trabajar", "text-emerald-600"], [base.filter(esEspera).length, "En espera", "text-amber-600"], [enTaller.length, "En el taller", "text-sky-600"], [sinCita, "Listos sin cita", "text-sky-600"]].map(([n, label, color]) =>
           <div key={label} className="rounded-xl border border-[var(--line)] bg-[var(--paper)] px-4 py-3"><div className={`text-2xl font-extrabold tabular-nums ${color}`}>{datos ? n : "—"}</div><div className="text-xs text-[var(--ink-soft)] mt-1">{label}</div></div>
         )}
       </div>
@@ -94,6 +96,7 @@ export default function ResumenOperativo({ aseguradoras }) {
         const cita = datos.citas[c.id];
         const etiqueta = ETIQUETAS_CASO.find(e => e.id === c.etiqueta_organizacion);
         const listo = c.estado === "listo_para_trabajar";
+        const enTaller = c.estado === "vehiculo_en_taller";
         const separador = i === 0 || casos[i - 1].aseguradora_id !== c.aseguradora_id;
         return <div key={c.id}>
           {separador && <h3 className="mt-6 mb-3 text-xs font-bold tracking-wide text-[var(--ink-soft)]">{c.aseguradora?.nombre || "Sin aseguradora"}</h3>}
@@ -101,9 +104,9 @@ export default function ResumenOperativo({ aseguradoras }) {
             <div className="min-w-0"><p className="font-bold">{[c.marca?.nombre, c.modelo?.nombre, c.anio].filter(Boolean).join(" ") || "Vehículo"} <span className="font-normal text-[var(--ink-soft)]">{c.color || ""}</span></p>
               <p className="text-sm text-[var(--ink-soft)]">{c.cliente?.nombre_completo || "Sin asegurado"} · Placa {c.placa || "—"}</p>
               <p className="text-xs text-[var(--ink-soft)] mt-1">Chasis {c.chasis || "—"} · Póliza {c.numero_poliza || "—"} · Reclamo {c.numero_reclamo || "—"}</p>
-              {c.estado === "vehiculo_en_taller" && <p className="mt-1 text-xs font-semibold text-sky-600">Vehículo en el taller</p>}
+              {enTaller && etiqueta && <p className="mt-1 text-xs font-semibold text-sky-600">Vehículo en el taller</p>}
             </div>
-            <div className="shrink-0 text-xs"><span className={`inline-block rounded-full px-3 py-1.5 border font-semibold ${listo ? "border-emerald-200 bg-emerald-50 text-emerald-700" : etiqueta?.chip || "border-amber-200 bg-amber-50 text-amber-700"}`}>{listo ? "Listo para trabajar" : etiqueta?.label || "En espera · Sin etiqueta"}</span>
+            <div className="shrink-0 text-xs"><span className={`inline-block rounded-full px-3 py-1.5 border font-semibold ${listo ? "border-emerald-200 bg-emerald-50 text-emerald-700" : etiqueta?.chip || (enTaller ? "border-sky-200 bg-sky-50 text-sky-700" : "border-amber-200 bg-amber-50 text-amber-700")}`}>{listo ? "Listo para trabajar" : etiqueta?.label || (enTaller ? "En el taller" : "En espera · Sin etiqueta")}</span>
               {listo && <p className="mt-2 text-[var(--ink-soft)]">{cita ? `Cita ${cita.fecha} · ${cita.hora?.slice(0, 5) || ""}` : "Sin cita programada"}</p>}
             </div>
           </Link>

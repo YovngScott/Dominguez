@@ -22,7 +22,7 @@ export default function ResumenVehiculos() {
 
   return <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
     <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--ink)] mb-2">Resumen de vehículos pendientes</h1>
-    <p className="text-sm text-[var(--ink-soft)] mb-6">Consulta los vehículos listos o en espera y descarga el resumen por aseguradora en PDF.</p>
+    <p className="text-sm text-[var(--ink-soft)] mb-6">Consulta los vehículos listos, en espera o en el taller y descarga el resumen por aseguradora en PDF.</p>
     {error ? <p role="alert" className="text-red-600">{error}</p> : <ResumenOperativo aseguradoras={aseguradoras} />}
   </div>;
 }
