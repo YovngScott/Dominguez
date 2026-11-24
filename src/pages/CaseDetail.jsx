@@ -476,7 +476,7 @@ export default function CaseDetail() {
           <Icon name="camera" className="w-4 h-4" /> Fotos
         </TabButton>
         <TabButton active={tab === "documentos"} onClick={() => setTab("documentos")}>
-          <Icon name="file" className="w-4 h-4" /> Documentos / PDF
+          <Icon name="file" className="w-4 h-4" /> Documentos
         </TabButton>
         <TabButton active={tab === "cotizaciones"} onClick={() => setTab("cotizaciones")}>
           <Icon name="receipt" className="w-4 h-4" /> Cotizaciones {cotizaciones.length > 0 && `(${cotizaciones.length})`}

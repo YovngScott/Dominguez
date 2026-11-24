@@ -10,9 +10,9 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('fotos-casos', 'fotos-casos', false, 8388608, array['image/jpeg','image/png','image/webp'])
 on conflict (id) do nothing;
 
--- Bucket privado para los PDF (cotizaciones del taller y del seguro)
+-- Bucket privado para documentos de cualquier formato (hasta 50 MB)
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('documentos-casos', 'documentos-casos', false, 52428800, array['application/pdf'])
+values ('documentos-casos', 'documentos-casos', false, 52428800, null)
 on conflict (id) do nothing;
 
 -- Bucket público (solo lectura) para los logos de las aseguradoras

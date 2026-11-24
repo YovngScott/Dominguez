@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { uuid } from "../lib/uuid";
+import { DOCUMENTOS_BUCKET, subirDocumentoCaso, vistaPreviaDocumento } from "../lib/documentosCaso";
 import {
   nombreTipoDocumento,
   prepararTiposDocumento,
@@ -18,7 +19,9 @@ export default function DocumentManager({ casoId }) {
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState("");
   const [visor, setVisor] = useState(null);
+  const [abriendo, setAbriendo] = useState(null);
   const fileInputRef = useRef(null);
+  const subidaEnCurso = useRef(false);
 
   useEffect(() => {
     async function loadTipos() {
@@ -61,68 +64,63 @@ export default function DocumentManager({ casoId }) {
     loadTipos();
   }, []);
 
-  async function loadDocumentos() {
-    const { data } = await supabase
+  const loadDocumentos = useCallback(async () => {
+    const { data, error: loadError } = await supabase
       .from("documentos_caso")
       .select("id, storage_path, nombre_archivo, uploaded_at, tipo:tipos_documento(nombre)")
       .eq("caso_id", casoId)
       .order("uploaded_at", { ascending: false });
 
-    const conUrls = await Promise.all(
-      (data || []).map(async (d) => {
-        const { data: signed } = await supabase.storage
-          .from("documentos-casos")
-          .createSignedUrl(d.storage_path, SIGNED_URL_TTL);
-        return { ...d, signedUrl: signed?.signedUrl };
-      })
-    );
-    setDocumentos(conUrls);
-  }
+    if (loadError) {
+      setError(loadError.message || "No se pudieron cargar los documentos.");
+      return;
+    }
+    setDocumentos(data || []);
+  }, [casoId]);
 
   useEffect(() => {
     if (casoId) loadDocumentos();
-  }, [casoId]);
+  }, [casoId, loadDocumentos]);
 
   async function handleFile(file) {
-    if (!file) return;
-    if (file.type !== "application/pdf") {
-      setError("Solo se permiten archivos PDF.");
-      return;
-    }
+    if (!file || subidaEnCurso.current) return;
     if (!tipoSubida) {
       setError("Selecciona un tipo de documento.");
       return;
     }
 
     setError("");
+    subidaEnCurso.current = true;
     setSubiendo(true);
     try {
-      const path = `${casoId}/${uuid()}.pdf`;
-      const { error: uploadErr } = await supabase.storage
-        .from("documentos-casos")
-        .upload(path, file, { contentType: "application/pdf" });
-      if (uploadErr) throw uploadErr;
-
-      const { data: signed } = await supabase.storage
-        .from("documentos-casos")
-        .createSignedUrl(path, SIGNED_URL_TTL);
-
-      const { data: userData } = await supabase.auth.getUser();
-
-      await supabase.from("documentos_caso").insert({
-        caso_id: casoId,
-        tipo_id: tipoSubida,
-        nombre_archivo: file.name,
-        storage_path: path,
-        url: signed?.signedUrl || "",
-        uploaded_by: userData?.user?.id,
-      });
-
-      loadDocumentos();
+      await subirDocumentoCaso({ client: supabase, casoId, tipoId: tipoSubida, file, id: uuid() });
+      await loadDocumentos();
     } catch (err) {
       setError(err.message || "Error subiendo el documento.");
     } finally {
+      subidaEnCurso.current = false;
       setSubiendo(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function abrirDocumento(doc) {
+    setError("");
+    setAbriendo(doc.id);
+    try {
+      const bucket = supabase.storage.from(DOCUMENTOS_BUCKET);
+      const preview = vistaPreviaDocumento(doc.nombre_archivo);
+      const [descarga, vista] = await Promise.all([
+        bucket.createSignedUrl(doc.storage_path, SIGNED_URL_TTL, { download: doc.nombre_archivo }),
+        preview ? bucket.createSignedUrl(doc.storage_path, SIGNED_URL_TTL) : Promise.resolve(null),
+      ]);
+      if (descarga.error) throw descarga.error;
+      if (vista?.error) throw vista.error;
+      setVisor({ ...doc, preview, signedUrl: vista?.data?.signedUrl, downloadUrl: descarga.data.signedUrl });
+    } catch (err) {
+      setError(err.message || "No se pudo abrir el documento.");
+    } finally {
+      setAbriendo(null);
     }
   }
 
@@ -141,7 +139,7 @@ export default function DocumentManager({ casoId }) {
         </span>
         <div>
           <h2 className="text-base sm:text-lg font-semibold text-[var(--ink)]">DOCUMENTOS DEL CASO</h2>
-          <p className="text-xs text-[var(--ink-soft)] mt-0.5">Selecciona el tipo exacto antes de subir el PDF.</p>
+          <p className="text-xs text-[var(--ink-soft)] mt-0.5">PDF, Word, Excel y cualquier otro archivo · Hasta 50 MB por archivo.</p>
         </div>
       </div>
 
@@ -150,15 +148,14 @@ export default function DocumentManager({ casoId }) {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={subiendo}
+          disabled={subiendo || !tipoSubida}
           className="bg-[var(--ink)] text-white px-5 py-2.5 rounded-lg font-medium hover:opacity-90 disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
-          <Icon name="file" className="w-4 h-4" /> {subiendo ? "SUBIENDO…" : "SUBIR PDF"}
+          <Icon name="file" className="w-4 h-4" /> {subiendo ? "SUBIENDO…" : "SUBIR ARCHIVO"}
         </button>
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf"
           hidden
           onChange={(e) => handleFile(e.target.files?.[0])}
         />
@@ -172,13 +169,14 @@ export default function DocumentManager({ casoId }) {
         <ul className="divide-y divide-[var(--line)]">
           {documentos.map((d) => (
             <li key={d.id} className="flex items-start gap-2 py-3 sm:items-center">
-              <button onClick={() => setVisor(d)} className="text-left flex-1 min-w-0 flex items-start gap-3 rounded-lg -mx-1 px-1 py-1 hover:bg-[var(--paper)]">
+              <button onClick={() => abrirDocumento(d)} disabled={abriendo !== null} className="text-left flex-1 min-w-0 flex items-start gap-3 rounded-lg -mx-1 px-1 py-1 hover:bg-[var(--paper)] disabled:opacity-60">
                 <span className="w-9 h-9 rounded-lg bg-[var(--paper)] text-[var(--ink-soft)] flex items-center justify-center shrink-0">
                   <Icon name="file" className="w-4 h-4" />
                 </span>
                 <span className="min-w-0">
                   <span className="block font-medium text-sm sm:text-base text-[var(--ink)] break-words leading-snug line-clamp-2">{d.nombre_archivo}</span>
                   <span className="block text-xs sm:text-sm font-semibold tracking-wide text-[var(--ink-soft)] mt-0.5">{nombreTipoDocumento(d.tipo?.nombre)}</span>
+                  {abriendo === d.id && <span className="block text-xs mt-1">Abriendo…</span>}
                 </span>
               </button>
               <button
@@ -201,14 +199,29 @@ export default function DocumentManager({ casoId }) {
           >
             <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-[var(--line)]">
               <p className="font-medium text-sm text-[var(--ink)] truncate flex-1">{visor.nombre_archivo}</p>
-              <a href={visor.signedUrl} download={visor.nombre_archivo} className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)]" title="Descargar PDF">
+              <a href={visor.downloadUrl} download={visor.nombre_archivo} className="p-2 text-[var(--ink-soft)] hover:text-[var(--brand-red)]" title="Descargar archivo" aria-label="Descargar archivo">
                 <Icon name="download" className="w-4 h-4" />
               </a>
               <button onClick={() => setVisor(null)} className="text-[var(--ink-soft)] px-2 text-sm whitespace-nowrap">
                 ✕ Cerrar
               </button>
             </div>
-            <iframe src={visor.signedUrl} title={visor.nombre_archivo} className="flex-1 w-full" />
+            {visor.preview === "pdf" ? (
+              <iframe src={visor.signedUrl} title={visor.nombre_archivo} className="flex-1 w-full" />
+            ) : visor.preview === "imagen" ? (
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center">
+                <img src={visor.signedUrl} alt={visor.nombre_archivo} className="max-w-full max-h-full object-contain" />
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
+                <Icon name="file" className="w-12 h-12 text-[var(--brand-red)]" />
+                <p className="font-semibold text-[var(--ink)] break-all">{visor.nombre_archivo}</p>
+                <p className="text-sm text-[var(--ink-soft)]">Descarga el archivo para abrirlo en su programa correspondiente.</p>
+                <a href={visor.downloadUrl} download={visor.nombre_archivo} className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-red)] px-5 py-3 font-medium text-white">
+                  <Icon name="download" className="w-4 h-4" /> Descargar archivo
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
