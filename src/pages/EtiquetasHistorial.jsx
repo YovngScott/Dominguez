@@ -22,6 +22,7 @@ export default function EtiquetasHistorial() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [imprimiendoId, setImprimiendoId] = useState(null);
+  const [avisoImpresion, setAvisoImpresion] = useState("");
 
   async function load() {
     const { data } = await supabase
@@ -52,6 +53,7 @@ export default function EtiquetasHistorial() {
 
   async function reimprimir(et) {
     setImprimiendoId(et.id);
+    setAvisoImpresion("");
     try {
       const payload = {
         caso: {
@@ -66,7 +68,7 @@ export default function EtiquetasHistorial() {
       };
       const { imprimirEtiquetas } = await import("../lib/printServer");
       const res = await imprimirEtiquetas(payload);
-      if (res.modo === "pdf") window.open(URL.createObjectURL(res.blob), "_blank");
+      setAvisoImpresion(res.modo === "cola" ? res.mensaje : "Etiquetas enviadas a la impresora central del taller.");
     } catch (err) {
       alert(err.message || "No se pudo imprimir.");
     } finally {
@@ -107,6 +109,8 @@ export default function EtiquetasHistorial() {
         placeholder="Buscar por vehículo, aseguradora, reclamo o pieza…"
         className="input w-full mb-5"
       />
+
+      {avisoImpresion && <p role="status" className="text-sm text-emerald-700 mb-4">{avisoImpresion}</p>}
 
       {loading ? (
         <p className="text-[var(--ink-soft)]">Cargando…</p>

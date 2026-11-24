@@ -5,15 +5,32 @@ const path = require("path");
 const fs = require("fs");
 const { createPrintServer } = require("./server.cjs");
 const { listPrinters, printRawZpl } = require("./windows-print.cjs");
+const { createCloudWorker } = require("./cloud-worker.cjs");
 
 const PORT = Number(process.env.STAGE_PRINT_PORT || 9100);
 const TOKEN = process.env.STAGE_PRINT_TOKEN || "dps-7f3a9c2e1b4d6f8a0e5c3b7d9a1f4e2c";
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 
 let mainWindow = null;
 let tray = null;
 let httpServer = null;
+let cloudWorker = null;
+let printQueue = Promise.resolve();
 let status = { running: false, port: PORT, version: VERSION, lastError: "", lastPrint: null };
+let cloudStatus = { configured: false, online: false, lastSync: null, lastError: "" };
+
+function performPrint({ zpl, printerName, jobId = null }) {
+  const chosen = printerName || loadSettings().printerName;
+  const task = printQueue.catch(() => {}).then(async () => {
+    if (!chosen) throw new Error("No hay una impresora configurada.");
+    await printRawZpl(chosen, zpl);
+    status.lastPrint = { printerName: chosen, jobId,
+      labels: (String(zpl).match(/\^XA/g) || []).length, at: new Date().toISOString() };
+    return status.lastPrint;
+  });
+  printQueue = task;
+  return task;
+}
 
 function settingsPath() {
   return path.join(app.getPath("userData"), "settings.json");
@@ -54,7 +71,9 @@ function createWindow() {
   });
   mainWindow.setMenuBarVisibility(false);
   mainWindow.loadFile(path.join(__dirname, "ui", "index.html"));
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.once("ready-to-show", () => {
+    if (!process.argv.includes("--hidden")) mainWindow.show();
+  });
   mainWindow.on("close", (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
@@ -104,28 +123,27 @@ async function startServer() {
       version: VERSION,
       getDefaultPrinter: () => loadSettings().printerName,
       listPrinters,
-      printRawZpl: async ({ zpl, printerName }) => {
-        const chosen = printerName || loadSettings().printerName;
-        if (!chosen) throw new Error("No hay una impresora configurada.");
-        await printRawZpl(chosen, zpl);
-        status.lastPrint = {
-          printerName: chosen,
-          labels: (String(zpl).match(/\^XA/g) || []).length,
-          at: new Date().toISOString()
-        };
-        return status.lastPrint;
-      }
+      getCloudState: () => ({ ...cloudStatus, lastPrint: status.lastPrint }),
+      printRawZpl: performPrint,
     });
     status = { ...status, running: true, lastError: "", printerName: settings.printerName };
   } catch (error) {
     status = { ...status, running: false, lastError: error.message };
   }
+  cloudWorker = createCloudWorker({
+    getSettings: loadSettings,
+    statePath: path.join(app.getPath("userData"), "cloud-print-state.json"),
+    printZpl: performPrint,
+    onStatus: next => { cloudStatus = next; },
+  });
+  cloudWorker.start();
 }
 
-ipcMain.handle("stage:get-state", async () => ({
+ipcMain.handle("stage:get-state", async (_event, options = {}) => ({
   status,
-  settings: loadSettings(),
-  printers: await listPrinters().catch(() => [])
+  cloud: cloudStatus,
+  settings: { printerName: loadSettings().printerName },
+  printers: options.printers === false ? null : await listPrinters().catch(() => [])
 }));
 
 ipcMain.handle("stage:refresh-printers", async () => listPrinters());
@@ -148,7 +166,7 @@ ipcMain.handle("stage:test-print", async (_event, printerName) => {
     "^FO35,190^GB742,3,3^FS^FO35,225^A0N,32,32^FDPRUEBA TERMICA ZPL^FS" +
     `^FO35,285^A0N,26,26^FD${new Date().toLocaleString("es-DO")}^FS^XZ`;
   const chosen = printerName || loadSettings().printerName;
-  await printRawZpl(chosen, zpl);
+  await performPrint({ printerName: chosen, zpl });
   return { success: true, printerName: chosen };
 });
 
@@ -157,7 +175,7 @@ ipcMain.handle("stage:calibrate-media", async (_event, printerName) => {
   if (!chosen) throw new Error("Selecciona una impresora.");
   // Guarda el tipo de material con separación y luego mide un ciclo completo
   // del rollo. ~JC avanza hasta el siguiente espacio sin imprimir contenido.
-  await printRawZpl(chosen, "^XA^MNY^JUS^XZ~JC");
+  await performPrint({ printerName: chosen, zpl: "^XA^MNY^JUS^XZ~JC" });
   return { success: true, printerName: chosen };
 });
 
@@ -171,7 +189,8 @@ if (!gotLock) {
     app.setLoginItemSettings({
       openAtLogin: true,
       openAsHidden: true,
-      path: process.execPath
+      path: process.execPath,
+      args: ["--hidden"],
     });
     await startServer();
     createTray();
@@ -181,6 +200,7 @@ if (!gotLock) {
 
 app.on("before-quit", () => {
   app.isQuitting = true;
+  cloudWorker?.stop();
   if (httpServer) httpServer.close();
 });
 

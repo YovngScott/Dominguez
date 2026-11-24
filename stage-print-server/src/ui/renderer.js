@@ -29,10 +29,10 @@ function renderPrinters(printers, selected) {
   }
 }
 
-async function load() {
+async function load(options = {}) {
   try {
-    const data = await window.stagePrint.getState();
-    renderPrinters(data.printers, data.settings.printerName);
+    const data = await window.stagePrint.getState(options);
+    if (data.printers) renderPrinters(data.printers, data.settings.printerName);
     serverBadge.textContent = data.status.running ? "● En línea" : "● Con error";
     serverBadge.className = `badge ${data.status.running ? "ok" : "error"}`;
     document.getElementById("serverAddress").textContent = `localhost:${data.status.port}`;
@@ -41,6 +41,14 @@ async function load() {
       ? new Date(data.status.lastPrint.at).toLocaleString("es-DO")
       : "Aún no";
     if (data.status.lastError) showMessage(data.status.lastError, true);
+    const cloud = data.cloud || {};
+    const badge = document.getElementById("cloudBadge");
+    badge.textContent = cloud.online ? "● Conectada" : cloud.configured ? "● Sin conexión" : "● Sin configurar";
+    badge.className = `badge ${cloud.online ? "ok" : "pending"}`;
+    document.getElementById("cloudMessage").textContent = cloud.lastError || (cloud.online
+      ? "Las etiquetas enviadas desde la web llegan a esta impresora por internet."
+      : cloud.configured ? "Reconectando automáticamente…" : "Esta PC no está vinculada como impresora central.");
+    document.getElementById("cloudSync").textContent = cloud.lastSync ? new Date(cloud.lastSync).toLocaleString("es-DO") : "Aún no";
   } catch (error) {
     serverBadge.textContent = "● Error";
     serverBadge.className = "badge error";
@@ -107,3 +115,4 @@ calibrateBtn.addEventListener("click", async () => {
 });
 
 load();
+setInterval(() => load({ printers: false }), 5000);

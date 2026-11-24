@@ -55,6 +55,7 @@ select:focus { border-color: #8064ff; box-shadow: 0 0 0 3px rgba(128, 100, 255, 
 .message { min-height: 18px; margin: 12px 0 0; font-size: 13px; color: #85f5b0; }
 .message.error { color: #ff8c9b; }
 .help { margin: 12px 0 0; color: #8991a3; font-size: 12px; }
+.cloud-card { margin-top: 16px; }
 .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
 .metric { background: #12151d; border: 1px solid #202531; border-radius: 16px; padding: 16px; min-width: 0; }
 .metric-label { display: block; color: #747d91; font-size: 11px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .08em; }

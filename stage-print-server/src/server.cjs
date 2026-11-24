@@ -19,7 +19,7 @@ function auth(token) {
   };
 }
 
-function createPrintServer({ port, token, version, getDefaultPrinter, listPrinters, printRawZpl }) {
+function createPrintServer({ port, token, version, getDefaultPrinter, listPrinters, printRawZpl, getCloudState = () => null }) {
   return new Promise((resolve, reject) => {
     const api = express();
     api.disable("x-powered-by");
@@ -47,7 +47,8 @@ function createPrintServer({ port, token, version, getDefaultPrinter, listPrinte
         status: "ok",
         product: "STAGE AI LABS Print Server",
         version,
-        printer: getDefaultPrinter() || null
+        printer: getDefaultPrinter() || null,
+        cloud: getCloudState(),
       })
     );
 

@@ -390,13 +390,13 @@ export default function EtiquetasPiezas() {
         qrUrl: casoId ? `${PUBLIC_URL}/piezas/${casoId}` : null,
       };
 
-      // Imprime directo en la térmica si hay print server; si no, abre el PDF.
+      // La cola entrega la etiqueta únicamente a la PC central del taller.
       const res = await imprimirEtiquetas(payload);
       if (res.modo === "directo") {
         const n = validas.length;
         setOk(`Enviado a la impresora (${n} etiqueta${n === 1 ? "" : "s"}).`);
-      } else {
-        window.open(URL.createObjectURL(res.blob), "_blank");
+      } else if (res.modo === "cola") {
+        setOk(res.mensaje);
       }
     } catch (err) {
       setError(err.message || "No se pudo imprimir las etiquetas.");
@@ -464,6 +464,7 @@ export default function EtiquetasPiezas() {
           <label className="flex items-center gap-2 text-sm text-[var(--ink-soft)] sm:ml-auto">
             <Icon name="printer" className="w-4 h-4" />
             <select
+              disabled
               value={impresoraSel}
               onChange={(e) => {
                 setImpresoraSel(e.target.value);
@@ -480,7 +481,8 @@ export default function EtiquetasPiezas() {
           </label>
         )}
       </div>
-      {ok && <p className="text-sm text-emerald-600 mb-4 font-medium">✓ {ok}</p>}
+        <p className="text-xs text-[var(--ink-soft)] mb-3">Las etiquetas se envían a la impresora de la PC del taller, desde cualquier red con internet.</p>
+        {ok && <p className="text-sm text-emerald-600 mb-4 font-medium">✓ {ok}</p>}
       {error && <p className="text-sm text-[var(--brand-red)] mb-4">{error}</p>}
 
       <div className="space-y-5">

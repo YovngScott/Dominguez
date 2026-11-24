@@ -61,6 +61,7 @@ export default function PiezasManager({ casoId, caso, onEstadoPiezasChange }) {
   const [mostrarEtiquetas, setMostrarEtiquetas] = useState(false);
   const [seleccion, setSeleccion] = useState(new Set());
   const [imprimiendo, setImprimiendo] = useState(false);
+  const [avisoImpresion, setAvisoImpresion] = useState("");
   const [fotoActiva, setFotoActiva] = useState(null);
   const [fotosRecibidas, setFotosRecibidas] = useState(new Map());
   const [subiendoFotoRecibida, setSubiendoFotoRecibida] = useState(null);
@@ -553,9 +554,11 @@ export default function PiezasManager({ casoId, caso, onEstadoPiezasChange }) {
 
   async function imprimirEtiquetas() {
     setImprimiendo(true);
+    setError("");
+    setAvisoImpresion("");
     try {
       const seleccionadas = piezas.filter((p) => seleccion.has(p.clave));
-      // Imprime directo en la térmica si hay print server; si no, abre el PDF.
+      // Desde cualquier red, siempre a la PC central del taller.
       // QR → abre el caso para ver dónde está guardada cada pieza (su tramo).
       const { imprimirEtiquetas: enviar } = await import("../lib/printServer");
       const res = await enviar({
@@ -563,7 +566,7 @@ export default function PiezasManager({ casoId, caso, onEstadoPiezasChange }) {
         piezas: seleccionadas,
         qrUrl: `https://dominguez.vercel.app/piezas/${casoId}`,
       });
-      if (res.modo === "pdf") window.open(URL.createObjectURL(res.blob), "_blank");
+      setAvisoImpresion(res.modo === "cola" ? res.mensaje : "Etiquetas enviadas a la impresora central del taller.");
       setMostrarEtiquetas(false);
     } catch (err) {
       setError(err.message || "No se pudo imprimir las etiquetas.");
@@ -609,6 +612,7 @@ export default function PiezasManager({ casoId, caso, onEstadoPiezasChange }) {
       </div>
 
       {error && <p className="text-sm text-[var(--brand-red)] mb-3">{error}</p>}
+      {avisoImpresion && <p role="status" className="text-sm text-emerald-700 mb-3">{avisoImpresion}</p>}
 
       {loading ? (
         <p className="text-sm text-[var(--ink-soft)]">Cargando…</p>
