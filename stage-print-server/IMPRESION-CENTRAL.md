@@ -11,6 +11,8 @@ Desde cualquier computadora con internet, el usuario del taller pulsa **Imprimir
 
 Puedes cerrar la ventana del receptor. Continúa funcionando junto al reloj de Windows. La PC debe estar encendida, sin suspensión y con acceso a internet. Las otras computadoras solo necesitan la web.
 
+La instalación de recuperación incluye `scripts/install-watchdog.ps1`. Registra una comprobación cada minuto para abrir el receptor si se cierra o reiniciarlo si deja de responder tres veces seguidas. Si Windows no permite crear la tarea, instala un supervisor del usuario cada 30 segundos. Ambos trabajan con la sesión de Windows del usuario, sin almacenar contraseñas. Para mantenimiento, la presencia de `pausar-receptor.flag` en `%APPDATA%\stage-ai-labs-print-server` suspende la recuperación.
+
 ## Instalación o recuperación
 
 La carpeta privada **Impresion central Dominguez** del Escritorio contiene el instalador 1.2.0, el controlador, `settings.json`, el SQL de activación y un script de reinstalación. Conserva esa carpeta fuera de C antes de formatear. `settings.json` vincula el receptor con el taller y debe permanecer privado.
