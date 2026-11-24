@@ -1,10 +1,17 @@
-param([switch]$Continuous)
+param([switch]$Continuous,[switch]$VerifyHidden)
 $ErrorActionPreference = 'Stop'
 $dataFolder = Join-Path $env:APPDATA 'stage-ai-labs-print-server'
 $application = Join-Path $env:LOCALAPPDATA 'Programs\STAGE AI LABS Print Server\STAGE AI LABS Print Server.exe'
 $stateFile = Join-Path $dataFolder 'watchdog-state.json'
 $pauseFile = Join-Path $dataFolder 'pausar-receptor.flag'
 New-Item -ItemType Directory -Path $dataFolder -Force | Out-Null
+if ($VerifyHidden) {
+    Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class WatchdogConsoleCheck { [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow(); }'
+    $hiddenConsole = [WatchdogConsoleCheck]::GetConsoleWindow() -eq [IntPtr]::Zero
+    [System.IO.File]::WriteAllText((Join-Path $dataFolder 'watchdog-hidden-verification.json'), (@{sin_consola=$hiddenConsole;fecha=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
+    if (-not $hiddenConsole) { exit 7 }
+    exit 0
+}
 
 function Check-PrintServer {
     if (Test-Path -LiteralPath $pauseFile) { return }
