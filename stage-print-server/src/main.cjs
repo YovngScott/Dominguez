@@ -9,7 +9,7 @@ const { createCloudWorker } = require("./cloud-worker.cjs");
 
 const PORT = Number(process.env.STAGE_PRINT_PORT || 9100);
 const TOKEN = process.env.STAGE_PRINT_TOKEN || "dps-7f3a9c2e1b4d6f8a0e5c3b7d9a1f4e2c";
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 
 let mainWindow = null;
 let tray = null;

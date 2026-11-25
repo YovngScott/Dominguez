@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 const require=createRequire(import.meta.url);
-const { createCloudWorker }=require('../stage-print-server/src/cloud-worker.cjs');
+const { createCloudWorker, diskState }=require('../stage-print-server/src/cloud-worker.cjs');
 
 function harness({lostClaim=false,lostAck=false,printError=false,initial={}}={}) {
   let state=structuredClone(initial);let jobStatus='pendiente';let claim=null;
@@ -56,4 +59,64 @@ test('un fallo parcial de Windows se informa sin reenvío automático',async()=>
 });
 test('dos ciclos simultáneos no imprimen dos veces',async()=>{
   const h=harness();await Promise.all([h.worker.tick(),h.worker.tick()]);assert.equal(h.prints(),1);
+});
+
+function temporaryState(t) {
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'stage-print-state-'));
+  t.after(()=>{
+    for(const file of fs.readdirSync(folder)) fs.unlinkSync(path.join(folder,file));
+    fs.rmdirSync(folder);
+  });
+  return {folder,file:path.join(folder,'state.json')};
+}
+
+test('recupera el archivo lleno de ceros o JSON truncado y conserva los bytes dañados',t=>{
+  const {folder,file}=temporaryState(t);
+  const store=diskState(file);
+  for(const damaged of [new Uint8Array(50),'{"claimId":','null','[]','{"pendingAck":{"estado":"enviado"}}']) {
+    fs.writeFileSync(file,damaged);
+    const previous=fs.readdirSync(folder);
+    assert.deepEqual(store.read(),{});
+    const archived=fs.readdirSync(folder).find(name=>!previous.includes(name));
+    assert.ok(archived.includes('.corrupt-'));
+    assert.equal(fs.readFileSync(path.join(folder,archived),'utf8'),typeof damaged==='string'?damaged:'\0'.repeat(50));
+    store.write({claimId:'new-claim'});
+    assert.deepEqual(store.read(),{claimId:'new-claim'});
+  }
+});
+
+test('el estado válido de envío y confirmación sobrevive al reinicio',t=>{
+  const {file}=temporaryState(t);
+  const store=diskState(file);
+  for(const state of [
+    {claimId:'claim-old',started:{id:'job-old'}},
+    {claimId:'claim-old',pendingAck:{id:'job-old',claimId:'claim-old',estado:'enviado'}},
+  ]) {
+    store.write(state);
+    assert.deepEqual(diskState(file).read(),state);
+  }
+});
+
+test('una recuperación usa otra recogida y no vuelve a tomar el trabajo de antes del daño',async t=>{
+  const {file}=temporaryState(t);
+  fs.writeFileSync(file,new Uint8Array(50));
+  const calls=[];
+  const worker=createCloudWorker({
+    statePath:file,
+    getSettings:()=>({printerName:'4BARCODE',cloud:{url:'https://example.supabase.co',anonKey:'anon',token:'token'}}),
+    randomId:()=> 'new-claim',
+    printZpl:async()=> assert.fail('No debe reimprimir un trabajo recogido con otra identidad'),
+    fetchImpl:async(_url,options)=>{
+      const args=JSON.parse(options.body);calls.push(args.p_recogida);
+      return {ok:true,json:async()=>args.p_recogida==='old-claim'?{id:'job-old',recogida_id:'old-claim',estado:'procesando',zpl:'^XA^XZ'}:null};
+    },
+  });
+  await worker.tick();
+  assert.equal(worker.getStatus().online,true);
+  assert.equal(worker.getStatus().lastError,'');
+  assert.deepEqual(calls,['new-claim']);
+  const first=fs.statSync(file).mtimeMs;
+  await worker.tick();
+  assert.deepEqual(calls,['new-claim','new-claim']);
+  assert.equal(fs.statSync(file).mtimeMs,first,'un receptor sin trabajos no reescribe el archivo en cada consulta');
 });

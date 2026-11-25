@@ -6,8 +6,28 @@ const { randomUUID } = require('node:crypto');
 function diskState(file) {
   return {
     read() {
-      try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+      let text;
+      try { text = fs.readFileSync(file, 'utf8'); }
       catch (error) { if (error.code === 'ENOENT') return {}; throw error; }
+      try {
+        const state = JSON.parse(text);
+        if (!state || typeof state !== 'object' || Array.isArray(state)
+          || (state.claimId !== undefined && (typeof state.claimId !== 'string' || !state.claimId))
+          || (state.started !== undefined && (!state.started || !state.claimId || typeof state.started.id !== 'string'))
+          || (state.pendingAck !== undefined && (!state.pendingAck || typeof state.pendingAck.id !== 'string'
+            || typeof state.pendingAck.claimId !== 'string'
+            || !['enviado', 'revisar'].includes(state.pendingAck.estado)))) {
+          throw new SyntaxError('Estado de impresión no válido.');
+        }
+        return state;
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        // Conserva el archivo dañado para diagnóstico y empieza con otra
+        // recogida. Nunca reutiliza una copia antigua: pudo haberse impreso
+        // después de guardarla. La cola deja esos trabajos en revisión.
+        fs.renameSync(file, `${file}.corrupt-${Date.now()}-${randomUUID()}`);
+        return {};
+      }
     },
     write(value) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -75,8 +95,10 @@ function createCloudWorker({ getSettings, statePath, printZpl, onStatus = () => 
         await acknowledge(config, state);
         return true;
       }
-      state.claimId ||= randomId();
-      storage.write(state); // Antes de la petición, para sobrevivir a una respuesta perdida.
+      if (!state.claimId) {
+        state.claimId = randomId();
+        storage.write(state); // Antes de la petición, para sobrevivir a una respuesta perdida.
+      }
       const job = await rpc(config, 'recoger_impresion_central', {
         p_token: config.token, p_recogida: state.claimId, p_impresora: settings.printerName,
       });

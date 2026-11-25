@@ -30,3 +30,13 @@ npm run build
 ```
 
 El instalador queda en `release/`.
+
+## Recuperación del estado local
+
+La versión 1.2.1 conserva y aparta `cloud-print-state.json` si un corte deja
+el archivo vacío, truncado o lleno de ceros. Reconecta con otra identidad de
+recogida: los trabajos anteriores sin confirmación quedan para revisión en
+la cola y no se vuelven a imprimir automáticamente. El estado se escribe
+antes de recoger o enviar un trabajo; no se reescribe durante las consultas
+sin trabajos. Las escrituras usan un archivo temporal, sincronización a disco
+y cambio de nombre.
